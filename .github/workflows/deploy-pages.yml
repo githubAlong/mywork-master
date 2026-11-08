@@ -3,7 +3,7 @@ name: Deploy mywork-master to GitHub Pages
 on:
   push:
     branches:
-      - test
+      - master
   workflow_dispatch:
 
 permissions:
@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - name: Check out verified source
@@ -40,6 +41,7 @@ jobs:
           path: dist
 
   deploy:
+    if: github.ref == 'refs/heads/master'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
