@@ -782,3 +782,138 @@
  .leave-editor-form .field-row{grid-template-columns:1fr}
  .att-work-period-control{width:auto!important}
 }
+
+/* ===== 考勤工作台：按纸质花名册参考图重排（TEST 验收版） ===== */
+.att-work-shell{
+  display:flex;flex-direction:column;gap:9px;
+  padding:2px 0 18px;
+}
+.att-work-shell .att-work-head{margin:0 0 1px}
+.att-work-shell .att-work-meta-controls{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  min-height:50px;margin:0;padding:7px 10px;
+  border:1px solid #e2e8f1;border-radius:12px;background:#fff;
+  box-shadow:0 2px 8px rgba(35,65,105,.035);
+}
+.att-work-shell .att-work-date{margin:0;gap:5px}
+.att-work-shell .att-work-date label{
+  height:34px;gap:8px;padding:0 9px;border:1px solid #dce3ed;border-radius:8px;
+}
+.att-work-shell .att-work-date label input{
+  flex:0 0 18px;width:18px;max-width:18px;height:20px;opacity:1;
+}
+.att-work-shell .att-work-date label span{font-size:12px;color:#33445e}
+.att-work-shell .att-work-date .icon-btn{width:30px;height:30px}
+.att-work-weekday{color:#245fc5;font-size:12px;font-weight:750;white-space:nowrap}
+.att-work-control{display:inline-flex;align-items:center;gap:7px;color:#718099;font-size:12px;white-space:nowrap}
+.att-work-control .input{
+  width:auto;min-width:82px;height:34px;padding:0 26px 0 9px;
+  border:1px solid #dce3ed;border-radius:8px;background:#fff;color:#33445e;font-size:12px;
+}
+.att-work-period-time{color:#718099;font-size:12px;white-space:nowrap}
+.att-work-expected{color:#6e7c91;font-size:12px;white-space:nowrap}
+.att-work-expected b{color:#172744;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+.att-work-meta-controls>.att-work-spacer{flex:1}
+.att-work-meta-controls>#att-work-today{height:34px;padding:0 12px;border:1px solid #e0e6ef;border-radius:8px;background:#fff;color:#56667f}
+.att-work-subjectbar{
+  display:flex;align-items:center;gap:10px;min-width:0;
+  padding:7px 10px;border:1px solid #e2e8f1;border-radius:12px;background:#fff;
+  box-shadow:0 2px 8px rgba(35,65,105,.035);
+}
+.att-work-subject-label{flex:0 0 auto;color:#5e6d84;font-size:12px;font-weight:750}
+.att-work-subjectbar .att-work-subjects{
+  flex:1 1 auto;min-width:0;gap:6px;padding:0 0 1px;overflow-x:auto;scrollbar-width:thin;
+}
+.att-work-subjectbar .att-work-subjects button{min-height:32px;padding:0 11px;font-size:11.5px}
+.att-work-subject-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.att-work-subject-actions .btn{height:32px;padding:0 10px;border-radius:8px;font-size:11px;white-space:nowrap}
+.att-work-shell .att-work-tabs{
+  display:flex;align-items:center;gap:27px;min-height:50px;
+  margin:0;padding:0 16px;border:1px solid #e2e8f1;border-radius:12px;
+  background:#fff;box-shadow:0 2px 8px rgba(35,65,105,.035);
+}
+.att-work-shell .att-work-tabs button{padding:0 2px 1px;font-size:13px}
+.att-work-shell .att-work-tabs button.on:after{bottom:-17px;height:3px}
+.att-work-shell .att-work-toolbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:0;padding:0 2px;
+}
+.att-work-shell .att-work-toolbar .btn{height:34px;padding:0 12px;border-radius:8px;font-size:11.5px}
+.att-work-shell .att-work-toolbar .aw-search{width:180px;height:34px;border-radius:8px}
+.att-work-roster-toolbar .att-roster-count{font-size:12px;color:#45556e;font-weight:750;white-space:nowrap}
+.att-work-roster-toolbar .att-work-export-wrap{position:relative;flex:0 0 auto}
+.att-work-import-menu{width:190px}
+.att-work-shell .att-work-panel{
+  width:100%;min-height:calc(100vh - 250px);
+  padding:13px 14px 10px;border:1px solid #e1e7ef;border-radius:12px;
+  background:#fff;box-shadow:0 3px 12px rgba(35,65,105,.04);
+}
+.att-work-shell .att-work-table-title{margin:0 0 8px;padding:0 1px}
+.att-work-shell .att-work-table-title h3{margin:0 0 3px;font-size:16px;color:#172744;font-weight:800}
+.att-work-shell .att-work-table-title span{font-size:11px;color:#74839a}
+.att-work-roster-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;align-items:start;min-width:0;
+}
+.att-work-roster-scroll{min-width:0;overflow:auto;border:0;border-radius:0}
+.att-work-shell .aw-roster-table{
+  width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;
+  font-size:13px;color:#27364d;
+}
+.att-work-shell .aw-roster-table th,
+.att-work-shell .aw-roster-table td{
+  height:29px;padding:3px 7px;text-align:center;vertical-align:middle;
+  border:1px solid #8a9099;white-space:nowrap;
+}
+.att-work-shell .aw-roster-table th{
+  height:32px;background:#f2f4f7;color:#596579;font-size:12px;font-weight:750;
+}
+.att-work-shell .aw-roster-table th:nth-child(1),
+.att-work-shell .aw-roster-table td:nth-child(1){width:13%;font-variant-numeric:tabular-nums}
+.att-work-shell .aw-roster-table th:nth-child(2),
+.att-work-shell .aw-roster-table td:nth-child(2){width:36%}
+.att-work-shell .aw-roster-table th:nth-child(3),
+.att-work-shell .aw-roster-table td:nth-child(3){width:29%}
+.att-work-shell .aw-roster-table th:nth-child(4),
+.att-work-shell .aw-roster-table td:nth-child(4){width:22%}
+.att-work-shell .aw-roster-table td.aw-name{font-weight:750;text-align:center;color:#1c2b43}
+.att-work-shell .aw-roster-table tbody tr:nth-child(even) td{background:#f5f7f9}
+.att-work-shell .aw-roster-table tbody tr:hover td{background:#edf4ff}
+.aw-roster-remove{
+  display:inline-grid;place-items:center;width:25px;height:22px;padding:0;
+  border:0;border-radius:5px;background:transparent;color:#aeb7c3;cursor:pointer;
+}
+.aw-roster-remove:hover{background:#fff0f0;color:#d34e4e}
+.aw-roster-empty{height:40px!important;color:#9aa5b5!important;text-align:center}
+.att-work-shell .att-work-foot{margin-top:9px;padding-top:8px;border-top:1px solid #e8edf3}
+@media(max-width:900px){
+  .att-work-shell .att-work-meta-controls{gap:7px}
+  .att-work-subjectbar{align-items:flex-start;flex-wrap:wrap}
+  .att-work-subjectbar .att-work-subjects{flex-basis:100%;order:2}
+  .att-work-subject-actions{margin-left:auto}
+  .att-work-roster-grid{gap:9px}
+  .att-work-shell .aw-roster-table{font-size:12px}
+}
+@media(max-width:680px){
+  .att-work-shell{gap:8px}
+  .att-work-shell .att-work-meta-controls{padding:8px;gap:7px}
+  .att-work-shell .att-work-date{margin:0}
+  .att-work-shell .att-work-date label{height:32px}
+  .att-work-weekday{margin-right:auto}
+  .att-work-control{gap:4px}
+  .att-work-control .input{min-width:72px;height:32px}
+  .att-work-expected{margin-right:auto}
+  .att-work-shell .att-work-meta-controls>.att-work-spacer{display:none}
+  .att-work-shell .att-work-meta-controls>#att-work-today{margin-left:auto}
+  .att-work-subjectbar{padding:8px;gap:7px}
+  .att-work-subject-actions{width:100%;justify-content:flex-end}
+  .att-work-shell .att-work-tabs{gap:19px;min-height:46px;padding:0 10px}
+  .att-work-shell .att-work-tabs button{font-size:12px}
+  .att-work-shell .att-work-tabs button.on:after{bottom:-15px}
+  .att-work-shell .att-work-panel{min-height:calc(100vh - 240px);padding:10px}
+  .att-work-roster-grid{grid-template-columns:1fr;gap:10px}
+  .att-work-shell .aw-roster-table{min-width:0;font-size:12px}
+  .att-work-shell .aw-roster-table th,.att-work-shell .aw-roster-table td{height:34px;padding:4px}
+  .att-work-shell .att-work-toolbar{gap:6px}
+  .att-work-shell .att-work-toolbar .aw-search{flex:1 1 130px;width:auto;min-width:0}
+}
