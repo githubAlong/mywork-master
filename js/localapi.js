@@ -1653,10 +1653,6 @@ on('POST', '/auth/login-cloud', async ({ body }) => {
     u.nickname = u.nickname && u.nickname !== '老师'
       ? u.nickname
       : (phone ? '用户' + phone.slice(-4) : (local || email));
-  } else if (uid && u.cloudUid && uid === u.cloudUid) {
-    /* 同一 Supabase UID 修改登录账号时，只更新账号标识；不重建用户、不改密码摘要，
-       因此本地用户 ID、权限和该 UID 对应的数据命名空间全部保持不变。 */
-    u.account = acct;
   } else if (u.account === phone && /^\d{11}$/.test(account)) {
     /* 只把同一 Supabase 用户原先保存的 +86 标识改为可见的11位账号，不改变 UID 或数据命名空间。 */
     u.account = account;
@@ -1846,7 +1842,9 @@ on('POST', '/me/avatar', async ({ body }) => {
   const files = body?.files || [];
   const f = files[0];
   if (!f) fail(400, '没有收到图片');
-  if (!/^image\//i.test(String(f.mime || ''))) fail(400, '请选择有效的图片文件');
+  if (byteLen(f.data) > 2 * 1024 * 1024) fail(400, `图片不能超过 2MB（当前 ${(byteLen(f.data) / 1024 / 1024).toFixed(1)}MB）`);
+  const ok = ['image/jpeg', 'image/png'].includes(String(f.mime || '').toLowerCase());
+  if (!ok) fail(400, '只支持 JPG / PNG 格式');
   /* 头像转成 dataURL 直接存：静态版没有 /files 静态目录，
      一个小图塞进 localStorage 是可以接受的，换设备靠导出备份带走。
      但写入必须检查结果——满了要如实告诉用户，不能让界面显示「已更新」然后刷新就没了。 */
@@ -1860,7 +1858,7 @@ on('POST', '/me/avatar', async ({ body }) => {
     u.avatar = prev;
     db.meta.user = u;
     save();
-    fail(507, '浏览器本机存储空间不足，头像暂未保存。请清理浏览器存储或导出备份后重试');
+    fail(507, '本机存储空间不足，头像没保存下来。可以先导出备份、清理旧课件再试，或者换一张小一点的图');
   }
   return { url: dataUrl, user: publicUser(u) };
 });
@@ -3415,7 +3413,7 @@ on('POST', '/teachers', ({ body }) => {
     }
     sort += 1;
     const id = T('teachers').reduce((mx, t) => Math.max(mx, num(t.id)), 0) + 1;
-    T('teachers').push({ id, grade, name, subject: String(it.subject || '').trim(), sort, active: 1, created_at: nowISO(), updated_at: nowISO(), deleted_at: null });
+    T('teachers').push({ id, grade, name, subject: String(it.subject || '').trim(), phone: String(it.phone || '').trim(), note: String(it.note || '').trim(), sort, active: 1, created_at: nowISO(), updated_at: nowISO(), deleted_at: null });
     ids.push(id);
   }
   save();
@@ -3434,6 +3432,8 @@ on('PATCH', '/teachers/:id', ({ params, body }) => {
     if (!validation.ok) fail(400, validation.invalid[0]?.reason || validation.duplicates[0]?.reason || '教师信息不完整');
   }
   for (const k of ['name', 'subject', 'grade']) if (k in (body || {})) t[k] = next[k];
+  if ('phone' in (body || {})) t.phone = String(body.phone || '').trim();
+  if ('note' in (body || {})) t.note = String(body.note || '').trim();
   if ('active' in (body || {})) t.active = body.active ? 1 : 0;
   if ('sort' in (body || {})) t.sort = Number(body.sort) || 0;
   t.updated_at = nowISO();
@@ -4120,7 +4120,6 @@ for (const table of CRUD_TABLES) {
        挑的都是「空着这条记录就没意义」的字段，不做格式校验，不打扰正常录入。 */
     const REQUIRED = {
       lessons: [['class_name', '班级不能为空']],
-      preps: [['topic', '请填写备课主题'], ['prep_type', '请选择备课类型']],
       trips: [['to_place', '目的地不能为空']],
       invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
     }[table];
@@ -4133,9 +4132,6 @@ for (const table of CRUD_TABLES) {
           fail(422, msg);
         }
       }
-    }
-    if (table === 'preps' && !['information', 'specialty'].includes(String(b.prep_type || '').trim())) {
-      fail(422, '请选择备课类型');
     }
     // 监考表旧列 type 是 NOT NULL，新逻辑用 duty_type，这里补一份映射
     if (table === 'invigilations' && !b.type) {
@@ -4152,22 +4148,11 @@ for (const table of CRUD_TABLES) {
     if (table === 'materials') { b.views = b.views ?? 0; b.downloads = b.downloads ?? 0; }
     return createRow(table, normalizeBody(b));
   });
-  on('PATCH', `/${table}/:id`, ({ params, body }) => {
-    const b = normalizeBody(body || {});
-    if (table === 'preps' && b.prep_type !== undefined
-      && !['information', 'specialty', 'unclassified'].includes(String(b.prep_type).trim())) {
-      fail(422, '备课类型不正确');
-    }
-    return updateRow(table, params.id, b);
-  });
+  on('PATCH', `/${table}/:id`, ({ params, body }) => updateRow(table, params.id, normalizeBody(body || {})));
   on('POST', `/${table}/bulk`, ({ body }) => {
     const rows = Array.isArray(body?.rows) ? body.rows : [];
     const ids = [];
     for (const item of rows) {
-      if (table === 'preps' && !item?.id) {
-        if (!String(item?.topic || '').trim()) fail(422, '请填写备课主题');
-        if (!['information', 'specialty'].includes(String(item?.prep_type || '').trim())) fail(422, '请选择备课类型');
-      }
       if (item && item.id) { updateRow(table, item.id, normalizeBody(item)); ids.push(item.id); }
       else { ids.push(createRow(table, normalizeBody(item || {})).id); }
     }
@@ -4224,13 +4209,8 @@ export async function handle(method, path, query = {}, body = undefined) {
     try {
       data = await cloudRoute(method, clean, query, body);
     } catch (e) {
-      /* 测试库尚未执行迁移时，PostgREST 会报 schema cache / relation not found。
-         这类错误不应阻断整张考勤工作台：先回退到本地实现，让用户继续验证界面和交互；
-         真实云端数据仍由迁移完成后自动接管。权限、网络和其他云端错误继续明确提示。 */
-      if (!isCloudSchemaUnavailable(e)) {
-        return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
-      }
-      data = null;
+      /* 云端出错时说清楚是云端的事，别让用户以为是本地坏了 */
+      return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
     }
     /* null = 这个接口还没上云（统计 / 原件照片），继续往下走本地实现。
        其他值一律当云端结果返回，包括空数组 —— 空数组是"真的没有数据"，
@@ -4271,11 +4251,6 @@ const CLOUD_TABLES = new Set([
   'attachments',       // 路由前缀：/upload、/attachments、/attachments/:id/file
                        // 以及 /attendance/:id/photos（也走这张表）
 ]);
-
-function isCloudSchemaUnavailable(error) {
-  const msg = String(error?.message || error || '');
-  return /schema\s+cache|could not query the database|relation .* does not exist|PGRST\d{3}/i.test(msg);
-}
 
 /* 云端是否可用。判断本身是同步的（读 localStorage），但 import 是异步的 ——
    如果网络抖动导致模块加载卡住，每个请求都会先停在这里。

@@ -701,252 +701,94 @@
 .roster-review-empty{text-align:center!important;color:#94a3b8!important;padding:28px!important}
 
 
-/* ===== 考勤管理：学科快捷筛选、双栏名单、统计与请假页签 ===== */
-.att-work-subjects{display:flex;align-items:center;gap:6px;max-width:100%;overflow-x:auto;scrollbar-width:thin;padding:1px 0 8px}
-.att-work-subjects button{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:31px;padding:0 10px;border:1px solid #e1e8f2;border-radius:999px;background:#fff;color:#60718a;font-size:11px;font-weight:650;white-space:nowrap;cursor:pointer}
-.att-work-subjects button b{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#f0f3f8;color:#7c8ba0;font-size:9px}
-.att-work-subjects button.on{border-color:#c7dcff;background:#edf5ff;color:#075cf2}
-.att-work-subjects button.on b{background:#d7e8ff;color:#075cf2}
-.att-work-double-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
-.att-work-double-grid .att-work-table-scroll{min-width:0}
-.att-work-double-grid .att-work-table{min-width:520px}
-.att-work-period-control{gap:8px!important}
-.att-work-period-time{color:#8392a8;font-size:11px;font-weight:500;white-space:nowrap}
-.att-work-special{min-width:0;padding:2px 0 4px}
-.att-work-special .stt-body{display:flex;flex-direction:column;gap:12px}
-.att-work-special .stt-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.att-work-special .stt-months{display:flex;gap:7px;flex-wrap:wrap}
-.att-work-special .stt-table{max-height:calc(100vh - 390px);min-height:180px}
-.att-work-special .stt-table .tbl{min-width:920px;width:100%}
-.leave-ledger{display:flex;flex-direction:column;gap:14px;min-width:0;color:#1d2b45}
-.leave-page-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
-.leave-page-head h3{margin:0 0 4px;color:#172744;font-size:17px;font-weight:800}
-.leave-page-head p{margin:0;color:#8794a8;font-size:11px}
-.leave-page-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
-.leave-page-actions .btn{height:35px;border-radius:9px}
-.leave-page-actions .btn.primary{background:#1261f4;border-color:#1261f4;color:#fff}
-.leave-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.leave-summary-card{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:13px 15px;border:1px solid #e5ebf4;border-radius:12px;background:linear-gradient(110deg,#f5f9ff,#fff)}
-.leave-summary-card span{color:#74849c;font-size:11px;white-space:nowrap}
-.leave-summary-card b{color:#1a2c49;font-size:23px;font-weight:820;font-variant-numeric:tabular-nums}
-.leave-summary-card.sick{background:linear-gradient(110deg,#fff5ed,#fff)}
-.leave-summary-card.personal{background:linear-gradient(110deg,#f4f1ff,#fff)}
-.leave-summary-card.days{background:linear-gradient(110deg,#eef9f3,#fff)}
-.leave-summary-card small{margin-left:4px;color:#8391a5;font-size:10px;font-weight:600}
-.leave-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.leave-toolbar .input{height:35px;border-radius:9px;font-size:12px}
-.leave-toolbar button{height:35px;min-width:34px;border:1px solid #e0e7f1;border-radius:9px;background:#fff;color:#516580;font-size:19px}
-.leave-toolbar .leave-month{width:150px}
-.leave-toolbar .leave-type{width:105px}
-.leave-toolbar .leave-search{flex:1 1 190px;min-width:140px}
-.leave-result-count{margin-left:auto;color:#8a98ad;font-size:11px;white-space:nowrap}
-.leave-table-scroll{overflow:auto;border:1px solid #e1e8f2;border-radius:11px;background:#fff}
-.leave-table{width:100%;min-width:820px;border-collapse:separate;border-spacing:0;font-size:12px}
-.leave-table th{position:sticky;top:0;z-index:1;height:38px;padding:8px 11px;background:#f3f6fb;color:#60718a;text-align:left;font-size:11px;font-weight:750;white-space:nowrap;border-bottom:1px solid #e4eaf2}
-.leave-table td{height:43px;padding:8px 11px;border-bottom:1px solid #edf1f6;color:#40536d;white-space:nowrap}
-.leave-table tr:last-child td{border-bottom:0}
-.leave-table tbody tr:hover td{background:#f8fbff}
-.leave-table .leave-person{color:#1b2d4b;font-weight:750}
-.leave-table .leave-remark{max-width:220px;overflow:hidden;text-overflow:ellipsis}
-.leave-type-tag{display:inline-flex;padding:4px 9px;border-radius:20px;background:#f0f3f8;color:#66758b;font-size:10px;font-weight:700}
-.leave-type-tag.sick{background:#fff0e5;color:#c36c2e}
-.leave-type-tag.personal{background:#f0ebff;color:#7654bd}
-.leave-row-actions{display:flex;gap:10px}
-.leave-row-actions button{padding:3px 0;background:none;border:0;color:#2367c9;font-size:11px;font-weight:700;cursor:pointer}
-.leave-row-actions button.danger{color:#c65353}
-.leave-empty{text-align:center!important;height:150px!important;color:#93a0b2!important}
-.leave-footnote{padding-top:10px;border-top:1px solid #edf1f6;color:#8795a9;font-size:10px;line-height:1.6}
-.leave-loading{min-height:180px;display:grid;place-items:center;color:#8493a8;font-size:12px}
-.leave-editor .sheet{max-width:620px}
-.leave-editor-form{display:flex;flex-direction:column;gap:12px}
-.leave-editor-form .field{min-width:0}
-.leave-editor-form .input{width:100%;min-height:38px}
-.leave-editor-form .field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.leave-editor-form textarea{resize:vertical;min-height:78px}
-@media(max-width:980px){
- .att-work-double-grid{grid-template-columns:1fr}
- .att-work-double-grid .att-work-table{min-width:680px}
-}
-@media(max-width:760px){
- .att-work-special .stt-bar{align-items:flex-start}
- .att-work-special .stt-table{max-height:calc(100vh - 430px)}
- .leave-page-head{align-items:flex-start;flex-direction:column}
- .leave-page-actions{width:100%;justify-content:flex-end}
- .leave-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
- .leave-summary-card{padding:10px 11px;border-radius:10px}
- .leave-summary-card span{font-size:10px}
- .leave-summary-card b{font-size:20px}
- .leave-toolbar{gap:6px}
- .leave-toolbar .leave-month{width:135px}
- .leave-result-count{width:100%;margin-left:0}
- .leave-editor-form .field-row{grid-template-columns:1fr}
- .att-work-period-control{width:auto!important}
-}
-
-/* ===== 考勤工作台：按纸质花名册参考图重排（TEST 验收版） ===== */
-.att-work-shell{
-  display:flex;flex-direction:column;gap:9px;
-  padding:2px 0 18px;
-}
-.att-work-shell .att-work-head{margin:0 0 1px}
-.att-work-shell .att-work-meta-controls{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  min-height:50px;margin:0;padding:7px 10px;
-  border:1px solid #e2e8f1;border-radius:12px;background:#fff;
-  box-shadow:0 2px 8px rgba(35,65,105,.035);
-}
-.att-work-shell .att-work-date{margin:0;gap:5px}
-.att-work-shell .att-work-date label{
-  height:34px;gap:8px;padding:0 9px;border:1px solid #dce3ed;border-radius:8px;
-}
-.att-work-shell .att-work-date label input{
-  flex:0 0 18px;width:18px;max-width:18px;height:20px;opacity:1;
-}
-.att-work-shell .att-work-date label span{font-size:12px;color:#33445e}
-.att-work-shell .att-work-date .icon-btn{width:30px;height:30px}
-.att-work-weekday{color:#245fc5;font-size:12px;font-weight:750;white-space:nowrap}
-.att-work-control{display:inline-flex;align-items:center;gap:7px;color:#718099;font-size:12px;white-space:nowrap}
-.att-work-control .input{
-  width:auto;min-width:82px;height:34px;padding:0 26px 0 9px;
-  border:1px solid #dce3ed;border-radius:8px;background:#fff;color:#33445e;font-size:12px;
-}
-.att-work-period-time{color:#718099;font-size:12px;white-space:nowrap}
-.att-work-expected{color:#6e7c91;font-size:12px;white-space:nowrap}
-.att-work-expected b{color:#172744;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
-.att-work-meta-controls>.att-work-spacer{flex:1}
-.att-work-meta-controls>#att-work-today{height:34px;padding:0 12px;border:1px solid #e0e6ef;border-radius:8px;background:#fff;color:#56667f}
-.att-work-subjectbar{
-  display:flex;align-items:center;gap:10px;min-width:0;
-  padding:7px 10px;border:1px solid #e2e8f1;border-radius:12px;background:#fff;
-  box-shadow:0 2px 8px rgba(35,65,105,.035);
-}
-.att-work-subject-label{flex:0 0 auto;color:#5e6d84;font-size:12px;font-weight:750}
-.att-work-subjectbar .att-work-subjects{
-  flex:1 1 auto;min-width:0;gap:6px;padding:0 0 1px;overflow-x:auto;scrollbar-width:thin;
-}
-.att-work-subjectbar .att-work-subjects button{min-height:32px;padding:0 11px;font-size:11.5px}
-.att-work-subject-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
-.att-work-subject-actions .btn{height:32px;padding:0 10px;border-radius:8px;font-size:11px;white-space:nowrap}
-.att-work-shell .att-work-tabs{
-  display:flex;align-items:center;gap:27px;min-height:50px;
-  margin:0;padding:0 16px;border:1px solid #e2e8f1;border-radius:12px;
-  background:#fff;box-shadow:0 2px 8px rgba(35,65,105,.035);
-}
-.att-work-shell .att-work-tabs button{padding:0 2px 1px;font-size:13px}
-.att-work-shell .att-work-tabs button.on:after{bottom:-17px;height:3px}
-.att-work-shell .att-work-toolbar{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  margin:0;padding:0 2px;
-}
-.att-work-shell .att-work-toolbar .btn{height:34px;padding:0 12px;border-radius:8px;font-size:11.5px}
-.att-work-shell .att-work-toolbar .aw-search{width:180px;height:34px;border-radius:8px}
-.att-work-roster-toolbar .att-roster-count{font-size:12px;color:#45556e;font-weight:750;white-space:nowrap}
-.att-work-roster-toolbar .att-work-export-wrap{position:relative;flex:0 0 auto}
-.att-work-import-menu{width:190px}
-.att-work-shell .att-work-panel{
-  width:100%;min-height:calc(100vh - 250px);
-  padding:13px 14px 10px;border:1px solid #e1e7ef;border-radius:12px;
-  background:#fff;box-shadow:0 3px 12px rgba(35,65,105,.04);
-}
-.att-work-shell .att-work-table-title{margin:0 0 8px;padding:0 1px}
-.att-work-shell .att-work-table-title h3{margin:0 0 3px;font-size:16px;color:#172744;font-weight:800}
-.att-work-shell .att-work-table-title span{font-size:11px;color:#74839a}
-.att-work-roster-grid{
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:14px;align-items:start;min-width:0;
-}
-.att-work-roster-scroll{min-width:0;overflow:auto;border:0;border-radius:0}
-.att-work-shell .aw-roster-table{
-  width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;
-  font-size:13px;color:#27364d;
-}
-.att-work-shell .aw-roster-table th,
-.att-work-shell .aw-roster-table td{
-  height:29px;padding:3px 7px;text-align:center;vertical-align:middle;
-  border:1px solid #8a9099;white-space:nowrap;
-}
-.att-work-shell .aw-roster-table th{
-  height:32px;background:#f2f4f7;color:#596579;font-size:12px;font-weight:750;
-}
-.att-work-shell .aw-roster-table th:nth-child(1),
-.att-work-shell .aw-roster-table td:nth-child(1){width:13%;font-variant-numeric:tabular-nums}
-.att-work-shell .aw-roster-table th:nth-child(2),
-.att-work-shell .aw-roster-table td:nth-child(2){width:36%}
-.att-work-shell .aw-roster-table th:nth-child(3),
-.att-work-shell .aw-roster-table td:nth-child(3){width:29%}
-.att-work-shell .aw-roster-table th:nth-child(4),
-.att-work-shell .aw-roster-table td:nth-child(4){width:22%}
-.att-work-shell .aw-roster-table td.aw-name{font-weight:750;text-align:center;color:#1c2b43}
-.att-work-shell .aw-roster-table tbody tr:nth-child(even) td{background:#f5f7f9}
-.att-work-shell .aw-roster-table tbody tr:hover td{background:#edf4ff}
-.aw-roster-remove{
-  display:inline-grid;place-items:center;width:25px;height:22px;padding:0;
-  border:0;border-radius:5px;background:transparent;color:#aeb7c3;cursor:pointer;
-}
-.aw-roster-remove:hover{background:#fff0f0;color:#d34e4e}
-.aw-roster-empty{height:40px!important;color:#9aa5b5!important;text-align:center}
-.att-work-shell .att-work-foot{margin-top:9px;padding-top:8px;border-top:1px solid #e8edf3}
-@media(max-width:900px){
-  .att-work-shell .att-work-meta-controls{gap:7px}
-  .att-work-subjectbar{align-items:flex-start;flex-wrap:wrap}
-  .att-work-subjectbar .att-work-subjects{flex-basis:100%;order:2}
-  .att-work-subject-actions{margin-left:auto}
-  .att-work-roster-grid{gap:9px}
-  .att-work-shell .aw-roster-table{font-size:12px}
-}
+/* Attendance PRD V1.0 — restrained palette, sticky toolbar, dense table and mobile cards */
+.att-work-shell{color:#1d2129;--aw-blue:#165dff;--aw-line:#e5e6eb;--aw-muted:#4e5969}
+.att-work-sticky{position:sticky;top:0;z-index:35;background:#f2f3f5;padding:10px 0;border-bottom:1px solid var(--aw-line)}
+.att-work-sticky>div:first-child{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.att-work-sticky h2{font-size:20px;margin:0;color:#1d2129}
+.att-work-grade{width:auto!important;min-width:140px!important;max-width:260px}
+.att-work-meta-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;padding:10px 12px;border:1px solid var(--aw-line);border-radius:10px;margin:10px 0}
+.att-work-time-display{font-size:13px;font-weight:650;color:#165dff;background:#eef4ff;padding:7px 10px;border-radius:7px}
+.att-work-calendar{position:relative;z-index:20;background:#fff;border:1px solid var(--aw-line);border-radius:10px;padding:12px;max-width:330px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.aw-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.aw-cal-head button{width:32px;height:30px;border:1px solid var(--aw-line);border-radius:7px;background:#fff}
+.aw-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center}
+.aw-cal-grid>*{height:34px;display:grid;place-items:center;border-radius:7px}
+.aw-cal-grid button{background:#fff;color:#1d2129}
+.aw-cal-grid button:hover,.aw-cal-grid button.on{background:#165dff;color:#fff}
+.aw-tab-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#c9cdd4;margin-left:5px;vertical-align:middle}
+.aw-tab-dot.done{background:#00b42a}
+.aw-roster-table th,.aw-roster-table td{white-space:nowrap}
+.aw-roster-input{width:100%;min-width:90px;border:1px solid transparent;border-radius:5px;padding:6px;background:transparent;color:#1d2129}
+.aw-roster-input:focus{outline:1px solid #165dff;background:#fff}
+.aw-grade-tag,.aw-subject-tag{display:inline-flex;padding:3px 8px;border-radius:999px;background:#eef4ff;color:#165dff;font-size:11px;font-weight:650}
+.aw-subject-tag{background:#f2f3f5;color:#4e5969}
+.aw-danger{color:#f53f3f!important}
+.aw-mobile-card{background:#fff;border:1px solid #e5e6eb;border-radius:12px;padding:12px;display:grid;gap:10px}
+.aw-mobile-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.aw-mobile-card-head>b{font-size:15px;color:#1d2129}
+.aw-mobile-status{display:flex;gap:7px;flex-wrap:wrap}
+.aw-mobile-mark{border:1px solid #e5e6eb;background:#fff;color:#4e5969;border-radius:8px;padding:7px 10px;font-size:12px}
+.aw-mobile-mark.on{background:#eaf1ff;border-color:#165dff;color:#165dff}
+.aw-mobile-remark{width:100%}
 @media(max-width:680px){
-  .att-work-shell{gap:8px}
-  .att-work-shell .att-work-meta-controls{padding:8px;gap:7px}
-  .att-work-shell .att-work-date{margin:0}
-  .att-work-shell .att-work-date label{height:32px}
-  .att-work-weekday{margin-right:auto}
-  .att-work-control{gap:4px}
-  .att-work-control .input{min-width:72px;height:32px}
-  .att-work-expected{margin-right:auto}
-  .att-work-shell .att-work-meta-controls>.att-work-spacer{display:none}
-  .att-work-shell .att-work-meta-controls>#att-work-today{margin-left:auto}
-  .att-work-subjectbar{padding:8px;gap:7px}
-  .att-work-subject-actions{width:100%;justify-content:flex-end}
-  .att-work-shell .att-work-tabs{gap:19px;min-height:46px;padding:0 10px}
-  .att-work-shell .att-work-tabs button{font-size:12px}
-  .att-work-shell .att-work-tabs button.on:after{bottom:-15px}
-  .att-work-shell .att-work-panel{min-height:calc(100vh - 240px);padding:10px}
-  .att-work-roster-grid{grid-template-columns:1fr;gap:10px}
-  .att-work-shell .aw-roster-table{min-width:0;font-size:12px}
-  .att-work-shell .aw-roster-table th,.att-work-shell .aw-roster-table td{height:34px;padding:4px}
-  .att-work-shell .att-work-toolbar{gap:6px}
-  .att-work-shell .att-work-toolbar .aw-search{flex:1 1 130px;width:auto;min-width:0}
+ .att-work-sticky{top:0;padding:8px 0}
+ .att-work-sticky>div:first-child{gap:6px}
+ .att-work-sticky h2{font-size:17px}
+ .att-work-meta-controls{gap:7px;padding:8px}
+ .att-work-time-display{font-size:11px}
+ .att-work-table-scroll.att-work-sheet-scroll{display:none!important}
+ .att-work-mobile-list{display:grid;gap:9px}
+ .aw-roster-table{min-width:900px}
+ .att-work-panel .att-work-foot{position:sticky;bottom:0;background:#fff;z-index:30;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
 }
+@media(min-width:681px){.att-work-mobile-list{display:none}}
 
+.aw-unseated{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#f2f3f5;color:#4e5969;font-size:11px;font-weight:650}
+.aw-unseated.hidden{display:none}
+.aw-roster-table th:first-child,.aw-roster-table td:first-child{width:60px;text-align:center}
+.aw-roster-table th:nth-child(2),.aw-roster-table td:nth-child(2){min-width:140px}
+.aw-roster-table th:nth-child(3),.aw-roster-table td:nth-child(3){min-width:140px}
+.aw-roster-table th{height:48px!important}
+.aw-roster-table td{height:44px!important}
+.aw-roster-table tbody tr:hover{background:#f7faff}
+.att-work-sheet-table thead th{position:sticky;top:0;z-index:8;height:48px}
+.att-work-sheet-table th:nth-child(1),.att-work-sheet-table td:nth-child(1){position:sticky;left:0;z-index:10;background:#fff;min-width:60px}
+.att-work-sheet-table th:nth-child(2),.att-work-sheet-table td:nth-child(2){position:sticky;left:60px;z-index:10;background:#fff;min-width:140px}
+.att-work-sheet-table th:nth-child(3),.att-work-sheet-table td:nth-child(3){position:sticky;left:200px;z-index:10;background:#fff;min-width:140px}
+.att-work-sheet-table thead th:nth-child(-n+3){z-index:12;background:#f2f3f5}
+.att-work-sheet-table tbody tr:hover td:nth-child(-n+3){background:#f7faff}
 
-/* ===== 考勤管理：日期栏 + 学科栏双层固定 =====
-   两条筛选栏作为一个 sticky 组，保证日期与学科始终相邻，
-   并避免移动端日期栏换行后用固定 top 值造成重叠。 */
-.att-work-shell .att-work-sticky-controls{
-  position:sticky;
-  top:14px;
-  z-index:35;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  min-width:0;
-  margin:0;
-  padding:0 0 3px;
-  background:var(--card,#fff);
+/* Attendance PRD V1.0 — result summary, online presence, roster frozen columns */
+.att-work-filter-summary{margin:-5px 0 10px;color:#4e5969;font-size:12px;line-height:1.5}
+.att-work-online{display:flex;align-items:center;gap:7px;min-width:0;max-width:300px;padding:6px 9px;border:1px solid #e5e6eb;border-radius:999px;background:#fff;color:#4e5969;font-size:11px;white-space:nowrap;overflow:hidden}
+.aw-online-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#00b42a;display:inline-block}
+.aw-online-dot.offline{background:#ff7d00}
+.aw-result-card{margin:16px 0 2px;padding:14px 16px;border:1px solid #d9eadf;border-radius:12px;background:#f7fcf8}
+.aw-result-card.is-modified{border-color:#f4dfc0;background:#fffaf2}
+.aw-result-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:#16834a}
+.aw-result-card.is-modified .aw-result-head{color:#b66b08}
+.aw-result-head strong{font-size:14px}
+.aw-result-head span{color:#718096;font-size:11px}
+.aw-result-meta{display:flex;flex-wrap:wrap;gap:7px 16px;margin-bottom:12px;color:#4e5969;font-size:11px}
+.aw-result-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.aw-result-stats>div{display:flex;align-items:baseline;gap:5px;min-width:0;padding:8px 9px;border-radius:8px;background:#fff}
+.aw-result-stats span{color:#718096;font-size:11px;white-space:nowrap}
+.aw-result-stats b{margin-left:auto;color:#1d2129;font-size:18px;font-variant-numeric:tabular-nums}
+.aw-result-stats small{color:#9aa3af;font-size:10px}
+.aw-roster-table th:nth-child(1),.aw-roster-table td:nth-child(1){position:sticky;left:0;z-index:10;background:#fff;min-width:60px}
+.aw-roster-table th:nth-child(2),.aw-roster-table td:nth-child(2){position:sticky;left:60px;z-index:10;background:#fff;min-width:140px}
+.aw-roster-table th:nth-child(3),.aw-roster-table td:nth-child(3){position:sticky;left:200px;z-index:10;background:#fff;min-width:140px}
+.aw-roster-table thead th:nth-child(-n+3){z-index:12;background:#f2f3f5}
+.aw-roster-table tbody tr:hover td:nth-child(-n+3){background:#f7faff}
+@media(max-width:900px){
+  .att-work-head-actions{display:flex;flex-wrap:wrap;gap:7px;width:100%;margin-left:0}
+  .att-work-head-actions .att-work-grade{flex:1 1 130px;min-width:0!important;width:auto!important}
+  .att-work-online{flex:1 1 100%;max-width:none;order:3}
+  .att-work-table-scroll.att-work-sheet-scroll{display:none!important}
+  .att-work-mobile-list{display:grid;gap:9px}
+  .att-work-foot{position:sticky;bottom:0;background:#fff;z-index:30;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .aw-result-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
-.att-work-shell .att-work-sticky-controls>.att-work-meta-controls,
-.att-work-shell .att-work-sticky-controls>.att-work-subjectbar{
-  flex:0 0 auto;
-  width:100%;
-}
-.att-work-shell .att-work-sticky-controls .att-work-meta-controls,
-.att-work-shell .att-work-sticky-controls .att-work-subjectbar{
-  box-shadow:0 3px 12px rgba(35,65,105,.07);
-}
-@media(max-width:1100px){
-  /* 手机/平板顶部还有一条固定的二级导航，筛选栏停在它的下方。 */
-  .att-work-shell .att-work-sticky-controls{
-    top:calc(66px + env(safe-area-inset-top,0px));
-    z-index:45;
-  }
-}
+@media(min-width:901px){.att-work-mobile-list{display:none}}
+@media(max-width:420px){.aw-result-card{padding:11px}.aw-result-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.aw-result-meta{display:grid;gap:5px}}
