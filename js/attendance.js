@@ -498,15 +498,16 @@ export async function renderAttendance(box, opts = {}) {
           <div><h2>${esc(activeGrade)} · 考勤</h2><div class="att-work-sync"><i></i> 数据已加载</div></div>
           <div class="att-work-head-actions">${!isRoster && !isSpecial ? '<button class="btn ghost sm" id="att-work-create-group">补齐三张表</button>' : ''}<select class="input att-work-grade" id="att-work-grade">${gradesData.tabs.map((g) => `<option value="${esc(g)}" ${g === activeGrade ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div>
         </div>
-        ${!isSpecial ? dateControlsHTML : ''}
-        ${!isSpecial ? subjectBarHTML : ''}
+        <div class="att-work-sticky-controls">
+          ${dateControlsHTML}
+          ${subjectBarHTML}
+        </div>
         <nav class="att-work-tabs" aria-label="考勤管理页签">
           <button data-tab="roster" class="${activeTab === 'roster' ? 'on' : ''}">花名册</button>
           <button data-tab="seat" class="${activeTab === 'seat' ? 'on' : ''}">坐班表</button>
-          <button data-tab="research" class="${activeTab === 'research' ? 'on' : ''}">教研表</button>
           <button data-tab="class" class="${activeTab === 'class' ? 'on' : ''}">上课表</button>
-          <button data-tab="stats" class="${activeTab === 'stats' ? 'on' : ''}">统计</button>
           <button data-tab="leave" class="${activeTab === 'leave' ? 'on' : ''}">请假</button>
+          <button data-tab="stats" class="${activeTab === 'stats' ? 'on' : ''}">统计</button>
         </nav>
         ${toolbarHTML}
         <section class="att-work-panel">
