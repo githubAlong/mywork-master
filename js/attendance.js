@@ -329,19 +329,18 @@ export async function renderAttendance(box, opts = {}) {
     const rows = visibleRows();
     const displayColumns = detail?.columns || [];
     const rosterRows = visibleRoster();
-    const rosterTable = (items, offset) => `<div class="att-work-table-scroll"><table class="att-work-table aw-roster-table">
+    const rosterHTML = `<div class="att-work-table-scroll"><table class="att-work-table aw-roster-table">
       <thead><tr><th>序号</th><th>姓名</th><th>学科</th><th>年级</th><th>手机号</th><th>备注</th><th>操作</th></tr></thead>
-      <tbody>${items.map((r, i) => `<tr data-teacher="${esc(r.id)}">
-        <td>${offset + i + 1}</td>
+      <tbody>${rosterRows.map((r, i) => `<tr data-teacher="${esc(r.id)}">
+        <td>${i + 1}</td>
         <td class="aw-name"><input class="aw-roster-input" data-roster-field="name" value="${esc(r.name || '')}"></td>
         <td><input class="aw-roster-input" data-roster-field="subject" value="${esc(r.subject || '')}"></td>
         <td><span class="aw-grade-tag">${esc(r.grade || activeGrade)}</span></td>
         <td><input class="aw-roster-input" data-roster-field="phone" value="${esc(r.phone || '')}" placeholder="手机号"></td>
         <td><input class="aw-roster-input" data-roster-field="note" value="${esc(r.note || '')}" placeholder="备注"></td>
         <td><button class="btn ghost sm" data-roster-save="${esc(r.id)}">保存</button><button class="btn ghost sm aw-danger" data-roster-delete="${esc(r.id)}">删除</button></td>
-      </tr>`).join('')}</tbody></table></div>`;
-    const split = Math.ceil(rosterRows.length / 2);
-    const rosterHTML = rosterRows.length ? `<div class="aw-roster-columns">${rosterTable(rosterRows.slice(0, split), 0)}${rosterTable(rosterRows.slice(split), split)}</div>` : `<div class="att-work-empty"><b>暂无教师名单</b><p>请点击新增老师或导入名单。</p></div>`;
+      </tr>`).join('')}</tbody>
+    </table></div>${rosterRows.length ? '' : `<div class="att-work-empty"><b>暂无教师名单</b><p>请点击新增老师或导入名单。</p></div>`}`;
     const classViewNote = isClass ? `<div class="att-work-locked-note">上课表独立保存、独立确认。可录入跨年级教师，年级标签会标明来源；临时记录不会自动加入花名册。</div>` : '';
     const mobileRowsHTML = !isRoster && detail ? `<div class="att-work-mobile-list">${rows.map((r)=>{const ix=detail.rows.findIndex(x=>(r.id&&String(x.id)===String(r.id))||(r._uiKey&&x._uiKey===r._uiKey));const any=displayColumns.some(c=>c.type==='check'&&r.data?.[c.key]==='1');return `<article class="aw-mobile-card" data-mobile-row="${ix}"><div class="aw-mobile-card-head"><b>${esc(r.teacher||'')}</b><span class="aw-grade-tag">${esc(r.data?.borrow_grade||r.data?.class_grade||r.grade||activeGrade)}</span><span class="aw-subject-tag">${esc(r.subject||'未填学科')}</span>${r.data?.__temp?'<span class="aw-temp">临时</span>':''}</div><div class="aw-mobile-status">${displayColumns.filter(c=>c.type==='check').map(c=>`<button class="aw-mobile-mark ${r.data?.[c.key]==='1'?'on':''}" data-row="${ix}" data-key="${esc(c.key)}">${esc(c.label)} ${r.data?.[c.key]==='1'?'✓':''}</button>`).join('')}${activeTab==='seat'&&!any?'<span class="aw-unseated">未坐班</span>':''}</div><input class="aw-cell-input aw-mobile-remark" data-cell-input data-row="${ix}" data-key="${esc(displayColumns.find(c=>c.type!=='check')?.key||'k_remark')}" value="${esc(r.data?.[displayColumns.find(c=>c.type!=='check')?.key||'k_remark']||'')}" placeholder="备注"></article>`;}).join('')}</div>` : '';
     const tableHTML = isRoster ? rosterHTML : detail ? `
