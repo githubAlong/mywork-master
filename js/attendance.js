@@ -374,6 +374,14 @@ export async function renderAttendance(box, opts = {}) {
       <button data-subject="" class="${!subjectFilter ? 'on' : ''}">全部 <b>${allTeacherCount}</b></button>
       ${subjects.map((subject) => `<button data-subject="${esc(subject)}" class="${subjectFilter === subject ? 'on' : ''}">${esc(subject)} <b>${subjectCounts.get(subject) || 0}</b></button>`).join('')}
     </div>`;
+    const subjectBarHTML = `<div class="att-work-subjectbar">
+      <span class="att-work-subject-label">学科筛选</span>
+      ${subjectButtons}
+      <div class="att-work-subject-actions">
+        <button class="btn ghost sm" id="att-work-subject-add">＋ 新增学科</button>
+        <button class="btn ghost sm" id="att-work-subject-manage">管理</button>
+      </div>
+    </div>`;
     const type = typeForTab[activeTab];
     const todays = listFor(type);
     const stateText = detail?.confirm_state === 'confirmed' ? '已确认' : detail?.confirm_state === 'modified' ? '已修改待确认' : '待确认';
@@ -381,15 +389,47 @@ export async function renderAttendance(box, opts = {}) {
     const pcols = periodCols();
     const rows = visibleRows();
     const displayColumns = detail?.columns || [];
-    const rosterRows = visibleRoster();
+    const rosterRows = visibleRoster().filter((r) => r.active);
     const currentPeriodInfo = periodSchedule.find((item) => Number(item.period_no) === Number(selectedPeriod));
     const currentPeriodTime = currentPeriodInfo
       ? [currentPeriodInfo.start_time, currentPeriodInfo.end_time].filter(Boolean).map((value) => String(value).slice(0, 5)).join('–')
       : '时间待设置';
-    const rosterHTML = `<div class="att-work-table-scroll"><table class="att-work-table aw-roster-table">
-      <thead><tr><th>序号</th><th>姓名</th><th>学科</th></tr></thead>
-      <tbody>${rosterRows.map((r, i) => `<tr><td>${i + 1}</td><td class="aw-name">${esc(r.name || '')}</td><td>${esc(r.subject || '未填学科')}</td></tr>`).join('')}</tbody>
-    </table></div>${rosterRows.length ? '' : `<div class="att-work-empty"><b>暂无教师名单</b><p>请先导入或维护本年级花名册。</p></div>`}`;
+    const dateObject = new Date(`${viewDate}T00:00:00`);
+    const weekdayText = Number.isNaN(dateObject.getTime()) ? '' : `周${WD[dateObject.getDay()]}`;
+    const periodOptionsHTML = Array.from({ length: 9 }, (_, i) => i + 1)
+      .map((p) => `<option value="${p}" ${String(p) === selectedPeriod ? 'selected' : ''}>第 ${p} 节</option>`).join('');
+    const timeRangeOptionsHTML = ['全天', '上午', '下午']
+      .map((range) => `<option value="${range}" ${range === timeRange ? 'selected' : ''}>${range}</option>`).join('');
+    const dateControlsHTML = `<div class="att-work-meta-controls">
+      <div class="att-work-date">
+        <button class="icon-btn" id="att-work-prev" aria-label="前一天">‹</button>
+        <label><input type="date" id="att-work-date" value="${esc(viewDate)}"><span>${esc(viewDate.split('-').join('/'))}</span></label>
+        <button class="icon-btn" id="att-work-next" aria-label="后一天">›</button>
+      </div>
+      <span class="att-work-weekday">${weekdayText}</span>
+      <label class="att-work-control"><span>节次</span><select class="input" id="att-work-period" aria-label="选择节次">${periodOptionsHTML}</select></label>
+      <span id="att-work-period-time" class="att-work-period-time">${esc(currentPeriodTime)}</span>
+      <label class="att-work-control"><span>时段</span><select class="input" id="att-work-time-range">${timeRangeOptionsHTML}</select></label>
+      <span class="att-work-expected">应到 <b>${allTeacherCount}</b> 人</span>
+      <span class="att-work-spacer"></span>
+      <button class="btn ghost sm" id="att-work-today">回到今天</button>
+    </div>`;
+    const renderRosterTable = (list, startIndex) => `
+      <div class="att-work-table-scroll att-work-roster-scroll">
+        <table class="att-work-table aw-roster-table">
+          <thead><tr><th>序号</th><th>姓名</th><th>学科</th><th>操作</th></tr></thead>
+          <tbody>${list.length ? list.map((r, i) => `<tr>
+            <td>${startIndex + i + 1}</td>
+            <td class="aw-name">${esc(r.name || '')}</td>
+            <td>${esc(r.subject || '未填学科')}</td>
+            <td><button class="aw-roster-remove" type="button" data-roster-remove="${esc(r.id || '')}" title="删除教师">${icon('close', 13)}</button></td>
+          </tr>`).join('') : `<tr><td colspan="4" class="aw-roster-empty">暂无教师</td></tr>`}</tbody>
+        </table>
+      </div>`;
+    const rosterMid = Math.ceil(rosterRows.length / 2);
+    const rosterHTML = rosterRows.length
+      ? `<div class="att-work-roster-grid">${renderRosterTable(rosterRows.slice(0, rosterMid), 0)}${renderRosterTable(rosterRows.slice(rosterMid), rosterMid)}</div>`
+      : `<div class="att-work-empty"><b>暂无教师名单</b><p>请先新增教师或导入本年级花名册。</p></div>`;
     const classViewNote = isClass ? `<div class="att-work-locked-note">上课表独立保存、独立确认。可录入跨年级临时教师；临时记录只保留在当天这张表，不写入花名册。</div>` : '';
     const renderRowsTable = (list) => `
       <div class="att-work-table-scroll att-work-sheet-scroll"><table class="att-work-table att-work-sheet-table">
@@ -412,6 +452,45 @@ export async function renderAttendance(box, opts = {}) {
       : `<div class="att-work-empty"><b>当天这张表尚未生成</b><p>请检查本年级花名册，或生成这张表后开始录入。</p><button class="btn primary sm" id="att-work-create">生成${esc(TYPE_SHORT[type] || '考勤表')}草稿</button></div>`;
 
 
+    const toolbarHTML = isSpecial ? '' : isRoster
+      ? `<div class="att-work-toolbar att-work-roster-toolbar">
+          <button class="btn primary sm" id="att-work-add">＋ 新增教师</button>
+          <button class="btn ghost sm" id="att-work-bulk">批量粘贴名单</button>
+          <button class="btn ghost sm" id="att-work-subject-add-inline">＋ 新增学科</button>
+          <input class="input aw-search" id="att-work-search" placeholder="⌕ 搜索教师姓名" value="${esc(searchText)}">
+          <span class="att-work-spacer"></span>
+          <span class="att-roster-count">共 ${allTeacherCount} 人</span>
+          <div class="att-work-export-wrap">
+            <button class="btn ghost sm" id="att-work-import">导入 ▾</button>
+            <div class="att-work-export-menu att-work-import-menu" id="att-work-import-menu" hidden>
+              <button data-roster-import="excel">导入 Excel / CSV</button>
+              <button data-roster-import="photo">拍照建册</button>
+            </div>
+          </div>
+          <div class="att-work-export-wrap">
+            <button class="btn ghost sm" id="att-work-export">导出 ▾</button>
+            <div class="att-work-export-menu" id="att-work-export-menu" hidden>
+              <button data-roster-export="csv">导出 CSV（Excel 可打开）</button>
+            </div>
+          </div>
+        </div>`
+      : `<div class="att-work-toolbar">
+          <input class="input aw-search" id="att-work-search" placeholder="⌕ 搜索教师姓名" value="${esc(searchText)}">
+          <button class="btn ghost sm" id="att-work-photo">${icon('camera', 14)} 拍照导入</button>
+          <button class="btn primary sm" id="att-work-voice">${icon('mic', 14)} 语音录入</button>
+          ${isClass ? `<button class="btn ghost sm" id="att-work-add">＋ 新增临时老师</button>` : ''}
+          <span class="att-work-spacer"></span>
+          <div class="att-work-export-wrap">
+            <button class="btn ghost sm" id="att-work-export">${icon('download', 14)} 导出 ▾</button>
+            <div class="att-work-export-menu" id="att-work-export-menu" hidden>
+              <button data-export="pdf">导出 PDF</button>
+              <button data-export="png">导出 PNG</button>
+              <button data-export="xlsx">导出 Excel</button>
+              <label><input type="checkbox" id="att-work-watermark" checked> 添加水印</label>
+            </div>
+          </div>
+        </div>`;
+
     box.innerHTML = `
       <div class="att-work-shell">
         <div class="att-work-crumb">工作模块 <span>/</span> 考勤 <span>/</span> ${esc(activeGrade)}</div>
@@ -419,30 +498,30 @@ export async function renderAttendance(box, opts = {}) {
           <div><h2>${esc(activeGrade)} · 考勤</h2><div class="att-work-sync"><i></i> 数据已加载</div></div>
           <div class="att-work-head-actions">${!isRoster && !isSpecial ? '<button class="btn ghost sm" id="att-work-create-group">补齐三张表</button>' : ''}<select class="input att-work-grade" id="att-work-grade">${gradesData.tabs.map((g) => `<option value="${esc(g)}" ${g === activeGrade ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div>
         </div>
-${isRoster || isSpecial ? '' : `<div class="att-work-meta-controls">
-          <div class="att-work-date"><button class="icon-btn" id="att-work-prev" aria-label="前一天">‹</button><label><input type="date" id="att-work-date" value="${esc(viewDate)}"> <span>${esc(dateLabel(viewDate))}</span></label><button class="icon-btn" id="att-work-next" aria-label="后一天">›</button><button class="btn ghost sm" id="att-work-today">今天</button></div>
-          <label>时间段 <select class="input" id="att-work-time-range"><option value="全天">全天</option><option value="上午">上午</option><option value="下午">下午</option></select></label>
-          ${activeTab === 'research' ? '' : `<label class="att-work-period-control">节次 <select class="input" id="att-work-period" aria-label="选择节次">${Array.from({ length: 9 }, (_, i) => i + 1).map((p) => `<option value="${p}" ${String(p) === selectedPeriod ? 'selected' : ''}>第 ${p} 节</option>`).join('')}</select><span id="att-work-period-time" class="att-work-period-time">${esc(currentPeriodTime)}</span></label>`}
-          <span class="att-work-meta-hint">日期、时间段和节次可手动调整</span>
-        </div>`}
+        ${!isSpecial ? dateControlsHTML : ''}
+        ${!isSpecial ? subjectBarHTML : ''}
         <nav class="att-work-tabs" aria-label="考勤管理页签">
-          <button data-tab="seat" class="${activeTab === 'seat' ? 'on' : ''}">坐班表</button><button data-tab="research" class="${activeTab === 'research' ? 'on' : ''}">教研表</button><button data-tab="class" class="${activeTab === 'class' ? 'on' : ''}">上课表</button><button data-tab="roster" class="${activeTab === 'roster' ? 'on' : ''}">花名册</button><button data-tab="stats" class="${activeTab === 'stats' ? 'on' : ''}">统计</button><button data-tab="leave" class="${activeTab === 'leave' ? 'on' : ''}">请假</button>
+          <button data-tab="roster" class="${activeTab === 'roster' ? 'on' : ''}">花名册</button>
+          <button data-tab="seat" class="${activeTab === 'seat' ? 'on' : ''}">坐班表</button>
+          <button data-tab="research" class="${activeTab === 'research' ? 'on' : ''}">教研表</button>
+          <button data-tab="class" class="${activeTab === 'class' ? 'on' : ''}">上课表</button>
+          <button data-tab="stats" class="${activeTab === 'stats' ? 'on' : ''}">统计</button>
+          <button data-tab="leave" class="${activeTab === 'leave' ? 'on' : ''}">请假</button>
         </nav>
-        ${isRoster || isSpecial ? '' : `<div class="att-work-stats">${(st.items || []).map((item) => `<div class="aw-stat ${item.tone || ''}"><span>${item.label}</span><b>${item.value}</b><small>人</small></div>`).join('')}</div>`}
+        ${toolbarHTML}
         <section class="att-work-panel">
           ${isSpecial ? `<div id="att-work-special" class="att-work-special"></div>` : `
-
-          <div class="att-work-toolbar">
-            ${subjectButtons}
-            <input class="input aw-search" id="att-work-search" placeholder="⌕ 搜索教师姓名" value="${esc(searchText)}">
-            ${isRoster ? `<button class="btn primary sm" id="att-work-add">＋ 管理花名册</button><button class="btn ghost sm" id="att-work-photo">${icon('camera', 14)} 拍照建册</button>` : `<button class="btn ghost sm" id="att-work-photo">${icon('camera', 14)} 拍照导入</button><button class="btn primary sm" id="att-work-voice">${icon('mic', 14)} 语音录入</button>${isClass ? `<button class="btn ghost sm" id="att-work-add">＋ 新增临时老师</button>` : ''}`}
-            <span class="att-work-spacer"></span>
-            ${isRoster ? `<span class="att-roster-count">${roster.filter((r) => r.active).length} 位在册教师</span>` : `<div class="att-work-export-wrap"><button class="btn ghost sm" id="att-work-export">${icon('download', 14)} 导出 ▾</button><div class="att-work-export-menu" id="att-work-export-menu" hidden><button data-export="pdf">导出 PDF</button><button data-export="png">导出 PNG</button><button data-export="xlsx">导出 Excel</button><label><input type="checkbox" id="att-work-watermark" checked> 添加水印</label></div></div>`}
-          </div>
-          <div class="att-work-table-title"><div><h3>${isRoster ? '教师花名册' : (tabTitle[activeTab] || '上课考勤表')}</h3><span>${isRoster ? `${esc(activeGrade)} · ${roster.filter((r) => r.active).length} 位教师 · ${subjects.length} 个学科` : `${esc(dateLabel(viewDate))} · ${esc(activeGrade)} · ${rows.length} 位教师`}</span></div>${isRoster ? `<span class="att-work-confirm ok">名单已加载</span>` : `<span class="att-work-confirm ${detail?.confirm_state === 'confirmed' ? 'ok' : detail?.confirm_state === 'modified' ? 'warn' : ''}">${stateText}</span>`}</div>
-          ${tableHTML}
-          ${isRoster ? `<div class="att-work-foot"><span>ⓘ 花名册按年级独立管理；姓名和学科必填，重复记录会在确认前拦截。</span></div>` : `<div class="att-work-foot"><span>${isClass ? 'ⓘ 上课表独立记录当天数据；临时教师不进入永久花名册，次日不会自动出现。' : activeTab === 'seat' ? 'ⓘ 坐班表独立记录并确认，不参与上课表内容。' : 'ⓘ 教研表独立记录签到、请假与备注，可按学科批量签到。'}</span><div><button class="btn ghost sm" id="att-work-save">保存草稿</button><button class="btn primary sm" id="att-work-confirm">${detail?.confirm_state === 'confirmed' ? `重新确认${TYPE_SHORT[activeTab]}` : `确认生成${TYPE_SHORT[activeTab]}`}</button></div></div>`}
-
+            <div class="att-work-table-title">
+              <div>
+                <h3>${isRoster ? `${esc(activeGrade)}教师花名册` : (tabTitle[activeTab] || '上课考勤表')}</h3>
+                <span>${isRoster ? `年级 ${esc(activeGrade)} · 共 ${allTeacherCount} 人 · 制表 ${esc(viewDate.split('-').join('/'))}` : `${esc(dateLabel(viewDate))} · ${esc(activeGrade)} · ${rows.length} 位教师`}</span>
+              </div>
+              ${isRoster ? '<span class="att-work-confirm ok">名单已加载</span>' : `<span class="att-work-confirm ${detail?.confirm_state === 'confirmed' ? 'ok' : detail?.confirm_state === 'modified' ? 'warn' : ''}">${stateText}</span>`}
+            </div>
+            ${tableHTML}
+            ${isRoster
+              ? '<div class="att-work-foot"><span>ⓘ 花名册按年级独立管理；删除名册教师不会删除已有考勤历史记录。</span></div>'
+              : `<div class="att-work-foot"><span>${isClass ? 'ⓘ 上课表独立记录当天数据；临时教师不进入永久花名册，次日不会自动出现。' : activeTab === 'seat' ? 'ⓘ 坐班表独立记录并确认，不参与上课表内容。' : 'ⓘ 教研表独立记录签到、请假与备注，可按学科批量签到。'}</span><div><button class="btn ghost sm" id="att-work-save">保存草稿</button><button class="btn primary sm" id="att-work-confirm">${detail?.confirm_state === 'confirmed' ? `重新确认${TYPE_SHORT[activeTab]}` : `确认生成${TYPE_SHORT[activeTab]}`}</button></div></div>`}
           `}
         </section>
       </div>`;
@@ -511,6 +590,45 @@ ${isRoster || isSpecial ? '' : `<div class="att-work-meta-controls">
     box.querySelector('#att-work-next')?.addEventListener('click', () => shiftDate(1));
     box.querySelector('#att-work-today')?.addEventListener('click', () => { viewDate = dayStr(); load(); });
     box.querySelectorAll('[data-subject]').forEach((button) => button.onclick = () => { subjectFilter = button.dataset.subject; paint(); });
+    box.querySelector('#att-work-bulk')?.addEventListener('click', () => bulkDialog(activeGrade, () => load({ makeToday: false })));
+    const openSubjectAdd = () => {
+      toast('新增学科时，需要同时添加该学科的首位教师；请在教师名册中填写新的学科名称。', 'warn', 5000);
+      rosterSheet(activeGrade, () => load({ makeToday: false }));
+    };
+    box.querySelector('#att-work-subject-add')?.addEventListener('click', openSubjectAdd);
+    box.querySelector('#att-work-subject-add-inline')?.addEventListener('click', openSubjectAdd);
+    box.querySelector('#att-work-subject-manage')?.addEventListener('click', () => subjectManageDialog(activeGrade, () => load({ makeToday: false })));
+    box.querySelector('#att-work-import')?.addEventListener('click', () => {
+      const menu = box.querySelector('#att-work-import-menu');
+      if (menu) menu.hidden = !menu.hidden;
+    });
+    box.querySelectorAll('[data-roster-import]').forEach((button) => button.onclick = () => {
+      const menu = box.querySelector('#att-work-import-menu');
+      if (menu) menu.hidden = true;
+      if (button.dataset.rosterImport === 'photo') rosterPhotoDialog(activeGrade, () => load({ makeToday: false }));
+      else rosterImportDialog(activeGrade, () => load({ makeToday: false }));
+    });
+    box.querySelectorAll('[data-roster-export]').forEach((button) => button.onclick = () => {
+      const list = visibleRoster().filter((teacher) => teacher.active);
+      const csv = [['序号', '姓名', '学科'], ...list.map((teacher, index) => [index + 1, teacher.name || '', teacher.subject || '未填学科'])]
+        .map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join(String.fromCharCode(13, 10));
+      saveBlob(new Blob([String.fromCharCode(0xFEFF), csv], { type: 'text/csv;charset=utf-8' }), `${activeGrade}_教师花名册.csv`);
+      toast(`已导出 ${list.length} 位教师`, 'ok');
+    });
+    box.querySelectorAll('[data-roster-remove]').forEach((button) => button.onclick = async () => {
+      const id = button.dataset.rosterRemove;
+      if (!id) return;
+      const teacher = roster.find((item) => String(item.id) === String(id));
+      const name = teacher?.name || '这位教师';
+      if (!await confirmDialog(`确认从「${activeGrade}」花名册中删除「${name}」？已有考勤记录不会删除。`)) return;
+      try {
+        await api.del('/teachers/' + id);
+        toast(`已从花名册删除「${name}」`, 'ok');
+        await load({ makeToday: false });
+      } catch (error) {
+        toast(error.message || '删除教师失败', 'err');
+      }
+    });
     box.querySelector('#att-work-search')?.addEventListener('input', (e) => { searchText = e.target.value; const pos = e.target.selectionStart; paint(); const q = box.querySelector('#att-work-search'); if (q) { q.focus(); q.setSelectionRange(pos, pos); } });
     box.querySelector('#att-work-photo')?.addEventListener('click', () => isRoster ? rosterPhotoDialog(activeGrade, () => load()) : uploadDialog(activeGrade, () => load()));
     const addButton = box.querySelector('#att-work-add');
