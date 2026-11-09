@@ -22,6 +22,7 @@ import {
 } from './localdb.js';
 import { accountIdentifierFromPhone } from './auth-identifier.mjs';
 import { attRowState } from './att-parse.js';
+import { buildInvigSummary as buildInvigSummaryV2 } from './invigilation-domain.mjs';
 import {
   dedupeAttendanceRows,
   dayKeyOf as attendanceDayKey,
@@ -449,6 +450,7 @@ function syncItemToTodo(itemId, changed) {
 const RECYCLE_KEEP_DAYS = 30;
 const RECYCLE_TITLE = {
   items: (r) => r.title, todos: (r) => r.title,
+  class_records: (r) => `${r.class_time || ''} ${r.subject || ''} ${r.class_name || ''}`.trim(),
   lessons: (r) => `${r.date} ${r.class_name || ''} ${r.content || ''}`.trim(),
   invigilations: (r) => `${r.date} ${r.subject || ''} 监考`,
   trips: (r) => `${r.to_place || ''} 出差`,
@@ -473,7 +475,7 @@ const RECYCLE_GROUP = {
   todos: { group: 'task', at: '日常 → 便签' },
   studies: { group: 'study', at: '学习 → 记录' },
   notes: { group: 'study', at: '学习 / 工作 → 笔记' },
-  lessons: { group: 'work', at: '工作 → 上课' },
+  class_records: { group: 'work', at: '工作 → 上课' },
   courses: { group: 'work', at: '工作 → 课表' },
   periods: { group: 'work', at: '工作 → 课表 → 节次' },
   invigilations: { group: 'work', at: '工作 → 监考' },
@@ -659,7 +661,8 @@ function lessonSummaryPayload(month, rows) {
 
 /* ============================ 监考汇总 ============================ */
 const DEFAULT_INVIG_RULES = {
-  mode: '场次',
+  mode: '分钟',
+  perMinute: 0.4,
   perSession: 60,
   perHour: 30,
   peerPerSession: 50,
@@ -675,81 +678,12 @@ function getInvigRules() {
 }
 
 function buildInvSummary(rows, rules = {}) {
-  const out = {
-    total: 0,
-    school: { count: 0, amount: 0, paid: 0, unpaid: 0 },
-    sub_out: { count: 0, hours: 0, amount: 0, open_amount: 0 },
-    sub_in: { count: 0, hours: 0, amount: 0, open_amount: 0 },
-    net: { amount: 0, direction: 'even' },
-    people: [], by_room: {}, minutes: 0, rules,
-  };
-  const peopleMap = new Map();
-
-  for (const r of rows) {
-    if ((r.status || 'done') === 'canceled') continue;
-    const amt = num(r.pay_amount, num(r.amount, 0));
-    out.total += 1;
-    out.minutes += num(r.duration_min, num(r.minutes, 0));
-    if (r.room) out.by_room[r.room] = (out.by_room[r.room] || 0) + 1;
-
-    const t = r.duty_type || 'school';
-    if (t === 'school') {
-      out.school.count += 1;
-      out.school.amount += amt;
-      if (r.school_paid) out.school.paid += amt; else out.school.unpaid += amt;
-      continue;
-    }
-
-    const isOut = t === '替他人';
-    const bucket = isOut ? out.sub_out : out.sub_in;
-    bucket.count += 1;
-    bucket.hours += 1;
-    bucket.amount += amt;
-
-    const name = String(r.peer_name || r.person || '').trim() || '(未填对方)';
-    const key = name + '|' + (isOut ? 'out' : 'in');
-    if (!peopleMap.has(key)) {
-      peopleMap.set(key, {
-        name, direction: isOut ? 'out' : 'in',
-        count: 0, amount: 0, open_amount: 0,
-        settled: false, partial: false, settled_count: 0,
-        open_ids: [], open_items: [],
-      });
-    }
-    const p = peopleMap.get(key);
-    p.count += 1;
-    p.amount += amt;
-    if (r.settled_at) {
-      p.settled_count += 1;
-    } else {
-      p.open_amount += amt;
-      p.open_ids.push(r.id);
-      p.open_items.push({
-        id: r.id, date: r.date || '', start_time: r.start_time || '',
-        exam_name: r.exam_name || r.subject || '', room: r.room || r.place || '',
-        amount: amt,
-      });
-      bucket.open_amount += amt;
-    }
-  }
-
-  for (const p of peopleMap.values()) {
-    p.settled = p.count > 0 && p.settled_count === p.count;
-    p.partial = p.settled_count > 0 && !p.settled;
-    p.open_items.sort((a, b) => (a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1)));
-    out.people.push(p);
-  }
-  out.people.sort((a, b) => (a.direction === b.direction ? b.open_amount - a.open_amount : a.direction === 'out' ? -1 : 1));
-
-  let net = 0;
-  for (const p of out.people) net += (p.direction === 'out' ? 1 : -1) * p.open_amount;
-  out.net.amount = n2(net);
-  out.net.direction = net > 0 ? 'receivable' : net < 0 ? 'payable' : 'even';
-  return out;
+  return buildInvigSummaryV2(rows, rules);
 }
 
+/* 旧版汇总算法保留在 Git 历史中；当前统一使用支持分次收付的纯规则模块。 */
 /* ============================ 出差报销 ============================ */
-const TRIP_DEFAULT = { foodPerDay: 100, localPerDay: 40 };
+const TRIP_DEFAULT = { foodPerDay: 100, localPerDay: 40, kmRate: 1 };
 const KIND_TXT = { transport: '交通', hotel: '住宿', taxi: '打车', meal: '餐饮', toll: '过路费', parking: '停车费', other: '其他' };
 const moneyFmt = (v) => n2(v).toFixed(2).replace(/\.00$/, '');
 
@@ -777,15 +711,12 @@ function calcTrip(t, rules, items = []) {
     transport: n2(t.transport), hotel: n2(t.hotel), taxi: n2(t.taxi),
     toll: n2(t.toll), parking: n2(t.parking), other: n2(t.other),
   };
-  /* 明细里填的金额汇总到对应类别，与主表手填金额取「较大者」：
-     有人习惯写总数，有人习惯逐张录明细，两种都要能用，但不能相加（否则记两遍翻倍）。 */
   const byKind = {};
   for (const it of items) {
     const k = ['transport', 'hotel', 'taxi', 'toll', 'parking'].includes(it.kind) ? it.kind : 'other';
     byKind[k] = n2((byKind[k] || 0) + n2(it.amount));
   }
   for (const k of Object.keys(byKind)) if (byKind[k] > real[k]) real[k] = byKind[k];
-
   const realTotal = n2(Object.values(real).reduce((a, b) => a + b, 0));
   const food = (t.subsidy_food != null && Number(t.subsidy_food) > 0) ? n2(t.subsidy_food) : n2(rules.foodPerDay * days);
   const local = (t.subsidy_local != null && Number(t.subsidy_local) > 0) ? n2(t.subsidy_local) : n2(rules.localPerDay * days);
@@ -793,21 +724,27 @@ function calcTrip(t, rules, items = []) {
   const total = n2(realTotal + subsidyTotal);
   const advance = n2(t.advance);
   const net = n2(total - advance);
+  /* 车辆里程费用单独核算，绝不加入报销合计；旧记录没有 km_rate 时按 1 元/公里兼容。 */
+  const km = Math.max(0, n2(t.km));
+  const kmRate = t.km_rate != null && t.km_rate !== '' && Number.isFinite(Number(t.km_rate))
+    ? Math.max(0, Number(t.km_rate)) : TRIP_DEFAULT.kmRate;
+  const vehicleFee = n2(km * kmRate);
   const missing = items.filter((it) => !it.has_invoice);
   const bigMissing = missing.filter((it) => Number(it.amount) >= 100 && ['transport', 'hotel', 'taxi'].includes(it.kind));
   return {
     days, real, byKind, realTotal, food, local, subsidyTotal, total, advance, net,
-    itemCount: items.length,
-    missingCount: missing.length,
-    bigMissingCount: bigMissing.length,
-    noInvoice: missing.length,
+    km, kmRate, vehicleFee,
+    itemCount: items.length, missingCount: missing.length,
+    bigMissingCount: bigMissing.length, noInvoice: missing.length,
   };
 }
 
 function tripWithCalc(t, rules) {
-  const items = (load().trip_items || [])
-    .filter((r) => !r.deleted_at && String(r.trip_id) === String(t.id))
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || a.id - b.id);
+  const storedItems = load().trip_items;
+  /* 旧备份或旧版本可能没有 trip_items，异常结构不能让整张出差列表一起加载失败。 */
+  const items = (Array.isArray(storedItems) ? storedItems : [])
+    .filter((r) => r && typeof r === 'object' && !r.deleted_at && String(r.trip_id) === String(t.id))
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || num(a.id) - num(b.id));
   return { ...t, items, calc: calcTrip(t, rules, items) };
 }
 
@@ -815,10 +752,12 @@ function tripText(t, user) {
   const c = t.calc;
   const L = [];
   const who = user?.nickname || '';
-  const span = t.end_date && t.end_date !== t.start_date ? `${t.start_date} 至 ${t.end_date}` : t.start_date;
-  L.push(`【差旅报销单】${who}${who ? '　' : ''}${span}　共 ${c.days} 天`);
-  L.push(`事由：${t.reason || '未填写'}`);
-  L.push(`行程：${t.from_place || '学校'} → ${t.to_place || '未填写'}${t.companions ? `（随行：${t.companions}）` : ''}`);
+  const span = t.end_date && t.end_date !== t.start_date ? t.start_date + ' 至 ' + t.end_date : t.start_date;
+  L.push('【差旅报销单】' + who + (who ? '　' : '') + span + '　共 ' + c.days + ' 天');
+  L.push('事由：' + (t.reason || '未填写'));
+  L.push('行程：' + (t.from_place || '学校') + ' → ' + (t.to_place || '未填写'));
+  L.push('驾驶人员：' + (t.driver || '未填写'));
+  L.push('随行人员：' + (t.companions || '无'));
   L.push('');
   L.push('一、实报实销');
   const realLines = [
@@ -826,32 +765,39 @@ function tripText(t, user) {
     ['过路费', c.real.toll], ['停车费', c.real.parking], ['其他', c.real.other],
   ].filter(([, v]) => Number(v) > 0);
   if (realLines.length) {
-    for (const [k, v] of realLines) L.push(`　${k}：¥${moneyFmt(v)}`);
+    for (const [k, v] of realLines) L.push('　' + k + '：¥' + moneyFmt(v));
     const detail = (t.items || []).filter((it) => Number(it.amount) > 0);
     if (detail.length) {
       L.push('　明细：');
       for (const it of detail.slice(0, 12)) {
-        L.push(`　　· ${it.date || ''} ${KIND_TXT[it.kind] || '其他'} ¥${moneyFmt(it.amount)}${it.note ? ' ' + it.note : ''}${it.has_invoice ? '' : '（无票）'}`);
+        L.push('　　· ' + (it.date || '') + ' ' + (KIND_TXT[it.kind] || '其他') + ' ¥' + moneyFmt(it.amount)
+          + (it.note ? ' ' + it.note : '') + (it.has_invoice ? '' : '（无票）'));
       }
-      if (detail.length > 12) L.push(`　　· 其余 ${detail.length - 12} 笔略`);
+      if (detail.length > 12) L.push('　　· 其余 ' + (detail.length - 12) + ' 笔略');
     }
-    L.push(`　小计：¥${moneyFmt(c.realTotal)}`);
+    L.push('　小计：¥' + moneyFmt(c.realTotal));
   } else {
     L.push('　（无）');
   }
   L.push('');
   L.push('二、定额补贴（无需发票）');
-  L.push(`　伙食补助：¥${moneyFmt(c.food)}（${moneyFmt(c.food / (c.days || 1))}/天 × ${c.days} 天）`);
-  L.push(`　市内交通补助：¥${moneyFmt(c.local)}（${moneyFmt(c.local / (c.days || 1))}/天 × ${c.days} 天）`);
-  L.push(`　小计：¥${moneyFmt(c.subsidyTotal)}`);
+  L.push('　伙食补助：¥' + moneyFmt(c.food) + '（' + moneyFmt(c.food / (c.days || 1)) + '/天 × ' + c.days + ' 天）');
+  L.push('　市内交通补助：¥' + moneyFmt(c.local) + '（' + moneyFmt(c.local / (c.days || 1)) + '/天 × ' + c.days + ' 天）');
+  L.push('　小计：¥' + moneyFmt(c.subsidyTotal));
   L.push('');
-  if (c.advance > 0) { L.push(`三、预借/垫付：¥${moneyFmt(c.advance)}`); L.push(''); }
-  L.push(`合计应报：¥${moneyFmt(c.total)}${c.advance > 0 ? `　扣除预借后应补：¥${moneyFmt(c.net)}` : ''}`);
-  if (Number(t.km) > 0) L.push(`自驾里程：${t.km} km`);
+  if (c.advance > 0) { L.push('三、预借/垫付：¥' + moneyFmt(c.advance)); L.push(''); }
+  L.push('合计应报：¥' + moneyFmt(c.total) + (c.advance > 0 ? '　扣除预借后应补：¥' + moneyFmt(c.net) : ''));
+  L.push('');
+  L.push('车辆里程费用（单独统计，不计入报销金额）');
+  L.push('　驾驶人员：' + (t.driver || '未填写'));
+  L.push('　里程：' + moneyFmt(c.km) + ' km × ¥' + moneyFmt(c.kmRate) + '/km = ¥' + moneyFmt(c.vehicleFee));
   if (c.missingCount) {
-    L.push(`备注：有 ${c.missingCount} 笔无发票${c.bigMissingCount ? `（其中 ${c.bigMissingCount} 笔为大额，建议补票）` : ''}——${(t.items || []).filter((i) => !i.has_invoice).map((i) => `${KIND_TXT[i.kind] || '其他'}¥${moneyFmt(i.amount)}`).slice(0, 5).join('、')}`);
+    L.push('备注：有 ' + c.missingCount + ' 笔无发票'
+      + (c.bigMissingCount ? '（其中 ' + c.bigMissingCount + ' 笔为大额，建议补票）' : '')
+      + '——' + (t.items || []).filter((i) => !i.has_invoice)
+        .map((i) => (KIND_TXT[i.kind] || '其他') + '¥' + moneyFmt(i.amount)).slice(0, 5).join('、'));
   }
-  if (t.remark) L.push(`补充说明：${t.remark}`);
+  if (t.remark) L.push('补充说明：' + t.remark);
   return L.join('\n');
 }
 
@@ -1086,12 +1032,20 @@ async function buildExport(kind, month) {
     const mins = rows.reduce((s, r) => s + (Number(r[8]) || 0), 0);
     extraHtml = `<div class="sum">本月合计：${rows.length} 场，共 ${mins} 分钟</div>`;
   } else if (kind === 'trips') {
-    title = `出差统计${month ? ' ' + month : ''}`;
-    headers = ['序号', '开始', '结束', '出发地', '目的地', '事由', '随行人员', '公里数', '过路费', '停车费', '其他', '合计(元)', '状态', '备注'];
+    title = '出差统计' + (month ? ' ' + month : '');
+    headers = ['序号', '开始日期', '结束日期', '出发地', '目的地', '出差事由', '驾驶人员', '随行人员', '公里数', '里程费率(元/km)', '车辆里程费用（单独统计）', '交通费', '住宿费', '市内打车', '过路费', '停车费', '其他费用', '实报小计', '伙食补助', '市内交通补助', '预借', '应报合计（不含里程费）', '审批状态', '报销状态', '备注'];
+    const rules = tripRules();
     rows = rowsOf('trips').filter(M('start_date')).sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))
-      .map((r) => [r.seq, r.start_date, r.end_date, r.from_place, r.to_place, r.reason, r.companions, r.km, r.toll, r.parking, r.other, (num(r.toll) + num(r.parking) + num(r.other)), r.status, r.remark]);
-    const total = rows.reduce((s, r) => s + (Number(r[11]) || 0), 0);
-    extraHtml = `<div class="sum">本月合计：${rows.length} 次，费用 ${total} 元</div>`;
+      .map((r) => {
+        const c = tripWithCalc(r, rules).calc;
+        return [r.seq, r.start_date, r.end_date, r.from_place, r.to_place, r.reason, r.driver, r.companions,
+          c.km, c.kmRate, c.vehicleFee, c.real.transport, c.real.hotel, c.real.taxi, c.real.toll, c.real.parking,
+          c.real.other, c.realTotal, c.food, c.local, c.advance, c.total, r.status, r.reimb_status, r.remark];
+      });
+    const reimbursementTotal = rows.reduce((s, r) => s + (Number(r[21]) || 0), 0);
+    const vehicleTotal = rows.reduce((s, r) => s + (Number(r[10]) || 0), 0);
+    extraHtml = '<div class="sum">本月合计：' + rows.length + ' 次；报销金额 ' + moneyFmt(reimbursementTotal)
+      + ' 元（不含里程费）；车辆里程费用单独统计 ' + moneyFmt(vehicleTotal) + ' 元</div>';
   } else if (kind === 'studies') {
     title = '学习记录';
     headers = ['序号', '日期', '标题', '内容', '时长(分钟)', '来源', '标签'];
@@ -1385,7 +1339,7 @@ export function seedIfEmpty() {
   T('trips').push({
     id: 1, seq: nextSeq('trip'), start_date: d10, end_date: d9,
     from_place: '学校', to_place: '市教研室（江城区）', reason: '高二语文命题培训',
-    companions: '李老师、陈老师', km: 86, toll: 40, parking: 15, other: 0,
+    driver: '李老师', companions: '陈老师、王老师', km: 86, km_rate: 1, toll: 40, parking: 15, other: 0,
     status: 'approved', reimb_status: 'paid', remark: '已完成报销',
     created_at: now, updated_at: now, deleted_at: null,
   });
@@ -1846,9 +1800,7 @@ on('POST', '/me/avatar', async ({ body }) => {
   const files = body?.files || [];
   const f = files[0];
   if (!f) fail(400, '没有收到图片');
-  if (byteLen(f.data) > 2 * 1024 * 1024) fail(400, `图片不能超过 2MB（当前 ${(byteLen(f.data) / 1024 / 1024).toFixed(1)}MB）`);
-  const ok = ['image/jpeg', 'image/png'].includes(String(f.mime || '').toLowerCase());
-  if (!ok) fail(400, '只支持 JPG / PNG 格式');
+  if (!/^image\//i.test(String(f.mime || ''))) fail(400, '请选择有效的图片文件');
   /* 头像转成 dataURL 直接存：静态版没有 /files 静态目录，
      一个小图塞进 localStorage 是可以接受的，换设备靠导出备份带走。
      但写入必须检查结果——满了要如实告诉用户，不能让界面显示「已更新」然后刷新就没了。 */
@@ -1862,7 +1814,7 @@ on('POST', '/me/avatar', async ({ body }) => {
     u.avatar = prev;
     db.meta.user = u;
     save();
-    fail(507, '本机存储空间不足，头像没保存下来。可以先导出备份、清理旧课件再试，或者换一张小一点的图');
+    fail(507, '浏览器本机存储空间不足，头像暂未保存。请清理浏览器存储或导出备份后重试');
   }
   return { url: dataUrl, user: publicUser(u) };
 });
@@ -3002,7 +2954,8 @@ on('PATCH', '/invig/rules', ({ body }) => {
   const u = currentUser();
   const cur = getInvigRules();
   const next = {
-    mode: body?.mode === '时长' ? '时长' : '场次',
+    mode: body?.mode === '时长' ? '时长' : body?.mode === '分钟' ? '分钟' : '场次',
+    perMinute: Number(body?.perMinute ?? cur.perMinute) || 0,
     perSession: Number(body?.perSession ?? cur.perSession) || 0,
     perHour: Number(body?.perHour ?? cur.perHour) || 0,
     peerPerSession: Number(body?.peerPerSession ?? cur.peerPerSession) || 0,
@@ -3013,9 +2966,24 @@ on('PATCH', '/invig/rules', ({ body }) => {
   saveUser(u);
   return { rules: next };
 });
-on('GET', '/invig/summary', ({ query }) => {
+on('GET', '/invig/summary', async ({ query }) => {
   const month = /^\d{4}-\d{2}$/.test(String(query.month || '')) ? String(query.month) : cnDate().slice(0, 7);
-  const rows = rowsOf('invigilations')
+  let sourceRows = rowsOf('invigilations');
+
+  /* 监考 CRUD 已走云端 invigilations 表；列表汇总也必须读取同一数据源。
+     否则云端删除成功后，本地 /invig/summary 仍会把旧副本显示出来。 */
+  if (await cloudReady()) {
+    try {
+      const cloud = await import('./cloud.js');
+      sourceRows = await cloud.listRows('invigilations', { month });
+    } catch (error) {
+      /* 测试库尚未迁移该表时，沿用本地数据；其他云端错误必须明确报出，
+         不能静默回退到旧数据并误报删除成功。 */
+      if (!isCloudSchemaUnavailable(error)) throw error;
+    }
+  }
+
+  const rows = sourceRows
     .filter((r) => String(r.date || '').startsWith(month))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.start_time || '').localeCompare(String(a.start_time || '')))
     .map(fillInvigTime);
@@ -3463,11 +3431,15 @@ on('PATCH', '/trip/rules', ({ body }) => {
 on('GET', '/trip/list', ({ query }) => {
   const rules = tripRules();
   const month = String(query.month || '');
-  let rows = rowsOf('trips');
-  if (/^\d{4}-\d{2}$/.test(month)) rows = rows.filter((r) => String(r.start_date || '').startsWith(month + '-'));
-  rows.sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)) || b.id - a.id);
+  /* 直接读取主表并过滤异常空行，避免一条损坏数据令整个列表接口失败。 */
+  const source = Array.isArray(load().trips) ? load().trips : [];
+  let rows = source.filter((r) => r && typeof r === 'object' && !r.deleted_at);
+  if (/^\d{4}-\d{2}$/.test(month)) {
+    rows = rows.filter((r) => String(r.start_date || '').slice(0, 10).startsWith(month + '-'));
+  }
+  rows.sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')) || num(b.id) - num(a.id));
   return { rules, rows: rows.map((r) => tripWithCalc(r, rules)) };
-});
+});;
 on('GET', '/trip/stats', ({ query }) => {
   const rules = tripRules();
   const year = String(query.year || new Date().getFullYear());
@@ -3475,33 +3447,56 @@ on('GET', '/trip/stats', ({ query }) => {
     .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)))
     .map((r) => tripWithCalc(r, rules));
   const months = {};
-  for (let i = 1; i <= 12; i += 1) months[`${year}-${pad2(i)}`] = { month: `${year}-${pad2(i)}`, count: 0, km: 0, real: 0, subsidy: 0, total: 0 };
+  for (let i = 1; i <= 12; i += 1) {
+    const month = year + '-' + pad2(i);
+    months[month] = { month, count: 0, km: 0, vehicleFee: 0, real: 0, subsidy: 0, total: 0 };
+  }
   const byKind = { transport: 0, hotel: 0, taxi: 0, toll: 0, parking: 0, other: 0 };
-  let km = 0; let total = 0; let real = 0; let subsidy = 0; let net = 0; let advance = 0;
+  const byDestination = Object.create(null);
+  const byDriver = Object.create(null);
+  const byCompanion = Object.create(null);
+  const addAggregate = (target, rawName, trip) => {
+    const name = String(rawName || '').trim();
+    if (!name) return;
+    const item = target[name] || (target[name] = { name, count: 0, km: 0, vehicleFee: 0 });
+    item.count += 1;
+    item.km = n2(item.km + trip.calc.km);
+    item.vehicleFee = n2(item.vehicleFee + trip.calc.vehicleFee);
+  };
+  let km = 0; let vehicleFee = 0; let total = 0; let real = 0; let subsidy = 0; let net = 0; let advance = 0;
   for (const t of list) {
     const m = String(t.start_date || '').slice(0, 7);
     if (months[m]) {
       months[m].count += 1;
-      months[m].km += num(t.km);
+      months[m].km = n2(months[m].km + t.calc.km);
+      months[m].vehicleFee = n2(months[m].vehicleFee + t.calc.vehicleFee);
       months[m].real = n2(months[m].real + t.calc.realTotal);
       months[m].subsidy = n2(months[m].subsidy + t.calc.subsidyTotal);
       months[m].total = n2(months[m].total + t.calc.total);
     }
-    km += num(t.km);
+    km = n2(km + t.calc.km);
+    vehicleFee = n2(vehicleFee + t.calc.vehicleFee);
     real = n2(real + t.calc.realTotal);
     subsidy = n2(subsidy + t.calc.subsidyTotal);
     total = n2(total + t.calc.total);
     net = n2(net + t.calc.net);
     advance = n2(advance + t.calc.advance);
     for (const k of Object.keys(byKind)) byKind[k] = n2(byKind[k] + num(t.calc.real[k]));
+    addAggregate(byDestination, t.to_place, t);
+    addAggregate(byDriver, t.driver, t);
+    const companions = [...new Set(String(t.companions || '').split(/[,，、;；|]+/).map((x) => x.trim()).filter(Boolean))];
+    for (const person of companions) addAggregate(byCompanion, person, t);
   }
+  const rank = (map) => Object.values(map).sort((a, b) => b.count - a.count || b.km - a.km || a.name.localeCompare(b.name, 'zh-CN'));
   return {
     year, rules,
     summary: {
-      count: list.length, km, real, subsidy, total, net, advance,
+      count: list.length, km, vehicleFee, real, subsidy, total, net, advance,
       pending: n2(list.filter((t) => t.reimb_status !== 'paid').reduce((s, t) => s + t.calc.net, 0)),
     },
-    months: Object.values(months), byKind, rows: list,
+    months: Object.values(months), byKind,
+    byDestination: rank(byDestination), byDriver: rank(byDriver), byCompanion: rank(byCompanion),
+    rows: list,
   };
 });
 on('GET', '/trip/:id', ({ params }) => {
@@ -3595,7 +3590,7 @@ on('POST', '/import/:kind', ({ params, body }) => {
     代课人: 'substitute', 课时: 'hours', 上课内容: 'content', 教学进度: 'progress',
     下节课内容: 'next_content', 违纪情况: 'discipline', 备注: 'remark', 标题: 'title',
     内容: 'content', 时长分钟: 'minutes', 出发点: 'from_place', 目的地: 'to_place',
-    事由: 'reason', 随行人员: 'companions', 公里数: 'km', 过路费: 'toll', 停车费: 'parking',
+    事由: 'reason', 驾驶人员: 'driver', 驾驶人: 'driver', 司机: 'driver', 随行人员: 'companions', 公里数: 'km', 里程费率: 'km_rate', '里程费率(元/km)': 'km_rate', 过路费: 'toll', 停车费: 'parking',
   };
   const table = { lessons: 'lessons', invigilations: 'invigilations', trips: 'trips', studies: 'studies', students: 'students', items: 'items', todos: 'todos' }[kind];
   if (!table) fail(400, '该类型暂不支持导入');
@@ -3742,7 +3737,7 @@ on('GET', '/attachments', ({ query }) => {
        一起改，那时才是一次完整的改动。
      ⚠️ 以后谁要把 material / trip 上云，必须把这里也改成不带 url，
         否则前端会同时拿到「有 url」和「没 url」两种形状，很难查。 */
-  const withUrl = query.owner_type !== 'attendance';
+  const withUrl = !['attendance', 'prep'].includes(query.owner_type);
   return list.sort((a, b) => a.id - b.id)
     .map((a) => (withUrl ? { ...a, url: a.url || '' } : { ...a, url: '' }));
 });
@@ -4071,7 +4066,7 @@ function searchAll(q, mode) {
   push('便签', 'todos', rowsOf('todos'), (r) => [r.title, r.content]);
   push('事项', 'items', rowsOf('items'), (r) => [r.title, r.detail]);
   push('学习记录', 'studies', rowsOf('studies'), (r) => [r.title, r.content]);
-  push('出差', 'trips', rowsOf('trips'), (r) => [r.to_place, r.reason]);
+  push('出差', 'trips', rowsOf('trips'), (r) => [r.to_place, r.reason, r.driver, r.companions]);
   push('监考', 'invigilations', rowsOf('invigilations'), (r) => [r.subject, r.exam_name, r.place, r.peer_name]);
   push('考勤表', 'attendance_tables', rowsOf('attendance_tables'), (r) => [r.name, r.grade]);
   groups.sort((a, b) => b.hits - a.hits);
@@ -4107,7 +4102,7 @@ on('POST', '/backup/restore', ({ body }) => {
 /* 服务端的自动路由表：/api/{table} 的 GET / POST / PATCH / bulk。
    表名来自 localdb.TABLES 里与服务端 CRUD 对齐的那 18 张。 */
 const CRUD_TABLES = [
-  'periods', 'courses', 'lessons', 'invigilations', 'trips', 'materials', 'notes', 'preps',
+  'periods', 'courses', 'class_records', 'invigilations', 'trips', 'materials', 'notes', 'preps',
   'categories', 'homework', 'studies', 'students', 'rosters', 'punishments', 'exceptions',
   'selfstudy', 'repairs', 'teachers',
 ];
@@ -4121,7 +4116,7 @@ for (const table of CRUD_TABLES) {
        别的入口调到的，只在界面拦等于没拦。
        挑的都是「空着这条记录就没意义」的字段，不做格式校验，不打扰正常录入。 */
     const REQUIRED = {
-      lessons: [['class_name', '班级不能为空']],
+      class_records: [['class_type', '请选择上课类型'], ['subject', '请填写学科']],
       preps: [['topic', '请填写备课主题'], ['prep_type', '请选择备课类型']],
       trips: [['to_place', '目的地不能为空']],
       invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
@@ -4226,8 +4221,13 @@ export async function handle(method, path, query = {}, body = undefined) {
     try {
       data = await cloudRoute(method, clean, query, body);
     } catch (e) {
-      /* 云端出错时说清楚是云端的事，别让用户以为是本地坏了 */
-      return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
+      /* 测试库尚未执行迁移时，PostgREST 会报 schema cache / relation not found。
+         这类错误不应阻断整张考勤工作台：先回退到本地实现，让用户继续验证界面和交互；
+         真实云端数据仍由迁移完成后自动接管。权限、网络和其他云端错误继续明确提示。 */
+      if (!isCloudSchemaUnavailable(e)) {
+        return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
+      }
+      data = null;
     }
     /* null = 这个接口还没上云（统计 / 原件照片），继续往下走本地实现。
        其他值一律当云端结果返回，包括空数组 —— 空数组是"真的没有数据"，
@@ -4261,13 +4261,18 @@ export async function handle(method, path, query = {}, body = undefined) {
    漏写它不会报错，只会安静地走本地逻辑 —— 表现为「云端有数据但页面是空的」，
    这种 bug 最难查，所以这里单独写一句提醒。 */
 const CLOUD_TABLES = new Set([
-  'lessons', 'invigilations',
+  'class_records', 'invigilations',
   'attendance',        // 路由前缀：/attendance、/attendance/:id、/attendance/:id/rows
   'attendance_tables', // 前端删表走 /attendance_tables/:id
   'attendance_rows',
   'attachments',       // 路由前缀：/upload、/attachments、/attachments/:id/file
                        // 以及 /attendance/:id/photos（也走这张表）
 ]);
+
+function isCloudSchemaUnavailable(error) {
+  const msg = String(error?.message || error || '');
+  return /schema\s+cache|could not query the database|relation .* does not exist|PGRST\d{3}/i.test(msg);
+}
 
 /* 云端是否可用。判断本身是同步的（读 localStorage），但 import 是异步的 ——
    如果网络抖动导致模块加载卡住，每个请求都会先停在这里。

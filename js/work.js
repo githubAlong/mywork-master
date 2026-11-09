@@ -1,10 +1,12 @@
 import { api, el, esc, clsName, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath } from './core.js';
 import { printStatement } from './pdfprint.js';
-import { registerView, state, icon, go, pageHead, onViewLeave, subCurrentOf, NAV } from './ui.js';
+import { registerView, state, icon, go, pageHead, onViewLeave } from './ui.js';
 import { renderAttendance } from './attendance.js';
+import { renderAttendancePRD } from './attendance-prd.js';
+import { renderTimetable as renderMyTimetable } from './timetable.js';
 import { detectTimetable } from './ttimage.js';
 import { loginBanner, hookBanner } from './auth.js';
-import { PREP_TYPE_OPTIONS, PREP_UNCLASSIFIED, normalizePrepType, prepTypeLabel, filterPrepRecords, validatePrepRecord } from './prep-domain.mjs';
+import { renderPreps } from './prep.js';
 
 const M = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 /* 备注字段统一生成器。
@@ -92,35 +94,28 @@ export function importSheet(kind, reload) {
 }
 
 /* ================= 工作（二级导航分发） ================= */
-/* 路由：work/<tab>，tab 取自 ui.js 的 NAV.work.sub。
-   小助手（materials）下面还有子级入口 work/materials/<third>：
-     selfstudy 自习 · textbook 教材 · pick 抽人 · mystery 盲盒
-   这四项对应的是**学生看到的那个页面**（student.html）里的模块，
-   老师这边需要的是「发链接、配内容、看谁用了」，所以第三级不是把学生页
-   照搬过来，而是给它做后台。 */
+/* 路由：work/<tab>，tab 取自工作一级目录下的二级导航。 */
 registerView(async function work(main, { tab, third }) {
   const t = tab || 'lessons';
   /* 页头标题跟着二级项走：以前所有二级页都顶着「工作」两个字，
      点进「考勤」看到的还是「工作」，会让人怀疑自己点错了。 */
   const meta = {
-    lessons: ['上课记录', '记录授课进度，管理课时与代课结算'],
-    timetable: ['课表', '这周几节课、哪个班、上课地点在哪里'],
-    prep: ['电子备课记录表', '统一记录信息课与特色课备课内容，按类型筛选和追踪进度'],
-    repairs: ['维修', '投影、网络、门锁、灯管坏了——报一声，修完留个底'],
+    lessons: ['上课', '登记正常上课、代课与换课记录'],
+    timetable: ['周课表', '一周课程安排、上课时间与班级一目了然'],
+    prep: ['电子备课', '线上编写教案，管理备课记录与附件素材'],
+    repairs: ['维修记录表', '按月份查看维修记录、处理状态与待跟踪事项'],
     attendance: ['考勤', '按年级分开管：花名册、每日三张表、统计'],
     invigilation: ['监考', '监考场次、时间、补贴，一场不漏'],
     trips: ['出差', '行程、报销、补贴，按天自动算'],
-    materials: ['小助手', '学生端互动工具统一管理：自习、教材、抽人、盲盒'],
     notes: ['笔记', '随手记的教学笔记，可搜索、可归档'],
   }[t] || ['工作', ''];
 
-  /* 页头先不放进 main：课件下面的三级页（自习/教材/抽人/盲盒）要换成自己的标题，
+  /* 页头先不放进 main：工作二级页面使用各自的标题，
      先画「课件」再改字符串会闪一下。所以正文容器先给出来，标题由正文渲染完再定。 */
   main.innerHTML = '<div id="work-body"></div>';
   const body = main.querySelector('#work-body');
   const headEl = el(`<div>${pageHead(meta[0], meta[1], '')}</div>`);
-  if (t === 'lessons') headEl.classList.add('lessons-head');
-  main.insertBefore(headEl, body);
+  if (t !== 'lessons') main.insertBefore(headEl, body);
   /* 三级页把自己的标题写进 url 的第三段，页头用子项名字，副标题用子项说明 */
   if (t === 'materials' && third) {
     const sub = (NAV.find((n) => n.id === 'work')?.sub || []).find((x) => x.id === 'materials')?.sub || [];
@@ -134,16 +129,20 @@ registerView(async function work(main, { tab, third }) {
       }[third] || '');
     }
   }
-  if (t === 'lessons') return renderLessons(body);
+  if (t === 'lessons') { const m = await import('./class-records.js'); return m.renderClassRecords(body); }
   if (t === 'prep') return renderPreps(body);
-  if (t === 'timetable') return renderTimetable(body);
+  if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
-    /* PRD 第 4 节：两级。第三段是年级（#/work/attendance/高一），
-       没有第三段就是年级列表页。中文要解码，URL 里是 %E9%AB%98%E4%B8%80。 */
+    /* 考勤管理两级入口：
+       没有年级参数时恢复原有年级总览；选择年级后进入当前考勤工作台。
+       中文年级名需要解码，URL 形如 #/work/attendance/高一。 */
     const grade = third ? decodeURIComponent(third) : '';
-    if (grade) headEl.innerHTML = pageHead('考勤管理', '按年级独立管理坐班、教研与上课记录；完成后人工确认生效');
-    else headEl.remove();
-    return renderAttendance(body, { grade });
+    if (!grade) {
+      headEl.remove();
+      return renderAttendance(body);
+    }
+    headEl.innerHTML = pageHead('考勤管理', '按年级独立管理坐班、教研与上课记录；完成后人工确认生效');
+    return renderAttendancePRD(body, { grade });
   }
   if (t === 'invigilation') return renderInvigilation(body);
   if (t === 'trips') return renderTrips(body);
@@ -151,18 +150,34 @@ registerView(async function work(main, { tab, third }) {
     const m = await import('./repairs.js');
     return m.renderRepairsBody(body);
   }
-  if (t === 'materials') {
-    if (third === 'selfstudy') {
-      const m = await import('./selfstudy.js');
-      return m.renderSelfstudyBody(body, { studentTab: 'checkin' });
-    }
-    if (third === 'textbook') return renderStudentModule(body, 'textbook');
-    if (third === 'pick') return renderStudentModule(body, 'pick');
-    if (third === 'mystery') return renderStudentModule(body, 'mystery');
-    return renderMaterials(body);
-  }
   if (t === 'notes') return renderNotes(body);
   return renderLessons(body);
+});
+
+/* ================= 小助手（一级目录，二级功能分发） ================= */
+registerView(async function materials(main, { tab }) {
+  const t = tab || '';
+  const meta = {
+    selfstudy: ['自习', '学生端「自习」：开一场签到，学生点「我到了」，这里实时看人数'],
+    textbook: ['教材', '学生端「教材」：你勾了「学生可见」的资料，就是学生看到的全部'],
+    pick: ['抽人', '学生端「抽人」：按号码或按名单，抽过的不重复'],
+    mystery: ['盲盒', '学生端「盲盒」：点一下随机弹一个任务，这一轮不重复'],
+  }[t] || ['小助手', '学生端互动工具统一管理：自习、教材、抽人、盲盒'];
+
+  main.innerHTML = '<div id="materials-body"></div>';
+  const body = main.querySelector('#materials-body');
+  const headEl = el(`<div>${pageHead(meta[0], meta[1], '')}</div>`);
+  main.insertBefore(headEl, body);
+
+  if (!t) return renderMaterials(body);
+  if (t === 'selfstudy') {
+    const m = await import('./selfstudy.js');
+    return m.renderSelfstudyBody(body, { studentTab: 'checkin' });
+  }
+  if (t === 'textbook') return renderStudentModule(body, 'textbook');
+  if (t === 'pick') return renderStudentModule(body, 'pick');
+  if (t === 'mystery') return renderStudentModule(body, 'mystery');
+  return renderMaterials(body);
 });
 
 /* ================= 上课（课时统计 & 代课对账） ================= */
@@ -813,57 +828,120 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
 /* ================= 课表 ================= */
 async function renderTimetable(box) {
   const load = async () => {
-    const [courses, periods] = await Promise.all([api.get('/courses'), api.get('/periods')]);
-    const maxP = Math.max(8, ...periods.map((p) => Number(p.period_no)));
-    /* 【列顺序】周一到周日，周日放最后。
-       数据里 weekday 用 0 表示周日（跟 Date.getDay() 一致），
-       但「0 排最前」是 JS 的约定，不是人的习惯 —— 老师看课表都是从周一开始。
-       所以这里单独定一张显示顺序表，不直接拿数字排序。 */
+    const [courseResult, periodResult] = await Promise.all([api.get('/courses'), api.get('/periods')]);
+    const courses = Array.isArray(courseResult) ? courseResult : [];
+    const periods = Array.isArray(periodResult) ? periodResult : [];
+    const maxP = Math.max(8, ...periods.map((p) => Number(p.period_no) || 0), ...courses.map((c) => Number(c.period_no) || 0));
+    /* 数据 weekday：0=周日；界面固定按周一至周日展示。 */
     const WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
     const wd = WD_ORDER;
+    const today = new Date().getDay();
+    const periodByNo = new Map(periods.map((p) => [Number(p.period_no), p]));
     const get = (d, p) => courses.find((c) => Number(c.weekday) === d && Number(c.period_no) === p);
+    const fmtTime = (value) => String(value || '').slice(0, 5);
+    const timeRange = (start, end) => {
+      const a = fmtTime(start);
+      const b = fmtTime(end);
+      return a && b ? a + '–' + b : (a || b || '时间待设置');
+    };
+    const courseTime = (course, period) => timeRange(
+      course?.start_time || period?.start_time,
+      course?.end_time || period?.end_time
+    );
+
     box.innerHTML = `
-      <div class="row wrap" style="margin-bottom:12px">
-        <button class="btn primary sm" id="add-course">${icon('plus', 15)} 添加课程</button>
-        <button class="btn ghost sm" id="import-tt">${icon('download', 15)} 导入课表</button>
-        <button class="btn ghost sm" id="edit-periods">编辑节次时间</button>
-        <button class="btn ghost sm" id="print-tt">${icon('download', 15)} 打印/导出课表</button>
-        <span style="flex:1"></span>
-        <span class="tiny muted">点击任意格子即可修改，时间、节次、班级都会变的情况也支持</span>
-      </div>
-      <div class="table-wrap"><table class="tbl" style="min-width:860px">
-        <thead><tr><th style="width:96px">节次</th>${wd.map((d) => `<th>周${WD_SHORT[d]}</th>`).join('')}</tr></thead>
-        <tbody>${Array.from({ length: maxP }, (_, i) => i + 1).map((p) => {
-          const per = periods.find((x) => Number(x.period_no) === p);
-          /* 【第 40 条：课表中间没有午休】
-             老师看课表的习惯是「上午四节 → 午休 → 下午四节」，
-             真实贴在墙上的课表中间一定有一条「午休」。
-             这里按节次时间的空隙自动判断：
-               上一节结束到这一节开始，跨过了 12:00 且间隔 ≥ 40 分钟 → 就是午休。
-             不去读「午休」这种行，是因为节次表里根本没存它；
-             按时间算出来的，改了节次时间也自动跟着对。 */
-          const prev = periods.find((x) => Number(x.period_no) === p - 1);
-          const lunch = lunchGap(prev, per);
-          const lunchRow = lunch ? `<tr class="tt-lunch">
-            <td colspan="${wd.length + 1}">🍚 午休 ${lunch}</td></tr>` : '';
-          return `${lunchRow}<tr><td><b>第${p}节</b><div class="tiny muted mono">${per ? per.start_time + '-' + per.end_time : '未设置'}</div></td>
-            ${wd.map((d) => {
-              const c = get(d, p);
-              return `<td data-cell="${d}-${p}" ${c ? `data-course-id="${esc(c.id)}" draggable="true"` : ''} style="cursor:${c ? 'grab' : 'pointer'};min-width:104px;height:52px;background:${c ? colorBg(c.class_name) : 'transparent'}">
-                ${c ? `<div class="tt-course-chip"><span class="tt-drag-handle" aria-hidden="true">⠿</span><div><div class="small bold">${esc(c.class_name)}</div><div class="tiny muted">${esc(c.subject)} ${esc(c.room || '')}</div></div></div>` : '<span class="tiny muted">＋</span>'}
-              </td>`;
-            }).join('')}
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
-      <div class="small muted" style="margin-top:10px">课时统计：本表每周共 ${courses.length} 节，按 4.3 周/月估算约 ${Math.round(courses.length * 4.3)} 节。实际以「上课」中的记录为准。</div>`;
+      <section class="tt-workspace" aria-label="周课表">
+        <div class="tt-workspace-head">
+          <div class="tt-workspace-title-wrap">
+            <h2 class="tt-workspace-title">周课表</h2>
+          </div>
+          <div class="tt-toolbar-actions">
+            <button class="btn ghost sm" id="edit-periods" type="button">作息设置</button>
+            <button class="btn primary sm" id="add-course" type="button">${icon('plus', 15)} 新增课程</button>
+            <details class="tt-more-actions">
+              <summary>更多操作</summary>
+              <div class="tt-more-menu">
+                <button type="button" id="import-tt">${icon('download', 14)} 导入课表</button>
+                <button type="button" id="print-tt">${icon('printer', 14)} 打印 / 导出课表</button>
+              </div>
+            </details>
+          </div>
+        </div>
+        <p class="tt-workspace-hint">点空格直接加课；课程块可以按住拖到别的节次或星期（落点有课则对调），点一下能改班级、时间或删除；右侧「作息设置」可以调整节次名称、上下课时间和午休时段。</p>
+        <div class="tt-grid-scroll">
+          <table class="tt-grid-table" aria-label="周课程安排">
+            <colgroup>
+              <col class="tt-col-time">
+              <col class="tt-col-period">
+              ${wd.map(() => '<col class="tt-col-day">').join('')}
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col" class="tt-fixed-head">时间</th>
+                <th scope="col" class="tt-fixed-head">节次</th>
+                ${wd.map((d) => `<th scope="col" class="tt-weekday-head ${d === today ? 'is-today' : ''}">周${WD_SHORT[d]}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${Array.from({ length: maxP }, (_, i) => i + 1).map((p) => {
+                const period = periodByNo.get(p);
+                const prev = periodByNo.get(p - 1);
+                const lunch = lunchGap(prev, period);
+                const lunchRow = lunch ? `
+                  <tr class="tt-lunch-row">
+                    <td colspan="${wd.length + 2}">
+                      <strong>午休</strong><span>${esc(lunch)}</span>
+                    </td>
+                  </tr>` : '';
+                return lunchRow + `
+                  <tr class="tt-period-row">
+                    <td class="tt-time-cell">
+                      <span>${esc(period ? timeRange(period.start_time, period.end_time) : '时间待设置')}</span>
+                    </td>
+                    <td class="tt-period-cell">第${p}节</td>
+                    ${wd.map((d) => {
+                      const course = get(d, p);
+                      const time = course ? courseTime(course, period) : '';
+                      const detail = course ? [course.subject, course.room].filter(Boolean).join(' · ') : '';
+                      const label = course
+                        ? [course.class_name || course.subject || '课程', time, detail].filter(Boolean).join('，')
+                        : '周' + WD_SHORT[d] + '第' + p + '节，点击新增课程';
+                      return `
+                        <td class="tt-slot ${course ? 'has-course' : 'is-empty'}"
+                          data-cell="${d}-${p}"
+                          ${course ? `data-course-id="${esc(course.id)}" draggable="true"` : ''}
+                          aria-label="${esc(label)}">
+                          ${course ? `
+                            <div class="tt-course-card" title="${esc(detail || label)}">
+                              <strong>${esc(course.class_name || course.subject || '课程')}</strong>
+                              <span>${esc(time)}</span>
+                            </div>` : '<span class="tt-empty-add" aria-hidden="true">＋</span>'}
+                        </td>`;
+                    }).join('')}
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="tt-summary-bar">
+          <span>本周共 ${courses.length} 节课程，按 4.3 周/月估算约 ${Math.round(courses.length * 4.3)} 节；实际以「上课」中的记录为准。</span>
+          <span>与「信息课教师工作台」的课表是同一份数据</span>
+        </div>
+      </section>`;
+
     let draggedCourseId = null;
     let suppressCellClick = false;
     box.querySelectorAll('[data-cell]').forEach((td) => {
       td.onclick = () => {
         if (suppressCellClick) { suppressCellClick = false; return; }
         const [d, p] = td.dataset.cell.split('-').map(Number);
-        courseEditor(get(d, p) || { weekday: d, period_no: p }, load);
+        const period = periodByNo.get(p) || {};
+        courseEditor(get(d, p) || {
+          weekday: d,
+          period_no: p,
+          start_time: period.start_time || '',
+          end_time: period.end_time || ''
+        }, load);
       };
       td.addEventListener('dragover', (event) => {
         if (!draggedCourseId) return;
@@ -880,9 +958,8 @@ async function renderTimetable(box) {
         const [toDay, toPeriod] = td.dataset.cell.split('-').map(Number);
         if (Number(source.weekday) === toDay && Number(source.period_no) === toPeriod) return;
         const target = get(toDay, toPeriod);
-        const periodMap = new Map(periods.map((item) => [Number(item.period_no), item]));
-        const sourceTime = periodMap.get(Number(source.period_no)) || {};
-        const targetTime = periodMap.get(toPeriod) || {};
+        const sourceTime = periodByNo.get(Number(source.period_no)) || {};
+        const targetTime = periodByNo.get(toPeriod) || {};
         try {
           const sourcePayload = {
             weekday: target ? Number(target.weekday) : toDay,
@@ -891,7 +968,8 @@ async function renderTimetable(box) {
             end_time: targetTime.end_time || (target ? target.end_time : '') || ''
           };
           const targetPayload = target ? {
-            weekday: Number(source.weekday), period_no: Number(source.period_no),
+            weekday: Number(source.weekday),
+            period_no: Number(source.period_no),
             start_time: sourceTime.start_time || target.start_time || '',
             end_time: sourceTime.end_time || target.end_time || ''
           } : null;
@@ -905,8 +983,10 @@ async function renderTimetable(box) {
           } catch (error) {
             if (target && targetUpdated) {
               await api.patch('/courses/' + target.id, {
-                weekday: Number(target.weekday), period_no: Number(target.period_no),
-                start_time: target.start_time || '', end_time: target.end_time || ''
+                weekday: Number(target.weekday),
+                period_no: Number(target.period_no),
+                start_time: target.start_time || '',
+                end_time: target.end_time || ''
               }).catch(() => {});
             }
             throw error;
@@ -937,10 +1017,15 @@ async function renderTimetable(box) {
       });
     });
     box.querySelector('#add-course').onclick = () => courseEditor(null, load);
-    box.querySelector('#import-tt').onclick = () => importTimetableDialog(load);
     box.querySelector('#edit-periods').onclick = () => periodEditor(periods, load);
-    box.querySelector('#print-tt').onclick = async () => {
+    box.querySelector('#import-tt').onclick = () => {
+      box.querySelector('.tt-more-actions').open = false;
+      importTimetableDialog(load);
+    };
+    box.querySelector('#print-tt').onclick = () => {
+      box.querySelector('.tt-more-actions').open = false;
       const w = window.open('', '_blank');
+      if (!w) return toast('浏览器拦截了打印窗口，请允许本站弹出窗口', 'warn');
       w.document.write(printTimetableHTML(courses, periods, maxP));
       w.document.close();
     };
@@ -1427,7 +1512,7 @@ function courseEditor(row, reload) {
      全站不再预填「语文 / 高二」这类默认值 —— 预填的东西如果不符实际，
      用户还得先删掉才能填，反而更慢。所以默认留空，直接手填。
      但又不想让用户每次都从头打字：把已存课程里出现过的科目/年级/班级
-     收集成候选，挂在 datalist 上——点一下就能填，不打字也行。
+     按最近更新时间优先去重，每个字段只保留最近 5 个候选，挂在 datalist 上。
      这叫「手填为主，联想为辅」：没有强制默认值，只是给个快捷入口。
 
      注意：这里必须保持同步函数。弹层要立刻出现，不能等接口；
@@ -1451,8 +1536,27 @@ function courseEditor(row, reload) {
 
   /* 历史值异步补上：失败就静默，手填照常可用 */
   api.get('/courses').then((all) => {
+    // 最近使用的课程优先；优先按更新时间，其次创建时间，最后用 ID 稳定排序。
+    const timestampOf = (course) => {
+      const updatedAt = Date.parse(course?.updated_at || '');
+      if (Number.isFinite(updatedAt)) return updatedAt;
+      const createdAt = Date.parse(course?.created_at || '');
+      return Number.isFinite(createdAt) ? createdAt : Number(course?.id) || 0;
+    };
+    const recent = [...(Array.isArray(all) ? all : [])].sort((a, b) =>
+      timestampOf(b) - timestampOf(a) || (Number(b?.id) || 0) - (Number(a?.id) || 0)
+    );
     for (const k of ['grade', 'class_name', 'subject']) {
-      const vals = [...new Set(all.map((c) => String(c[k] || '').trim()).filter(Boolean))].slice(0, 40);
+      const seen = new Set();
+      const vals = [];
+      for (const course of recent) {
+        const value = String(course?.[k] || '').trim();
+        const normalized = value.toLocaleLowerCase();
+        if (!value || seen.has(normalized)) continue;
+        seen.add(normalized);
+        vals.push(value);
+        if (vals.length === 5) break;
+      }
       if (!vals.length) continue;
       const input = body.querySelector(`[data-hist="${k}"]`);
       if (!input) continue;
@@ -1497,7 +1601,7 @@ function periodEditor(periods, reload) {
       <td><button class="icon-btn sm" data-delp="1">${icon('close', 14)}</button></td></tr>`).join('')}</tbody></table></div>
     <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="addp">＋ 加一节</button><span style="flex:1"></span><button class="btn primary" id="savep">保存</button></div>
   </div>`);
-  const s = sheet({ title: '编辑节次时间', body, wide: true });
+  const s = sheet({ title: '作息设置', body, wide: true });
   body.querySelector('#addp').onclick = async () => {
     const next = (Math.max(0, ...periods.map((p) => Number(p.period_no))) || 0) + 1;
     await api.post('/periods', { period_no: next, name: `第${next}节`, start_time: '00:00', end_time: '00:00' });
@@ -1521,396 +1625,9 @@ function periodEditor(periods, reload) {
 
 /* 考勤模块已独立到 attendance.js（两种表两套界面，代码量较大） */
 /* ================= 监考 ================= */
-const INVIG_LABEL = { school: '学校分配', '替他人': '我代别人', '他人替我': '别人代我' };
 async function renderInvigilation(box) {
-  let month = M();
-  let rules = null;
-  const load = async () => {
-    let data;
-    try { data = await api.get('/invig/summary?month=' + month); } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message || '加载失败')}</div>`; return; }
-    rules = data.rules || rules;
-    const s = data.summary;
-    const rows = data.rows || [];
-    const netCls = s.net.direction === 'receivable' ? 'green' : s.net.direction === 'payable' ? 'amber' : '';
-    const netTxt = s.net.direction === 'even' ? '已平' : `${s.net.direction === 'receivable' ? '应收' : '应付'} ${money(Math.abs(s.net.amount))}`;
-
-    // 学校款「标记已到账 / 撤销」
-    const markSchool = async (paid) => {
-      try {
-        const r = await api.post('/invig/school-paid', { month, paid });
-        toast(paid ? `已标记 ${r.updated} 场学校监考费到账` : '已撤销到账标记');
-        load();
-      } catch (e) { toast(e.message || '操作失败', 'err'); }
-    };
-
-    box.innerHTML = `
-    <div class="row wrap" style="gap:8px;margin-bottom:12px">
-      <div class="row" style="gap:4px"><button class="icon-btn sm" data-mprev>${icon('left', 16)}</button>
-        <button class="btn ghost sm month-btn" data-mpick style="min-width:112px;justify-content:center">${monthLabel(month)}</button>
-        <button class="icon-btn sm" data-mnext>${icon('right', 16)}</button></div>
-      <button class="btn ghost sm" id="iv-rules">${icon('settings', 15)} 计价 ${rules.mode === '时长' ? '按时长' : '按场次'}</button>
-      <span style="flex:1"></span>
-      <button class="btn primary sm" id="iv-add">${icon('plus', 15)} 记一场监考</button>
-    </div>
-
-    <div class="ls-cards">
-      <div class="ls-card main">
-        <div class="lc-k">学校应发</div>
-        <div class="lc-v">${money(s.school.unpaid)}<span class="lc-u">元</span></div>
-        <div class="lc-s">${s.school.count} 场${s.school.paid > 0 ? ` · 已到账 ${money(s.school.paid)} 元` : ' · 统一打卡，不算私账'}</div>
-        ${s.school.count ? `<button class="iv-linked" data-school-paid="${s.school.unpaid > 0 ? 1 : 0}">${s.school.unpaid > 0 ? '标记已到账' : '撤销到账'}</button>` : ''}
-      </div>
-      <div class="ls-card">
-        <div class="lc-k">${icon('arrow-up-right', 13)} 我该收</div>
-        <div class="lc-v green">${money(s.sub_out.open_amount)}<span class="lc-u">元</span></div>
-        <div class="lc-s">替人监考 ${s.sub_out.count} 场 · 共 ${money(s.sub_out.amount)} 元</div>
-      </div>
-      <div class="ls-card">
-        <div class="lc-k">${icon('arrow-down-left', 13)} 我该付</div>
-        <div class="lc-v amber">${money(s.sub_in.open_amount)}<span class="lc-u">元</span></div>
-        <div class="lc-s">别人代我 ${s.sub_in.count} 场 · 共 ${money(s.sub_in.amount)} 元</div>
-      </div>
-      <div class="ls-card">
-        <div class="lc-k">同事间净额</div>
-        <div class="lc-v ${netCls}">${netTxt}</div>
-        <div class="lc-s">${s.school.count ? '学校那笔不在内' : '两边持平'}</div>
-      </div>
-      <div class="ls-card">
-        <div class="lc-k">本月监考</div>
-        <div class="lc-v">${s.total}<span class="lc-u">场</span></div>
-        <div class="lc-s">${Math.round(s.minutes / 60 * 10) / 10} 小时</div>
-      </div>
-    </div>
-
-    ${s.people.length ? `<div class="card card-pad ls-settle">
-      <div class="lss-head">跟谁结算<span class="lss-head-s">点开可逐场勾选，先结一部分也行</span></div>
-      ${s.people.map((p) => `<div class="lss-row${p.settled ? ' done' : ''}${p.partial ? ' part' : ''}" data-person="${esc(p.name)}|${p.direction}">
-        <div class="lss-line">
-          <div class="lss-main">
-            <span class="lss-name">${esc(p.name)}</span>
-            <span class="chip ${p.direction === 'out' ? 'green' : 'amber'}">${p.direction === 'out' ? '应收' : '应付'}</span>
-            <span class="lss-amt">${p.settled
-              ? `${p.count} 场 / ${money(p.amount)} 元`
-              : p.partial
-                ? `还剩 ${money(p.open_amount)} 元<span class="lss-dim">（已结 ${p.count - p.open_items.length}/${p.count} 场）</span>`
-                : `${p.count} 场 / ${money(p.amount)} 元`}</span>
-            ${p.settled ? '<span class="chip grey">已结清</span>' : p.partial ? '<span class="chip grey">部分结清</span>' : ''}
-          </div>
-          <div class="lss-btns">
-            ${p.settled ? '' : `<button class="btn ghost sm" data-toggle="${esc(p.name)}|${p.direction}">逐场结</button>`}
-            <button class="btn ${p.settled ? 'ghost' : 'primary'} sm" data-settle="${esc(p.name)}" data-dir="${p.direction}" data-done="${p.settled ? '1' : ''}">${p.settled ? '撤销结清' : '全部结清'}</button>
-          </div>
-        </div>
-        ${p.open_items.length && !p.settled ? `<div class="lss-items hidden" data-items="${esc(p.name)}|${p.direction}">
-          ${p.open_items.map((it) => `<label class="lss-item">
-            <input type="checkbox" data-pick="${it.id}" data-name="${esc(p.name)}" data-dir="${p.direction}" data-h="1" data-a="${it.amount}">
-            <span class="lsi-d">${esc(String(it.date).slice(5))}${it.start_time ? ' ' + esc(it.start_time) : ''}</span>
-            <span class="lsi-c">${esc(it.exam_name || '')}${it.room ? ' · ' + esc(it.room) : ''}</span>
-            <span class="lsi-h">${money(it.amount)} 元</span>
-          </label>`).join('')}
-          <div class="lss-pick-bar">
-            <span class="lss-pick-sum" data-sum-for="${esc(p.name)}|${p.direction}">未选</span>
-            <button class="btn ghost sm" data-checkall="${esc(p.name)}|${p.direction}">全选</button>
-            <button class="btn primary sm" data-settlepick="${esc(p.name)}|${p.direction}" disabled>结清选中的</button>
-          </div>
-        </div>` : ''}
-      </div>`).join('')}
-    </div>` : ''}
-
-    <div class="mobile-tip">手机上以卡片显示，点任意一条可修改</div>
-    <div class="table-wrap"><table class="tbl tbl-invig">
-      <thead><tr><th class="th-no">#</th><th style="width:78px">日期</th><th style="width:74px">类型</th><th style="width:96px">对方</th><th>考试 / 考场</th><th style="width:104px">时间</th><th style="width:62px">金额</th><th style="width:78px">状态</th><th class="th-ops">操作</th></tr></thead>
-      <tbody>${rows.length ? rows.map((r, idx) => {
-        const dt = r.duty_type || 'school';
-        const chip = `<span class="chip ${dt === 'school' ? 'blue' : dt === '替他人' ? 'green' : dt === '他人替我' ? 'amber' : 'grey'}">${INVIG_LABEL[dt] || dt}</span>`;
-        const st = dt === 'school'
-          ? (r.school_paid ? '<span class="chip green">已到账</span>' : '<span class="chip blue">待学校发</span>')
-          : (r.settled_at ? '<span class="chip grey">已结清</span>' : '<span class="chip red">未结</span>');
-        return `<tr data-row="${r.id}">
-          <td class="td-no">${idx + 1}</td>
-          <td class="nowrap">${esc(String(r.date || '').slice(5))}</td>
-          <td class="nowrap">${chip}</td>
-          <td class="iv-peer">${esc(r.peer_name || '')}</td>
-          <td class="lc-content">${esc(r.exam_name || (r.duty_type === 'school' ? '学校监考' : '监考'))}${r.room ? `<div class="lc-next">考场：${esc(r.room)}</div>` : ''}</td>
-          <td class="tiny mono nowrap">${esc(r.start_time || '')}${r.end_time ? '-' + esc(r.end_time) : ''}<div class="tiny muted">${r.duration_min ? r.duration_min + ' 分钟' : ''}</div></td>
-          <td class="num">${money(r.pay_amount || 0)}</td>
-          <td>${st}</td>
-          <td class="td-ops">
-            <button class="icon-btn sm" data-edit="${r.id}" title="修改">${icon('edit', 14)}</button>
-            <button class="icon-btn sm danger" data-del-invig="${r.id}" title="删除">${icon('trash', 14)}</button>
-          </td>
-        </tr>`;
-      }).join('') : `<tr><td colspan="9"><div class="empty">${monthLabel(month)}还没有监考记录<br><span class="tiny muted">点右上角「记一场监考」开始</span></div></td></tr>`}</tbody>
-    </table></div>`;
-
-    box.querySelector('[data-mprev]').onclick = () => { month = monthShift(month, -1); load(); };
-    box.querySelector('[data-mnext]').onclick = () => { month = monthShift(month, 1); load(); };
-    box.querySelector('[data-mpick]').onclick = () => pickMonth(month, (m) => { month = m; load(); });
-    box.querySelector('#iv-add').onclick = () => invEditor(null, load, month, rules, s.people);
-    box.querySelector('#iv-rules').onclick = () => invRulesDialog(rules, load);
-    box.querySelectorAll('[data-edit]').forEach((b) => {
-      b.onclick = (e) => { e.stopPropagation(); invEditor(rows.find((r) => String(r.id) === b.dataset.edit), load, month, rules, s.people); };
-    });
-    box.querySelectorAll('[data-del-invig]').forEach((b) => {
-      b.onclick = async (e) => {
-        e.stopPropagation();
-        const r = rows.find((x) => String(x.id) === b.dataset.delInvig);
-        if (!r) return;
-        /* 已经结清的场次要额外提醒：删掉之后对账金额会变，
-           用户往往没意识到「删一条记录」等于「改了对账单」。 */
-        const warn = r.settled_at ? '这一场已经结清过了，删除后对账金额会跟着变。' : '';
-        if (!(await confirmDialog(`删除 ${String(r.date || '').slice(5)} ${r.exam_name || '监考'} 这一场？${warn ? '\n' + warn : ''}`, { danger: true, okText: '删除' }))) return;
-        try { await api.del('/invigilations/' + r.id); toast('已删除'); load(); }
-        catch (err) { toast(err.message || '删除失败', 'err'); }
-      };
-    });
-    box.querySelectorAll('[data-row]').forEach((tr) => {
-      tr.onclick = () => invEditor(rows.find((r) => String(r.id) === tr.dataset.row), load, month, rules, s.people);
-    });
-
-    // 学校款「标记已到账 / 撤销」
-    box.querySelectorAll('[data-school-paid]').forEach((b) => {
-      b.onclick = (e) => { e.stopPropagation(); markSchool(Number(b.dataset.schoolPaid) === 1); };
-    });
-
-    box.querySelectorAll('[data-settle]').forEach((b) => {
-      b.onclick = async (e) => {
-        e.stopPropagation();
-        const { settle: name, dir, done } = b.dataset;
-        try {
-          await api.post(`/invig/${done ? 'unsettle' : 'settle'}`, { month, name, direction: dir });
-          toast(done ? '已撤销结清' : `已把 ${name} 本月监考费结清`);
-          load();
-        } catch (err) { toast(err.message || '操作失败', 'err'); }
-      };
-    });
-    box.querySelectorAll('[data-toggle]').forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const key = b.dataset.toggle;
-        const panel = box.querySelector(`[data-items="${CSS.escape(key)}"]`);
-        if (!panel) return;
-        const open = !panel.classList.toggle('hidden');
-        b.textContent = open ? '收起' : '逐场结';
-        b.classList.toggle('on', open);
-      };
-    });
-    const refreshPick = (key) => {
-      const panel = box.querySelector(`[data-items="${CSS.escape(key)}"]`);
-      if (!panel) return;
-      const picks = [...panel.querySelectorAll('[data-pick]:checked')];
-      const sum = picks.reduce((a, x) => a + Number(x.dataset.a || 0), 0);
-      const sumEl = panel.querySelector('[data-sum-for]');
-      const btn = panel.querySelector('[data-settlepick]');
-      if (sumEl) sumEl.innerHTML = picks.length ? `已选 <b>${picks.length}</b> 场 / <b>${money(sum)}</b> 元` : '未选';
-      if (btn) { btn.disabled = !picks.length; btn.textContent = picks.length ? `结清选中的 ${picks.length} 场` : '结清选中的'; }
-    };
-    box.querySelectorAll('[data-pick]').forEach((ck) => { ck.onchange = () => refreshPick(ck.dataset.name + '|' + ck.dataset.dir); });
-    box.querySelectorAll('[data-checkall]').forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const key = b.dataset.checkall;
-        const panel = box.querySelector(`[data-items="${CSS.escape(key)}"]`);
-        const all = [...panel.querySelectorAll('[data-pick]')];
-        const target = !all.every((x) => x.checked);
-        all.forEach((x) => { x.checked = target; });
-        b.textContent = target ? '取消全选' : '全选';
-        refreshPick(key);
-      };
-    });
-    box.querySelectorAll('[data-settlepick]').forEach((b) => {
-      b.onclick = async (e) => {
-        e.stopPropagation();
-        const key = b.dataset.settlepick;
-        const [name, dir] = key.split('|');
-        const panel = box.querySelector(`[data-items="${CSS.escape(key)}"]`);
-        const ids = [...panel.querySelectorAll('[data-pick]:checked')].map((x) => Number(x.dataset.pick));
-        if (!ids.length) return;
-        b.disabled = true;
-        try {
-          const r = await api.post('/invig/settle', { month, name, direction: dir, ids });
-          toast(`已结清 ${r.settled} 场`);
-          load();
-        } catch (err) { b.disabled = false; toast(err.message || '操作失败', 'err'); }
-      };
-    });
-  };
-  await load();
-}
-
-/* 计价规则 */
-function invRulesDialog(rules, reload) {
-  const r = rules || { mode: '场次', perSession: 60, perHour: 30, peerPerSession: 50, tiers: [] };
-  const nt = (r.tiers && r.tiers.length ? r.tiers : [{ max: 90, amount: 50 }, { max: 150, amount: 70 }, { max: 999, amount: 90 }]);
-  const body = el(`<div class="sheet-body">
-    <div class="small muted" style="margin-bottom:12px">同事之间（替人监考）固定一场一口价；学校分配的按你自己的学校标准算。</div>
-    <div class="field"><label class="field-label">学校监考怎么算</label>
-      <select class="input" id="mode">
-        <option value="场次" ${r.mode !== '时长' ? 'selected' : ''}>按场次（每场固定）</option>
-        <option value="时长" ${r.mode === '时长' ? 'selected' : ''}>按时长（按分钟分档）</option>
-      </select></div>
-    <div class="field" id="w-per"><label class="field-label">每场多少钱（元）</label><input class="input" type="number" step="1" id="perSession" value="${r.perSession}"></div>
-    <div class="field hidden" id="w-tier">
-      <label class="field-label">按时长分档（分钟以内 → 多少钱）</label>
-      ${nt.map((t, i) => `<div class="row" style="gap:8px;margin-bottom:8px">
-        <input class="input" type="number" data-tmax="${i}" value="${t.max}" placeholder="分钟上限" style="flex:1">
-        <span class="muted">分钟以内 →</span>
-        <input class="input" type="number" data-tamt="${i}" value="${t.amount}" placeholder="元" style="width:96px">
-      </div>`).join('')}
-    </div>
-    <div class="field"><label class="field-label">同事之间每场（元）</label><input class="input" type="number" step="1" id="peer" value="${r.peerPerSession}"></div>
-    <div class="confirm-actions"><button class="btn ghost" id="c">取消</button><button class="btn primary" id="k">保存</button></div>
-  </div>`);
-  const s = sheet({ title: '监考计价规则', body });
-  const modeEl = body.querySelector('#mode');
-  const sync = () => {
-    const dur = modeEl.value === '时长';
-    body.querySelector('#w-per').classList.toggle('hidden', dur);
-    body.querySelector('#w-tier').classList.toggle('hidden', !dur);
-  };
-  modeEl.onchange = sync; sync();
-  body.querySelector('#c').onclick = s.close;
-  body.querySelector('#k').onclick = async () => {
-    const tiers = [...body.querySelectorAll('[data-tmax]')].map((x, i) => ({
-      max: Number(x.value) || 0,
-      amount: Number(body.querySelector(`[data-tamt="${i}"]`).value) || 0,
-    }));
-    try {
-      await api.patch('/invig/rules', {
-        mode: modeEl.value,
-        perSession: Number(body.querySelector('#perSession').value) || 0,
-        peerPerSession: Number(body.querySelector('#peer').value) || 0,
-        tiers,
-      });
-      s.close(); toast('计价规则已保存'); reload();
-    } catch (e) { toast(e.message || '保存失败', 'err'); }
-  };
-}
-
-/* 录入 / 编辑一场监考 */
-function invEditor(row, reload, month, rules, people) {
-  const isNew = !row;
-  const r = rules || { peerPerSession: 50, perSession: 60, mode: '场次', tiers: [] };
-  const dt0 = row?.duty_type || 'school';
-  const peerNames = [...new Set((people || []).map((p) => p.name))];
-  const calc = (dt, mins) => {
-    if (dt !== 'school') return Number(r.peerPerSession) || 0;
-    if (r.mode === '时长') {
-      const tiers = r.tiers?.length ? r.tiers : [{ max: 90, amount: 50 }, { max: 150, amount: 70 }, { max: 999, amount: 90 }];
-      for (const t of tiers) if (mins <= Number(t.max)) return Number(t.amount) || 0;
-      return Number(tiers[tiers.length - 1].amount) || 0;
-    }
-    return Number(r.perSession) || 0;
-  };
-  const body = el(`<div class="sheet-body">
-    <div class="field"><label class="field-label">这一场是什么情况</label>
-      <div class="seg3" id="dt">
-        ${[['school', '学校分配'], ['替他人', '我代别人'], ['他人替我', '别人代我']].map(([v, l]) =>
-          `<button type="button" class="seg3-i ${dt0 === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}
-      </div>
-      <div class="tiny muted" id="dt-hint" style="margin-top:6px"></div>
-    </div>
-    <div class="form-grid">
-      <div class="field"><label class="field-label">日期</label><input class="input" type="date" id="date" value="${esc(row?.date || ymd(new Date()))}"></div>
-      <div class="field" id="w-peer"><label class="field-label">对方老师</label>
-        <input class="input" id="peer" list="peer-names" value="${esc(row?.peer_name || '')}">
-        <datalist id="peer-names">${peerNames.map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
-      <div class="field"><label class="field-label">考试名称</label><input class="input" id="exam" value="${esc(row?.exam_name || '')}"></div>
-      <div class="field"><label class="field-label">考场</label><input class="input" id="room" value="${esc(row?.room || '')}"></div>
-      <div class="field"><label class="field-label">开始</label><input class="input" type="time" id="st" value="${esc(row?.start_time || '')}"></div>
-      <div class="field"><label class="field-label">结束</label><input class="input" type="time" id="et" value="${esc(row?.end_time || '')}"></div>
-      <div class="field"><label class="field-label">时长（分钟）</label><input class="input" type="number" id="mins" value="${row?.duration_min ?? ''}"></div>
-      <div class="field"><label class="field-label">金额（元）</label><input class="input" type="number" step="1" id="amt" value="${row?.pay_amount ?? ''}"></div>
-    </div>
-    <div class="field" id="w-paid"><label class="field-label">学校这笔到账了吗</label>
-      <select class="input" id="schoolPaid">
-        <option value="0" ${!Number(row?.school_paid) ? 'selected' : ''}>还没到账</option>
-        <option value="1" ${Number(row?.school_paid) ? 'selected' : ''}>已到账（已打卡）</option>
-      </select></div>
-    ${remarkField({ value: row?.remark || row?.pay_note || '', placeholder: '如：需带答题卡袋、考场在三楼' })}
-    <div class="confirm-actions"><button class="btn ghost" id="c">取消</button><button class="btn primary" id="k">保存</button></div>
-  </div>`);
-  const s = sheet({ title: isNew ? '记一场监考' : '编辑监考', body, wide: true });
-  const q = (id) => body.querySelector('#' + id);
-  let dt = dt0;
-
-  const syncKind = () => {
-    const isSchool = dt === 'school';
-    q('w-peer').classList.toggle('hidden', isSchool);
-    q('w-paid').classList.toggle('hidden', !isSchool);
-    q('dt-hint').textContent = isSchool
-      ? '学校统一发放到工资卡，不进同事间净额'
-      : dt === '替他人' ? '你替对方监考，对方该给你钱' : '对方替你监考，你该给对方钱';
-    body.querySelectorAll('.seg3-i').forEach((b) => b.classList.toggle('on', b.dataset.v === dt));
-  };
-  const syncAmt = (force) => {
-    const mins = Number(q('mins').value) || 0;
-    if (force || !q('amt').value) q('amt').value = calc(dt, mins);
-  };
-  body.querySelectorAll('.seg3-i').forEach((b) => {
-    b.onclick = () => { dt = b.dataset.v; syncKind(); syncAmt(true); };
-  });
-  // 起止时间改动时自动算时长，再按时长（或场次）算金额
-  const calcMins = () => {
-    const a = q('st').value; const b2 = q('et').value;
-    if (!a || !b2) return;
-    const [h1, m1] = a.split(':').map(Number); const [h2, m2] = b2.split(':').map(Number);
-    let d = (h2 * 60 + m2) - (h1 * 60 + m1);
-    if (d < 0) d += 24 * 60;
-    q('mins').value = d;
-    syncAmt(true);
-  };
-
-  /* 【新建时不再无条件预填金额】
-     原来这里有一行 `if (isNew) syncAmt(true);`，一打开表单就把金额填成"单价 × 1 场"（默认 60 元）。
-     用户什么都没填就点保存，存的是一条 60 元的空记录。
-     现在：只有用户真的碰过时间/时长，才自动算金额；
-     全新的空表单保持空白，留空就存 0，不再凭空生出钱。 */
-  q('mins').onchange = () => syncAmt(true);
-  if (!isNew) syncAmt(true);
-  q('st').onchange = calcMins; q('et').onchange = calcMins;
-  syncKind();
-
-  body.querySelector('#c').onclick = s.close;
-  body.querySelector('#k').onclick = async () => {
-    const payload = {
-      date: q('date').value, duty_type: dt,
-      peer_name: dt === 'school' ? '' : q('peer').value.trim(),
-      exam_name: q('exam').value.trim(), room: q('room').value.trim(),
-      start_time: q('st').value, end_time: q('et').value,
-      duration_min: Number(q('mins').value) || 0,
-      pay_amount: Number(q('amt').value) || 0,
-      pay_rule: dt === 'school' && r.mode === '时长' ? '时长' : '场次',
-      school_paid: dt === 'school' ? Number(q('schoolPaid').value) : 0,
-      status: 'done',
-      remark: q('remark').value,
-      paid: dt === 'school' ? Number(q('schoolPaid').value) : 0,
-      // 兼容旧列与日历/首页读取
-      type: dt === 'school' ? '学校分配' : dt === '替他人' ? '我代他人' : '他人代我',
-      person: dt === 'school' ? '' : q('peer').value.trim(),
-      subject: q('exam').value.trim(),
-      place: q('room').value.trim(),
-      amount: Number(q('amt').value) || 0,
-      minutes: Number(q('mins').value) || 0,
-      start_at: q('date').value && q('st').value ? `${q('date').value}T${q('st').value}` : '',
-      end_at: q('date').value && q('et').value ? `${q('date').value}T${q('et').value}` : '',
-    };
-    if (dt !== 'school' && !payload.peer_name) { toast('请填对方老师姓名', 'err'); return; }
-    /* 【空监考单曾能一路存进去，还自带 60 元】
-       原来这里只校验了"代别人/别人代我"要填对方姓名，学校和价、考场、时间一个都没管。
-       用户什么都不填点保存 → 成功 → 库里多出一条 60 元、状态"已完成"的记录。
-       60 元是上面 calc() 按单价自动算的，月底对账会真实地算进"学校应发"，
-       用户会以为学校少发了钱。
-       现在要求：考试名称 / 考场 / 开始时间，至少有一个 —— 有了这个才有对账依据。 */
-    if (!payload.exam_name && !payload.room && !payload.start_time) {
-      toast('至少填一下考试名称、考场或开始时间，不然这条没法对账', 'warn');
-      return;
-    }
-    try {
-      if (isNew) await api.post('/invigilations', payload); else await api.patch('/invigilations/' + row.id, payload);
-      s.close(); toast('已保存'); reload();
-    } catch (e) { toast(e.message || '保存失败', 'err'); }
-  };
+  const module = await import('./invigilation.js');
+  return module.renderInvigilation(box);
 }
 
 /* ================= 出差 ================= */
@@ -1925,21 +1642,55 @@ const money2 = (v) => (Math.round((Number(v) || 0) * 100) / 100).toFixed(2).repl
 
 async function renderTrips(box) {
   const ctx = { month: M() };
-  const load = async () => {
-    const d = await api.get('/trip/list', { month: ctx.month }).catch(() => ({ rows: [], rules: {} }));
-    const rows = d.rows || [];
+  const load = async (targetMonth) => {
+    if (/^\d{4}-\d{2}$/.test(String(targetMonth || ''))) ctx.month = String(targetMonth);
+    let d;
+    try {
+      d = await api.get('/trip/list', { month: ctx.month });
+      if (!d || !Array.isArray(d.rows)) throw new Error('出差列表返回的数据格式不正确');
+
+      /* 自定义列表接口为空时，再从通用出差主表核对一次。
+         创建入口写入 /trips，列表入口读取 /trip/list；两者应读取同一份数据。
+         这里做读后核对，避免主表已有记录却被页面误报为“暂无记录”。 */
+      if (!d.rows.length) {
+        const rawRows = await api.get('/trips', { month: ctx.month });
+        if (Array.isArray(rawRows) && rawRows.length) {
+          const rows = await Promise.all(rawRows.map((row) => api.get('/trip/' + row.id)));
+          d = { ...d, rows };
+        }
+      }
+    } catch (primaryError) {
+      /* 主列表接口异常时，使用主表 + 单条详情兜底，不能把接口错误伪装成空列表。 */
+      try {
+        const rawRows = await api.get('/trips', { month: ctx.month });
+        if (!Array.isArray(rawRows)) throw new Error('出差主表返回的数据格式不正确');
+        const [rules, rows] = await Promise.all([
+          api.get('/trip/rules'),
+          Promise.all(rawRows.map((row) => api.get('/trip/' + row.id))),
+        ]);
+        d = { rules, rows };
+      } catch (fallbackError) {
+        console.error('[trips] 列表读取失败', primaryError, fallbackError);
+        box.innerHTML = `<div class="card empty">
+          <div>${esc(fallbackError.message || primaryError.message || '出差记录加载失败')}</div>
+          <button class="btn ghost sm" id="trip-retry" style="margin-top:12px">重新加载</button>
+        </div>`;
+        box.querySelector('#trip-retry')?.addEventListener('click', () => load());
+        return;
+      }
+    }
+    const rows = Array.isArray(d.rows) ? d.rows : [];
     const rules = d.rules || { foodPerDay: 100, localPerDay: 40 };
     const sum = (f) => rows.reduce((s, r) => s + (f(r) || 0), 0);
-    const total = sum((r) => r.calc.total);
-    const pending = sum((r) => (r.reimb_status === 'paid' ? 0 : r.calc.net));
-    const km = sum((r) => Number(r.km) || 0);
-    const missing = sum((r) => r.calc.bigMissingCount);
+    const reimbursement = sum((r) => r.calc.total);
+    const km = sum((r) => r.calc.km);
+    const vehicleFee = sum((r) => r.calc.vehicleFee);
 
     box.innerHTML = `<div class="stat-cards" style="margin-bottom:14px">
       <div class="stat"><div class="k">本月出差</div><div class="v">${rows.length}<span class="u">次</span></div></div>
-      <div class="stat"><div class="k">应报总额</div><div class="v">${money2(total)}<span class="u">元</span></div></div>
-      <div class="stat"><div class="k">待报销</div><div class="v" style="color:${pending > 0 ? 'var(--amber)' : 'var(--text)'}">${money2(pending)}<span class="u">元</span></div></div>
-      <div class="stat"><div class="k">里程</div><div class="v">${km}<span class="u">km</span></div></div>
+      <div class="stat"><div class="k">累计行驶里程</div><div class="v">${money2(km)}<span class="u">km</span></div></div>
+      <div class="stat"><div class="k">车辆里程费用（单独统计）</div><div class="v" style="color:var(--green)">${money2(vehicleFee)}<span class="u">元</span></div></div>
+      <div class="stat"><div class="k">报销金额（不含里程费）</div><div class="v">${money2(reimbursement)}<span class="u">元</span></div></div>
     </div>
     ${toolbars('trips', ctx.month, `<button class="btn ghost sm" id="trip-stats">${icon('chart', 15)} 统计</button>
       <button class="btn ghost sm" id="trip-rules">${icon('settings', 15)} 补贴标准</button>
@@ -1964,9 +1715,21 @@ async function renderTrips(box) {
           <span class="bold">${esc(r.to_place || '未填目的地')}</span>
           <span class="chip ${rCls}">${rTxt}</span>
           ${c.bigMissingCount ? `<span class="chip red" title="住宿/交通等大额无票">缺票 ${c.bigMissingCount}</span>` : ''}
-          <span class="tiny muted">${esc(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ~ ' + esc(r.end_date) : ''} · ${c.days} 天</span>
+          <span class="tiny muted">${esc(r.start_date || '')}${r.end_date && r.end_date !== r.start_date ? ' ~ ' + esc(r.end_date) : ''} · ${c.days} 天</span>
         </div>
-        <div class="small muted" style="margin-top:2px">${esc(r.reason || '')}${r.companions ? ' · 随行：' + esc(r.companions) : ''}</div>
+        <div class="small muted" style="margin-top:5px">${esc(r.reason || '未填写出差事由')}</div>
+        <div class="trip-people">
+          <span>驾驶人员：<b>${esc(r.driver || '未填写')}</b></span>
+          <span>随行人员：${esc(r.companions || '无')}</span>
+        </div>
+        <div class="trip-mileage">
+          <div class="trip-mileage-main">
+            <span>车辆里程</span><b>${money2(c.km)} km</b>
+            <span>× ¥${money2(c.kmRate)} / km</span>
+            <span class="trip-mileage-note">单独统计，不计入报销</span>
+          </div>
+          <div class="trip-mileage-fee">¥${money2(c.vehicleFee)}</div>
+        </div>
         <div class="trip-math">
           <span class="tm-piece">实报 <b>¥${money2(c.realTotal)}</b></span>
           <span class="tm-op">+</span>
@@ -1975,7 +1738,7 @@ async function renderTrips(box) {
           <span class="tm-res"><span class="tm-op">=</span><span class="tm-total">¥${money2(c.net)}</span></span>
         </div>
         <div class="trip-foot">
-          <span class="tiny muted trip-meta">${c.itemCount ? c.itemCount + ' 笔明细' : '无明细'}${c.missingCount ? ` · ${c.missingCount} 笔无票` : ''}${Number(r.km) > 0 ? ` · ${r.km} km` : ''}</span>
+          <span class="tiny muted trip-meta">${c.itemCount ? c.itemCount + ' 笔明细' : '无明细'}${c.missingCount ? ` · ${c.missingCount} 笔无票` : ''}</span>
           <div class="trip-acts">
             <button class="btn ghost sm" data-trip-open="${r.id}">明细 / 发票</button>
             <button class="btn ghost sm" data-trip-copy="${r.id}">${icon('copy', 14)} 复制报销单</button>
@@ -2000,9 +1763,7 @@ async function renderTrips(box) {
         e.stopPropagation();
         const r = rows.find((x) => String(x.id) === b.dataset.tripDel);
         if (!r) return;
-        /* 出差卡里往往已经录了明细和发票，删掉是连带一起没的，
-           所以确认文案要把差额金额也说出来，让人看清楚损失的是什么。 */
-        const amt = r.calc?.net != null ? `（含 ${r.calc.itemCount || 0} 笔明细，合计 ¥${money2(r.calc.net)}）` : '';
+        const amt = r.calc?.net != null ? `（含 ${r.calc.itemCount || 0} 笔明细，报销应结算 ¥${money2(r.calc.net)}；另有车辆里程费 ¥${money2(r.calc.vehicleFee)}）` : '';
         if (!(await confirmDialog(`删除去「${r.to_place || '未填目的地'}」的出差记录？${amt}`, { danger: true, okText: '删除' }))) return;
         try { await api.del('/trips/' + r.id); toast('已删除'); load(); }
         catch (err) { toast(err.message || '删除失败', 'err'); }
@@ -2065,35 +1826,54 @@ async function tripStatsSheet() {
   try { d = await api.get('/trip/stats', { year: new Date().getFullYear() }); } catch (e) { return toast(e.message, 'err'); }
   const s0 = d.summary;
   const maxM = Math.max(1, ...d.months.map((m) => m.total));
+  const maxVehicle = Math.max(1, ...d.months.map((m) => m.vehicleFee || 0));
   const kinds = Object.entries(d.byKind).filter(([, v]) => v > 0);
   const kindTotal = kinds.reduce((a, [, v]) => a + v, 0) || 1;
+  const rankHtml = (items) => items?.length
+    ? '<div class="trip-stat-list">' + items.map((item) => '<div class="trip-stat-row">'
+      + '<span class="trip-stat-name">' + esc(item.name) + '</span>'
+      + '<span>' + item.count + ' 次</span>'
+      + '<span>' + money2(item.km) + ' km</span>'
+      + '<b>¥' + money2(item.vehicleFee) + '</b></div>').join('') + '</div>'
+    : '<div class="empty" style="padding:12px 0">暂无记录</div>';
+  const reimbursementBars = d.months.map((m) => '<div class="bc-col" title="' + m.month + ' 报销 ¥' + money2(m.total) + '">'
+    + '<div class="bc-bar" style="height:' + (m.total > 0 ? Math.max(4, Math.round(m.total / maxM * 100)) : 0) + '%"></div>'
+    + '<div class="bc-x">' + Number(m.month.slice(5)) + '</div>'
+    + (m.total > 0 ? '<div class="bc-v">' + money2(m.total) + '</div>' : '') + '</div>').join('');
+  const vehicleBars = d.months.map((m) => '<div class="bc-col" title="' + m.month + ' 车辆里程费 ¥' + money2(m.vehicleFee) + '">'
+    + '<div class="bc-bar" style="height:' + (m.vehicleFee > 0 ? Math.max(4, Math.round(m.vehicleFee / maxVehicle * 100)) : 0) + '%;background:var(--green)"></div>'
+    + '<div class="bc-x">' + Number(m.month.slice(5)) + '</div>'
+    + (m.vehicleFee > 0 ? '<div class="bc-v">' + money2(m.vehicleFee) + '</div>' : '') + '</div>').join('');
+  const kindHtml = kinds.length
+    ? '<div class="kind-list">' + kinds.sort((a, b) => b[1] - a[1]).map(([k, v]) => '<div class="kind-row">'
+      + '<span class="kind-name">' + (KIND_LABEL[k] || k) + '</span>'
+      + '<span class="kind-bar"><i style="width:' + Math.round(v / kindTotal * 100) + '%"></i></span>'
+      + '<span class="kind-v">¥' + money2(v) + '</span>'
+      + '<span class="tiny muted" style="width:42px;text-align:right">' + Math.round(v / kindTotal * 100) + '%</span>'
+      + '</div>').join('') + '</div>'
+    : '<div class="empty" style="padding:20px 0">今年还没有出差费用记录</div>';
   const body = el(`<div class="sheet-body">
     <div class="rd-cards" style="grid-template-columns:repeat(4,1fr)">
       <div class="rd-c"><div class="rd-n">${s0.count}</div><div class="rd-l">出差次数</div></div>
-      <div class="rd-c"><div class="rd-n">${s0.km}</div><div class="rd-l">总里程 km</div></div>
-      <div class="rd-c"><div class="rd-n" style="color:var(--primary)">${money2(s0.total)}</div><div class="rd-l">应报合计</div></div>
-      <div class="rd-c"><div class="rd-n" style="color:var(--amber)">${money2(s0.pending)}</div><div class="rd-l">未到手</div></div>
+      <div class="rd-c"><div class="rd-n">${money2(s0.km)}</div><div class="rd-l">总里程 km</div></div>
+      <div class="rd-c"><div class="rd-n" style="color:var(--green)">${money2(s0.vehicleFee)}</div><div class="rd-l">车辆里程费（单独）</div></div>
+      <div class="rd-c"><div class="rd-n" style="color:var(--primary)">${money2(s0.total)}</div><div class="rd-l">报销金额（不含里程）</div></div>
     </div>
-    <div class="sec-title" style="margin:16px 0 8px">${d.year} 年每月应报</div>
-    <div class="bar-chart">
-      ${d.months.map((m) => `<div class="bc-col" title="${m.month} ¥${money2(m.total)}">
-        <div class="bc-bar" style="height:${m.total > 0 ? Math.max(4, Math.round(m.total / maxM * 100)) : 0}%"></div>
-        <div class="bc-x">${Number(m.month.slice(5))}</div>
-        ${m.total > 0 ? `<div class="bc-v">${money2(m.total)}</div>` : ''}
-      </div>`).join('')}
-    </div>
-    ${kinds.length ? `<div class="sec-title" style="margin:18px 0 8px">钱花在哪</div>
-      <div class="kind-list">
-        ${kinds.sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="kind-row">
-          <span class="kind-name">${KIND_LABEL[k] || k}</span>
-          <span class="kind-bar"><i style="width:${Math.round(v / kindTotal * 100)}%"></i></span>
-          <span class="kind-v">¥${money2(v)}</span>
-          <span class="tiny muted" style="width:42px;text-align:right">${Math.round(v / kindTotal * 100)}%</span>
-        </div>`).join('')}
-      </div>` : '<div class="empty" style="padding:20px 0">今年还没有出差记录</div>'}
+    <div class="tiny muted" style="margin-top:8px">待报销：¥${money2(s0.pending)} · 车辆里程费不计入报销金额</div>
+    <div class="sec-title" style="margin:16px 0 8px">${d.year} 年每月报销金额（不含里程费）</div>
+    <div class="bar-chart">${reimbursementBars}</div>
+    <div class="sec-title" style="margin:18px 0 8px">${d.year} 年每月车辆里程费用（单独统计）</div>
+    <div class="bar-chart">${vehicleBars}</div>
+    <div class="sec-title" style="margin:18px 0 8px">目的地统计</div>
+    ${rankHtml(d.byDestination)}
+    <div class="sec-title" style="margin:18px 0 8px">驾驶人员统计</div>
+    ${rankHtml(d.byDriver)}
+    <div class="sec-title" style="margin:18px 0 8px">随行人员统计</div>
+    ${rankHtml(d.byCompanion)}
+    ${kindHtml}
     <div class="confirm-actions"><button class="btn ghost" id="c">关闭</button></div>
   </div>`);
-  const s = sheet({ title: `出差统计 · ${d.year}`, body, wide: true });
+  const s = sheet({ title: '出差统计 · ' + d.year, body, wide: true });
   body.querySelector('#c').onclick = s.close;
 }
 
@@ -2109,7 +1889,19 @@ async function tripDetail(id, reload) {
       <div class="bold" style="font-size:16px">${esc(r.to_place || '')}</div>
       <span class="tiny muted">${esc(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ~ ' + esc(r.end_date) : ''}</span>
     </div>
-    <div class="small muted" style="margin-bottom:14px">${esc(r.reason || '')}${r.companions ? ' · 随行：' + esc(r.companions) : ''}</div>
+    <div class="small muted" style="margin-bottom:8px">${esc(r.reason || '未填写出差事由')}</div>
+    <div class="trip-people">
+      <span>驾驶人员：<b>${esc(r.driver || '未填写')}</b></span>
+      <span>随行人员：${esc(r.companions || '无')}</span>
+    </div>
+    <div class="trip-mileage">
+      <div class="trip-mileage-main">
+        <span>车辆里程</span><b>${money2(r.calc.km)} km</b>
+        <span>× ¥${money2(r.calc.kmRate)} / km</span>
+        <span class="trip-mileage-note">单独统计，不计入报销</span>
+      </div>
+      <div class="trip-mileage-fee">¥${money2(r.calc.vehicleFee)}</div>
+    </div>
 
     <div class="sec-title">费用明细 <span class="tiny muted">（一笔一行，发票可后补）</span></div>
     <div id="items"></div>
@@ -2166,6 +1958,10 @@ async function tripDetail(id, reload) {
   function paintSum(nd) {
     const c = nd.calc;
     body.querySelector('#sum').innerHTML = `
+      <div class="ts-mileage-separate">
+        <div class="ts-line"><span>车辆里程费用（单独统计，不计入报销）</span><b>¥${money2(c.vehicleFee)}</b></div>
+        <div class="tiny muted">${money2(c.km)} km × ¥${money2(c.kmRate)} / km · 驾驶人员：${esc(nd.driver || '未填写')}</div>
+      </div>
       <div class="ts-line"><span>实报实销</span><b>¥${money2(c.realTotal)}</b></div>
       <div class="ts-line"><span>补贴（伙食 ${money2(c.food)} + 市内交通 ${money2(c.local)}）</span><b>¥${money2(c.subsidyTotal)}</b></div>
       ${c.advance > 0 ? `<div class="ts-line"><span>预借 / 垫付</span><b style="color:var(--amber)">−¥${money2(c.advance)}</b></div>` : ''}
@@ -2236,43 +2032,58 @@ export async function uploadTo(ownerType, ownerId, done) {
 
 function tripEditor(row, reload) {
   const isNew = !row;
+  const kmRate = row?.km_rate != null && row.km_rate !== '' && Number.isFinite(Number(row.km_rate))
+    ? Math.max(0, Number(row.km_rate))
+    : 1;
   const body = el(`<div class="sheet-body">
-    <div class="sec-title">行程</div>
+    <div class="sec-title">01 · 基本行程</div>
     <div class="form-grid">
-      <div class="field"><label class="field-label">出发日期</label><input class="input" type="date" id="sd" value="${esc(row?.start_date || ymd(new Date()))}"></div>
-      <div class="field"><label class="field-label">返回日期</label><input class="input" type="date" id="ed" value="${esc(row?.end_date || '')}"></div>
-      <div class="field"><label class="field-label">出发地</label><input class="input" id="from" value="${esc(row?.from_place || '学校')}"></div>
-      <div class="field"><label class="field-label">目的地</label><input class="input" id="to" value="${esc(row?.to_place || '')}"></div>
+      <div class="field"><label class="field-label">出差开始日期</label><input class="input" type="date" id="sd" value="${esc(row?.start_date || ymd(new Date()))}"></div>
+      <div class="field"><label class="field-label">出差结束日期</label><input class="input" type="date" id="ed" value="${esc(row?.end_date || '')}"></div>
+      <div class="field"><label class="field-label">出发地点</label><input class="input" id="from" value="${esc(row?.from_place || '学校')}"></div>
+      <div class="field"><label class="field-label">目的地</label><input class="input" id="to" value="${esc(row?.to_place || '')}" placeholder="例如：郑州"></div>
     </div>
-    <div class="field"><label class="field-label">事由</label><input class="input" id="reason" value="${esc(row?.reason || '')}"></div>
-    <div class="field"><label class="field-label">随行人员</label><input class="input" id="comp" value="${esc(row?.companions || '')}"></div>
+    <div class="field"><label class="field-label">出差事由</label><input class="input" id="reason" value="${esc(row?.reason || '')}" placeholder="填写本次出差的具体原因"></div>
 
-    <div class="sec-title" style="margin-top:18px">实报实销 <span class="tiny muted">（大额建议留票）</span></div>
+    <div class="sec-title" style="margin-top:18px">02 · 出差人员</div>
     <div class="form-grid">
-      <div class="field"><label class="field-label">交通（车票/机票）</label><input class="input" type="number" id="transport" value="${row?.transport ?? 0}"></div>
-      <div class="field"><label class="field-label">住宿</label><input class="input" type="number" id="hotel" value="${row?.hotel ?? 0}"></div>
-      <div class="field"><label class="field-label">市内打车</label><input class="input" type="number" id="taxi" value="${row?.taxi ?? 0}"></div>
-      <div class="field"><label class="field-label">过路费</label><input class="input" type="number" id="toll" value="${row?.toll ?? 0}"></div>
-      <div class="field"><label class="field-label">停车费</label><input class="input" type="number" id="park" value="${row?.parking ?? 0}"></div>
-      <div class="field"><label class="field-label">其他费用</label><input class="input" type="number" id="other" value="${row?.other ?? 0}"></div>
-    </div>
-    <div class="tiny muted" style="margin:-4px 0 4px">大额（住宿/交通）没票会在列表里标「缺票」。要逐笔记录、传发票，保存后点卡片上的「明细 / 发票」。</div>
-
-    <div class="sec-title" style="margin-top:18px">预借 / 自驾</div>
-    <div class="form-grid">
-      <div class="field"><label class="field-label">预借（从应报里扣）</label><input class="input" type="number" id="advance" value="${row?.advance ?? 0}"></div>
-      <div class="field"><label class="field-label">自驾公里数</label><input class="input" type="number" id="km" value="${row?.km ?? 0}"></div>
+      <div class="field"><label class="field-label">驾驶人员</label><input class="input" id="driver" value="${esc(row?.driver || '')}" placeholder="填写实际开车老师姓名"></div>
+      <div class="field"><label class="field-label">随行人员</label><input class="input" id="comp" value="${esc(row?.companions || '')}" placeholder="多人可用顿号分隔"></div>
     </div>
 
-    <div class="sec-title" style="margin-top:18px">状态</div>
+    <div class="sec-title" style="margin-top:18px">03 · 车辆里程费用 <span class="tiny muted">（单独统计）</span></div>
+    <div class="trip-mileage-editor">
+      <div class="form-grid">
+        <div class="field"><label class="field-label">实际行驶公里数</label><input class="input" type="number" min="0" step="0.1" id="km" value="${row?.km ?? 0}" placeholder="输入公里数"></div>
+        <div class="field"><label class="field-label">里程费率</label><div class="trip-rate-static">¥${money2(kmRate)} / 公里 <span>默认标准 1 元/公里</span></div></div>
+      </div>
+      <div class="trip-mileage-preview" id="vehicle-preview">
+        <span>车辆里程费用（不计入报销总额）</span>
+        <strong>¥${money2((Number(row?.km) || 0) * kmRate)}</strong>
+      </div>
+    </div>
+
+    <div class="sec-title" style="margin-top:18px">04 · 其他费用报销 <span class="tiny muted">（原有报销项目保留）</span></div>
     <div class="form-grid">
+      <div class="field"><label class="field-label">交通（车票 / 机票）</label><input class="input" type="number" min="0" step="0.01" id="transport" value="${row?.transport ?? 0}"></div>
+      <div class="field"><label class="field-label">住宿</label><input class="input" type="number" min="0" step="0.01" id="hotel" value="${row?.hotel ?? 0}"></div>
+      <div class="field"><label class="field-label">市内打车</label><input class="input" type="number" min="0" step="0.01" id="taxi" value="${row?.taxi ?? 0}"></div>
+      <div class="field"><label class="field-label">过路费</label><input class="input" type="number" min="0" step="0.01" id="toll" value="${row?.toll ?? 0}"></div>
+      <div class="field"><label class="field-label">停车费</label><input class="input" type="number" min="0" step="0.01" id="park" value="${row?.parking ?? 0}"></div>
+      <div class="field"><label class="field-label">其他费用</label><input class="input" type="number" min="0" step="0.01" id="other" value="${row?.other ?? 0}"></div>
+    </div>
+    <div class="tiny muted" style="margin:-4px 0 4px">费用明细、发票上传和复制报销单功能保持不变；车辆里程费用不并入上述报销费用。</div>
+
+    <div class="sec-title" style="margin-top:18px">05 · 结算与状态</div>
+    <div class="form-grid">
+      <div class="field"><label class="field-label">预借金额（从报销金额中扣除）</label><input class="input" type="number" min="0" step="0.01" id="advance" value="${row?.advance ?? 0}"></div>
       <div class="field"><label class="field-label">审批状态</label><select class="input" id="status">
         ${[['draft', '草稿'], ['submitted', '已提交（待领导审核）'], ['approved', '已审核'], ['rejected', '被驳回']].map(([v, l]) => `<option value="${v}" ${row?.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="field"><label class="field-label">报销状态</label><select class="input" id="rstat">
         ${[['draft', '未提交'], ['submitted', '已交财务'], ['paid', '已到账']].map(([v, l]) => `<option value="${v}" ${row?.reimb_status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label class="field-label">审核意见</label><input class="input" id="anote" value="${esc(row?.approve_note || '')}"></div>
-    ${remarkField({ value: row?.remark || '', rows: 2, placeholder: '如：领导要求当天往返、带纸质材料三份' })}
+    ${remarkField({ value: row?.remark || '', rows: 2, placeholder: '补充其他说明' })}
     <div class="confirm-actions">${isNew ? '' : '<button class="btn ghost" id="del" style="margin-right:auto;color:var(--red)">删除</button>'}
       <button class="btn ghost" id="c">取消</button><button class="btn primary" id="k">保存</button></div>
   </div>`);
@@ -2282,35 +2093,46 @@ function tripEditor(row, reload) {
     if (await confirmDialog('删除这条出差记录？')) { await api.del('/trips/' + row.id); s.close(); toast('已删除'); reload(); }
   });
   const num = (id) => Number(body.querySelector('#' + id).value) || 0;
+  const updateVehiclePreview = () => {
+    const fee = Math.round(num('km') * kmRate * 100) / 100;
+    body.querySelector('#vehicle-preview').innerHTML = `<span>车辆里程费用（不计入报销总额）</span><strong>¥${money2(fee)}</strong>`;
+  };
+  body.querySelector('#km').addEventListener('input', updateVehiclePreview);
   body.querySelector('#k').onclick = async () => {
-    /* 目的地和事由至少填一个。
-       原来只校验出发日期（还是默认今天的），别的全靠用户自觉 ——
-       点开「记录出差」什么都不填直接保存，就会生成一张空的出差单：
-       列表里显示「去『未填目的地』」，统计里也算一次出差，月底补贴还要按它算。
-       目的地是这张单子的主语，先要它。 */
     const toPlace = body.querySelector('#to').value.trim();
     const reason = body.querySelector('#reason').value.trim();
+    const driver = body.querySelector('#driver').value.trim();
     if (!toPlace) {
       toast('去哪出差？先填一下目的地', 'warn');
       body.querySelector('#to').focus();
       return;
     }
+    if (!body.querySelector('#sd').value) return toast('出差开始日期要填', 'err');
+    if (num('km') > 0 && !driver) {
+      toast('填写了行驶公里数，请补充实际驾驶人员', 'warn');
+      body.querySelector('#driver').focus();
+      return;
+    }
     const payload = {
       start_date: body.querySelector('#sd').value, end_date: body.querySelector('#ed').value || null,
       from_place: body.querySelector('#from').value.trim(), to_place: toPlace,
-      reason, companions: body.querySelector('#comp').value,
+      reason, driver, companions: body.querySelector('#comp').value,
       transport: num('transport'), hotel: num('hotel'), taxi: num('taxi'),
       toll: num('toll'), parking: num('park'), other: num('other'),
-      advance: num('advance'), km: num('km'),
+      advance: num('advance'), km: num('km'), km_rate: kmRate,
       status: body.querySelector('#status').value,
       reimb_status: body.querySelector('#rstat').value,
       approve_note: body.querySelector('#anote').value,
       remark: body.querySelector('#remark').value,
     };
-    if (!payload.start_date) return toast('出发日期要填', 'err');
     try {
-      if (isNew) await api.post('/trips', payload); else await api.patch('/trips/' + row.id, payload);
-      s.close(); toast('已保存'); reload();
+      const saved = isNew
+        ? await api.post('/trips', payload)
+        : await api.patch('/trips/' + row.id, payload);
+      s.close();
+      toast('已保存');
+      const savedMonth = String(saved?.start_date || payload.start_date).slice(0, 7);
+      await reload(savedMonth);
     } catch (e) { toast(e.message || '保存失败', 'err'); }
   };
 }
@@ -2726,12 +2548,12 @@ function askStatus() {
   });
 }
 
-/* ================= 学生页面的三个模块（小助手下面的子级入口） =================
+/* ================= 学生页面的三个模块（小助手下面的二级入口） =================
    教材 / 抽人 / 盲盒，对应 student.html 顶部的三个页签：
      material → 老师在「课件」里上传、勾了「学生可见」的资料
      roll     → 抽人（按号码或按名单，不重复）
      punish   → 惩罚盲盒（点一下随机弹一个任务）
-   第三级页面不做「学生页的复刻」，而是给这三件事做后台：
+   二级页面不做「学生页的复刻」，而是给这三件事做后台：
    看学生到底能拿到什么、把要用的东西配好、看用了几次。
    自习那个模块因为本身就是「开一场签到 + 看名单」，逻辑更重，
    单独放在 selfstudy.js 里（见 renderSelfstudyBody）。 */
@@ -3209,269 +3031,7 @@ async function materialEditor(m, catId, reload) {
   };
 }
 
-/* ================= 电子备课记录表 =================
-   信息课与特色课共用同一张记录表，只有备课类型不同。
-   历史记录没有类型字段时按「待分类」展示，不批量改写旧数据。 */
-const PREP_STATUS = { doing: ['在备', 'amber'], done: ['备好了', 'green'] };
-
-/* 备课清单筛选统一走领域规则，避免类型、班级、状态和关键词筛选互相覆盖。 */
-function filterList(src, { fClass = '', fStatus = '', fType = '', keyword = '' } = {}) {
-  return filterPrepRecords(src, {
-    className: fClass,
-    status: fStatus,
-    type: fType,
-    keyword,
-  });
-}
-
-async function renderPreps(box) {
-  let list = [];
-  let fClass = '';
-  let fStatus = '';
-  let fType = '';
-  let keyword = '';
-
-  const load = async () => {
-    list = await api.get('/preps').catch(() => []);
-    paint();
-  };
-
-  const breakpointOf = (p) => {
-    const nx = (p.next_step || '').trim();
-    if (nx) return { k: 'next', v: nx };
-    const pr = (p.progress || '').trim();
-    if (pr) return { k: 'prog', v: pr };
-    return null;
-  };
-
-  const paint = () => {
-    const classes = [...new Set(list.map((p) => (p.class_name || '').trim()).filter(Boolean))].sort();
-    const doing = list.filter((p) => (p.status || 'doing') !== 'done');
-    const countOf = (type) => list.filter((p) => normalizePrepType(p.prep_type) === type).length;
-    const typeFilters = [
-      { value: '', label: '全部类型', count: list.length },
-      ...PREP_TYPE_OPTIONS.map((item) => ({ ...item, count: countOf(item.value) })),
-      { value: PREP_UNCLASSIFIED, label: '待分类', count: countOf(PREP_UNCLASSIFIED) },
-    ];
-    const show = filterList(list, { fClass, fStatus, fType, keyword });
-
-    box.innerHTML = `
-    <div class="row wrap" style="gap:8px;margin-bottom:14px">
-      <div class="prep-stat">
-        <span class="ps-num">${doing.length}</span>
-        <span class="ps-k">还在备</span>
-      </div>
-      <div class="prep-stat done">
-        <span class="ps-num">${list.filter((p) => (p.status || 'doing') === 'done').length}</span>
-        <span class="ps-k">已备好</span>
-      </div>
-      <span style="flex:1"></span>
-      <button class="btn primary sm" id="prep-add">${icon('plus', 15)} 新建备课记录</button>
-    </div>
-
-    ${doing.length ? `<section class="card card-pad prep-next">
-      <div class="prep-next-h">${icon('book', 16)} 接着备这些 <span class="chip amber">${doing.length}</span>
-        <span class="prep-next-s">上次停在哪，下次就从哪接着</span></div>
-      <div class="prep-next-list">
-        ${doing.slice(0, 6).map((p) => {
-          const bp = breakpointOf(p);
-          return `<button class="prep-next-i" data-open="${p.id}">
-            <span class="pni-l">
-              <span class="pni-t">${esc(p.topic || '未命名课题')}</span>
-              <span class="pni-m">${esc(prepTypeLabel(p))}${p.class_name ? ' · ' + esc(p.class_name) : ''}${p.subject ? ' · ' + esc(p.subject) : ''}${p.date ? ' · ' + esc(String(p.date).slice(5)) : ''}</span>
-            </span>
-            <span class="pni-bp">${bp
-              ? `${bp.k === 'next' ? '下一步' : '进度'}：${esc(bp.v)}`
-              : '<span class="pni-todo">还没写进度，点开补一句</span>'}</span>
-            ${icon('right', 14)}
-          </button>`;
-        }).join('')}
-      </div>
-      ${doing.length > 6 ? `<div class="tiny muted" style="margin-top:8px">还有 ${doing.length - 6} 条未备完，见下面清单</div>` : ''}
-    </section>` : ''}
-
-    <div class="prep-filter">
-      <div class="prep-type-filter row wrap" aria-label="备课类型筛选">
-        ${typeFilters.map((item) => `<button class="sr-chip${fType === item.value ? ' on' : ''}" data-ft="${item.value}">${esc(item.label)}（${item.count}）</button>`).join('')}
-      </div>
-      <div class="row wrap" style="gap:6px">
-        <button class="sr-chip${fClass === '' ? ' on' : ''}" data-fc="">全部班级</button>
-        ${classes.map((c) => `<button class="sr-chip${fClass === c ? ' on' : ''}" data-fc="${esc(c)}">${esc(c)}</button>`).join('')}
-      </div>
-      <div class="row wrap" style="gap:6px;margin-top:6px">
-        <button class="sr-chip${fStatus === '' ? ' on' : ''}" data-fs="">全部状态</button>
-        <button class="sr-chip${fStatus === 'doing' ? ' on' : ''}" data-fs="doing">在备</button>
-        <button class="sr-chip${fStatus === 'done' ? ' on' : ''}" data-fs="done">备好了</button>
-        <span style="flex:1"></span>
-        <input class="input prep-q" id="prep-q" placeholder="搜索课题 / 备课内容 / 进度" value="${esc(keyword)}">
-      </div>
-    </div>
-
-    <div class="card prep-list-card">
-      ${show.length ? `<div class="prep-list">${show.map(prepRow).join('')}</div>` : `<div class="empty">
-        ${list.length ? '没有符合筛选条件的备课记录' : '还没有备课记录<br><span class="tiny muted">点击「新建备课记录」，选择信息课或特色课开始填写</span>'}
-      </div>`}
-    </div>`;
-
-    box.querySelector('#prep-add').onclick = () => prepEditor(null, load);
-    box.querySelectorAll('[data-ft]').forEach((b) => { b.onclick = () => { fType = b.dataset.ft; paint(); }; });
-    box.querySelectorAll('[data-fc]').forEach((b) => { b.onclick = () => { fClass = b.dataset.fc; paint(); }; });
-    box.querySelectorAll('[data-fs]').forEach((b) => { b.onclick = () => { fStatus = b.dataset.fs; paint(); }; });
-    const q = box.querySelector('#prep-q');
-    if (q) {
-      q.oninput = () => {
-        keyword = q.value.trim();
-        /* 只重画列表，保留输入框与中文输入法的焦点。 */
-        const card = box.querySelector('.prep-list-card');
-        if (!card) return;
-        const shown = filterList(list, { fClass, fStatus, fType, keyword });
-        card.innerHTML = shown.length
-          ? `<div class="prep-list">${shown.map(prepRow).join('')}</div>`
-          : `<div class="empty">${list.length ? '没有符合筛选条件的备课记录' : '还没有备课记录'}</div>`;
-        bindRows();
-      };
-    }
-    bindRows();
-
-    function bindRows() {
-      box.querySelectorAll('[data-open]').forEach((b) => {
-        b.onclick = () => prepEditor(list.find((p) => String(p.id) === b.dataset.open), load);
-      });
-      box.querySelectorAll('[data-toggle-done]').forEach((b) => {
-        b.onclick = async (e) => {
-          e.stopPropagation();
-          const p = list.find((x) => String(x.id) === b.dataset.toggleDone);
-          if (!p) return;
-          const next = (p.status || 'doing') === 'done' ? 'doing' : 'done';
-          try {
-            await api.patch('/preps/' + p.id, { status: next });
-            toast(next === 'done' ? '已标记备好' : '已改回在备');
-            load();
-          } catch (err) { toast(err.message || '操作失败', 'err'); }
-        };
-      });
-    }
-  };
-
-  const prepRow = (p) => {
-    const st = PREP_STATUS[p.status || 'doing'] || PREP_STATUS.doing;
-    const bp = breakpointOf(p);
-    const typeClass = normalizePrepType(p.prep_type) === PREP_UNCLASSIFIED ? ' is-unclassified' : '';
-    const content = String(p.content || '').trim();
-    return `<div class="prep-row${(p.status || 'doing') === 'done' ? ' is-done' : ''}" data-open="${p.id}">
-      <div class="pr-date"><b>${esc((p.date || '').slice(5) || '—')}</b><span>${esc((p.date || '').slice(0, 4))}</span></div>
-      <div class="pr-main">
-        <div class="pr-t">${esc(p.topic || '未命名课题')}
-          <span class="prep-type-badge${typeClass}">${esc(prepTypeLabel(p))}</span>
-          <span class="chip ${st[1]}">${st[0]}</span>
-          ${p.seq ? `<span class="sr-no">编号 ${String(p.seq).padStart(3, '0')}</span>` : ''}
-        </div>
-        <div class="pr-m">${p.class_name ? `<span>${esc(p.class_name)}</span>` : ''}${p.subject ? `<span>${esc(p.subject)}</span>` : ''}${p.minutes ? `<span>${p.minutes} 分钟</span>` : ''}</div>
-        ${content ? `<div class="pr-content">${esc(content.length > 150 ? content.slice(0, 150) + '…' : content)}</div>` : ''}
-        ${bp ? `<div class="pr-bp"><i>${bp.k === 'next' ? '下一步' : '进度'}</i>${esc(bp.v)}</div>`
-          : `<div class="pr-bp empty">还没写进度和下一步，点开补一句，下次就知道从哪接</div>`}
-        ${p.remark ? `<div class="pr-rm">${icon('edit', 11)}<span>${esc(p.remark)}</span></div>` : ''}
-      </div>
-      <button class="btn ghost sm pr-ok" data-toggle-done="${p.id}">${(p.status || 'doing') === 'done' ? '改回在备' : '标记备好'}</button>
-    </div>`;
-  };
-
-  await load();
-}
-
-/* 电子备课记录编辑弹窗：两种类型共用同一套字段与保存逻辑。 */
-function prepEditor(row, reload) {
-  const isNew = !row;
-  const today = ymd(new Date());
-  const st = row?.status || 'doing';
-  const currentType = isNew ? '' : normalizePrepType(row?.prep_type);
-  const typeOptions = [
-    isNew
-      ? '<option value="">请选择备课类型</option>'
-      : '<option value="unclassified">待分类（旧记录）</option>',
-    ...PREP_TYPE_OPTIONS.map((item) => `<option value="${item.value}">${esc(item.label)}</option>`),
-  ].join('');
-  const body = el(`<div class="sheet-body">
-    <div class="prep-tip">${icon('alert', 14)} 信息课与特色课使用同一张电子备课记录表；请先选择备课类型，再填写相同的备课内容。</div>
-    <div class="form-grid">
-      <div class="field"><label class="field-label">备课类型 <span class="req">*</span></label>
-        <select class="input" id="p-type" ${isNew ? 'required' : ''}>${typeOptions}</select></div>
-      <div class="field"><label class="field-label">备课日期</label>
-        <input class="input" type="date" id="p-date" value="${esc(row?.date || today)}"></div>
-      <div class="field"><label class="field-label">班级</label>
-        <input class="input" id="p-class" value="${esc(row?.class_name || '')}"></div>
-      <div class="field"><label class="field-label">学科</label>
-        <input class="input" id="p-subject" value="${esc(row?.subject || '')}"></div>
-      <div class="field"><label class="field-label">花了多久（分钟，选填）</label>
-        <input class="input" id="p-min" type="number" min="0" step="5" value="${row?.minutes ?? ''}"></div>
-    </div>
-    <div class="field"><label class="field-label">备的是哪一课 <span class="req">*</span></label>
-      <input class="input" id="p-topic" value="${esc(row?.topic || '')}"></div>
-    <div class="field"><label class="field-label">备课内容</label>
-      <textarea class="input" id="p-content" rows="6" placeholder="填写教学目标、重点难点、教学流程、活动设计、课前准备等">${esc(row?.content || '')}</textarea></div>
-    <div class="field"><label class="field-label">备课进度</label>
-      <textarea class="input" id="p-progress" rows="3">${esc(row?.progress || '')}</textarea></div>
-    <div class="field"><label class="field-label">下次接着备什么 <span class="prep-hint">写清下一步，方便下次继续</span></label>
-      <textarea class="input" id="p-next" rows="2">${esc(row?.next_step || '')}</textarea></div>
-    ${remarkField({ id: 'p-remark', value: row?.remark || '', placeholder: '如：需要打印学案、借投影笔' })}
-    <div class="field"><label class="field-label">状态</label>
-      <div class="le-seg" id="p-seg">
-        <button type="button" class="le-seg-i${st !== 'done' ? ' on' : ''}" data-s="doing">还在备</button>
-        <button type="button" class="le-seg-i${st === 'done' ? ' on' : ''}" data-s="done">备好了</button>
-      </div>
-    </div>
-    <div class="confirm-actions">
-      ${isNew ? '' : '<button class="btn ghost" id="p-del" style="margin-right:auto;color:var(--red)">删除</button>'}
-      <button class="btn ghost" id="p-cancel">取消</button>
-      <button class="btn primary" id="p-save">保存</button>
-    </div>
-  </div>`);
-  const s = sheet({ title: isNew ? '新增电子备课记录' : '编辑电子备课记录', body, wide: true });
-  const typeSelect = body.querySelector('#p-type');
-  if (typeSelect) typeSelect.value = currentType;
-  let status = st;
-  body.querySelectorAll('[data-s]').forEach((b) => {
-    b.onclick = () => {
-      status = b.dataset.s;
-      body.querySelectorAll('[data-s]').forEach((x) => x.classList.toggle('on', x === b));
-    };
-  });
-  body.querySelector('#p-cancel').onclick = s.close;
-  const del = body.querySelector('#p-del');
-  if (del) {
-    del.onclick = async () => {
-      if (!(await confirmDialog('删除这条备课记录？', { danger: true, okText: '删除' }))) return;
-      try { await api.del('/preps/' + row.id); s.close(); reload(); toast('已删除'); }
-      catch (e) { toast(e.message || '删除失败', 'err'); }
-    };
-  }
-  saving(body.querySelector('#p-save'), async () => {
-    const topic = body.querySelector('#p-topic').value.trim();
-    const prep_type = typeSelect.value;
-    const validationMessage = validatePrepRecord({ prep_type, topic }, { isNew });
-    if (validationMessage) return toast(validationMessage, 'warn');
-    const payload = {
-      prep_type,
-      date: body.querySelector('#p-date').value || today,
-      class_name: body.querySelector('#p-class').value.trim(),
-      subject: body.querySelector('#p-subject').value.trim(),
-      topic,
-      content: body.querySelector('#p-content').value.trim(),
-      progress: body.querySelector('#p-progress').value.trim(),
-      next_step: body.querySelector('#p-next').value.trim(),
-      minutes: Number(body.querySelector('#p-min').value) || 0,
-      remark: body.querySelector('#p-remark').value.trim(),
-      status,
-    };
-    try {
-      if (isNew) await api.post('/preps', payload);
-      else await api.patch('/preps/' + row.id, payload);
-      s.close();
-      toast(isNew ? '电子备课记录已保存' : '已保存');
-      reload();
-    } catch (e) { toast(e.message || '保存失败', 'err'); }
-  });
-}
+/* 电子备课模块由 js/prep.js 独立维护。 */
 
 /* ================= 笔记（知识库） ================= */
 async function renderNotes(box) {

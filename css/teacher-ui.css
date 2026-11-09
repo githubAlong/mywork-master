@@ -1349,7 +1349,7 @@ html[data-theme="dark"] .home-redesign .home-welcome-card .home-welcome-stats bu
    其他卡片保留在 DOM 与卡片管理中，但默认隐藏；不改业务数据。
    ========================================================================== */
 .main:has(#home-grid) {
-  max-width: 1920px;
+  max-width: none;
   padding: 20px clamp(16px, 2.2vw, 34px) 36px;
 }
 .home-redesign .home-topbar {
@@ -1599,6 +1599,33 @@ html[data-theme="dark"] .home-redesign .home-weather-card .wxb-outfit { backgrou
   .home-redesign .home-calendar-card .cal-grid { gap:4px 1px; }
 }
 
+/* 首页参考图：搜索、外观与布局按钮同处一行，避免额外占用一整行。 */
+.home-redesign .home-topbar {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:58px;
+  margin:0 0 14px;
+  padding:7px 9px 7px 16px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:var(--card);
+  box-shadow:0 4px 18px color-mix(in srgb,var(--text) 5%,transparent);
+}
+.home-redesign .home-topbar .searchbar { flex:1 1 auto; min-width:180px; width:auto; max-width:none; margin:0; border:0; background:transparent; box-shadow:none; }
+.home-redesign .home-topbar .home-layout-hint { display:none; }
+.home-redesign .home-topbar .home-top-actions { flex:0 0 auto; display:flex; align-items:center; gap:8px; }
+.home-redesign .home-topbar .home-action { min-height:38px; padding:0 11px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text-2); }
+.home-redesign .home-topbar .home-action-secondary { color:var(--primary); }
+.home-redesign .home-topbar .home-action:hover { background:var(--primary-weak); color:var(--primary); }
+.home-redesign .home-layout-intro { display:none; }
+@media(max-width:760px) {
+  .home-redesign .home-topbar { flex-wrap:wrap; padding:6px; }
+  .home-redesign .home-topbar .searchbar { flex-basis:100%; }
+  .home-redesign .home-topbar .home-top-actions { width:100%; }
+  .home-redesign .home-topbar .home-action { flex:1; }
+}
+
 
 /* 全局主题统一：所有页面的左侧导航背景直接读取主题背景变量。 */
 html[data-theme] .app > .sidebar {
@@ -1677,3 +1704,1539 @@ html[data-theme] .home-redesign-app .home-sidebar .sidebar-foot #side-user .side
   background:var(--primary-weak);
 }
 html[data-theme] .home-redesign-app > .main.home-redesign { background:var(--bg); }
+
+
+/* ==========================================================================
+   首页参考图布局 v5：三列卡片、日期时钟、个人信息与每日一句合并。
+   所有强调色和表面颜色读取后台主题变量，切换主题时首页同步变化。
+   ========================================================================== */
+.home-redesign .home-topbar {
+  display:block;
+  position:relative;
+  top:auto;
+  margin:0 0 10px;
+  padding:0;
+  min-height:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.home-redesign .home-topbar .searchbar {
+  display:flex;
+  width:100%;
+  max-width:none;
+  height:52px;
+  padding:0 8px 0 16px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:var(--card);
+  box-shadow:0 4px 18px color-mix(in srgb,var(--text) 5%,transparent);
+}
+.home-redesign .home-topbar .searchbar input { min-width:0; font-size:14px; }
+.home-redesign .home-topbar .searchbar .sb-go {
+  width:42px;
+  height:40px;
+  border-radius:12px;
+  background:var(--primary);
+  color:#fff;
+}
+.home-redesign .home-layout-intro {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin:0 0 14px;
+  min-height:34px;
+}
+.home-redesign .home-layout-hint {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  color:var(--text-2);
+  font-size:13px;
+}
+.home-redesign .home-layout-hint svg { color:var(--primary); }
+.home-redesign .home-top-actions { display:flex; align-items:center; gap:9px; }
+.home-redesign .home-action {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:36px;
+  padding:0 13px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--card);
+  color:var(--text);
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.home-redesign .home-action svg { color:var(--primary); }
+.home-redesign .home-action:hover {
+  border-color:color-mix(in srgb,var(--primary) 35%,var(--line));
+  background:var(--primary-weak);
+}
+.home-redesign .home-action.is-active,
+.home-redesign .teacher-layout-btn.is-active {
+  border-color:var(--primary);
+  color:var(--primary);
+  background:var(--primary-weak);
+}
+.home-redesign #home-grid {
+  grid-template-columns:repeat(12,minmax(0,1fr));
+  grid-auto-rows:52px;
+  gap:14px;
+  align-items:stretch;
+}
+.home-redesign #home-grid > .hg-item { min-width:0; min-height:0; }
+.home-redesign #home-grid > .hg-item > .card {
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:var(--card);
+  box-shadow:0 5px 22px color-mix(in srgb,var(--text) 5%,transparent);
+}
+.home-redesign #home-grid > .hg-item[hidden] { display:none!important; }
+.home-redesign .home-card-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:18px 20px 12px;
+}
+.home-redesign .home-card-title {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  color:var(--text);
+  font-size:17px;
+  font-weight:800;
+}
+.home-redesign .home-card-title > svg { color:var(--primary); flex:0 0 auto; }
+.home-redesign .home-card-link {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  color:var(--primary);
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.home-redesign .home-count-chip {
+  display:inline-grid;
+  place-items:center;
+  min-width:21px;
+  height:21px;
+  padding:0 6px;
+  border-radius:99px;
+  background:var(--primary-weak);
+  color:var(--primary);
+  font-size:11px;
+  font-weight:750;
+}
+
+/* 个人资料 + 每日一句 */
+.home-redesign .home-welcome-card {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  gap:13px;
+  padding:18px 20px!important;
+  background:var(--card)!important;
+}
+.home-redesign .home-profile-actions {
+  position:absolute;
+  top:12px;
+  right:14px;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.home-redesign .home-profile-actions .home-action {
+  display:inline-flex;
+  flex:0 0 34px;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  min-width:34px;
+  height:34px;
+  min-height:34px;
+  padding:0;
+  gap:0;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--card);
+  color:var(--text-2);
+  box-shadow:0 2px 7px color-mix(in srgb,var(--text) 7%,transparent);
+}
+.home-redesign .home-profile-actions .home-action svg {
+  width:16px;
+  height:16px;
+  color:var(--primary);
+}
+.home-redesign .home-profile-actions .home-action span {
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+.home-redesign .home-profile-actions .home-action:focus-visible {
+  outline:2px solid var(--primary);
+  outline-offset:2px;
+}
+.home-redesign .home-profile-head {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
+  padding-right:78px;
+}
+.home-redesign .home-profile-head .ah-btn {
+  flex:0 0 64px;
+  width:64px!important;
+  height:64px!important;
+  overflow:hidden;
+  border:2px solid var(--primary-weak);
+  border-radius:17px;
+  box-shadow:0 4px 12px color-mix(in srgb,var(--primary) 14%,transparent);
+}
+.home-redesign .home-profile-head .ah-btn img {
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.home-redesign .home-profile-info { min-width:0; }
+.home-redesign .home-profile-info .clk-greet {
+  color:var(--text);
+  font-size:clamp(18px,1.5vw,23px);
+  font-weight:850;
+  line-height:1.35;
+}
+.home-redesign .home-profile-info .clk-greet-sub {
+  margin-top:4px;
+  color:var(--text-2);
+  font-size:12px;
+  line-height:1.5;
+}
+.home-redesign .home-profile-meta,
+.home-redesign .home-profile-role {
+  margin-top:3px;
+  color:var(--text-3);
+  font-size:11px;
+  line-height:1.4;
+}
+.home-redesign .home-quote {
+  min-width:0;
+  padding-top:11px;
+  border-top:1px solid var(--line);
+}
+.home-redesign .home-quote-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:7px;
+}
+.home-redesign .home-quote-title {
+  color:var(--text);
+  font-size:13px;
+  font-weight:800;
+}
+.home-redesign .home-quote .quote-en {
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  color:var(--text);
+  font-size:12px;
+  font-style:italic;
+  font-weight:650;
+  line-height:1.5;
+}
+.home-redesign .home-quote .qt { min-width:0; }
+.home-redesign .home-quote .speak-btn {
+  flex:0 0 auto;
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  background:var(--primary-weak);
+  color:var(--primary);
+}
+.home-redesign .home-quote .quote-zh {
+  margin-top:5px;
+  color:var(--text-2);
+  font-size:12px;
+  line-height:1.5;
+}
+.home-redesign .home-quote .quote-author {
+  margin-top:2px;
+  color:var(--text-3);
+  font-size:10px;
+}
+
+/* 日期、实时钟表和今日进度 */
+.home-redesign .home-clock-card {
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  padding:18px 20px!important;
+}
+.home-redesign .home-clock-top {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+.home-redesign .home-clock-top .home-card-title { font-size:15px; }
+.home-redesign .home-clock-top .clock-date {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-end;
+  gap:5px;
+  color:var(--text-2);
+  font-size:11px;
+}
+.home-redesign .home-clock-top .home-date-full {
+  padding:4px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--primary-weak);
+  color:var(--primary);
+  font-weight:800;
+}
+.home-redesign .home-clock-top .wd-badge,
+.home-redesign .home-clock-top .home-week-badge {
+  padding:4px 7px;
+  border-radius:8px;
+  background:var(--bg);
+  color:var(--text-2);
+}
+.home-redesign .home-clock-main {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  flex:1;
+  min-height:0;
+}
+.home-redesign .home-clock-time-wrap { min-width:0; }
+.home-redesign .home-clock-card .clock {
+  color:var(--text);
+  font-size:clamp(38px,3.3vw,58px);
+  font-weight:850;
+  letter-spacing:-2px;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.home-redesign .home-clock-card .clock .sec {
+  margin-left:3px;
+  color:var(--primary);
+  font-size:.38em;
+  letter-spacing:0;
+  vertical-align:top;
+}
+.home-redesign .home-clock-foot {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:20px;
+  color:var(--text-2);
+  font-size:12px;
+}
+.home-redesign .home-clock-foot::before {
+  content:"";
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--primary);
+}
+.home-redesign .home-clock-foot strong {
+  color:var(--text);
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
+}
+.home-redesign .home-day-progress-wrap {
+  position:relative;
+  flex:0 0 100px;
+  width:100px;
+  height:100px;
+}
+.home-redesign .home-day-progress-wrap svg {
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+.home-redesign .home-day-track,
+.home-redesign .home-day-ring {
+  fill:none;
+  stroke-width:7;
+}
+.home-redesign .home-day-track { stroke:var(--primary-weak); }
+.home-redesign .home-day-ring {
+  stroke:var(--primary);
+  stroke-linecap:round;
+  stroke-dasharray:257.61;
+  stroke-dashoffset:257.61;
+  transform:rotate(-90deg);
+  transform-origin:50% 50%;
+  transition:stroke-dashoffset .35s ease;
+}
+.home-redesign .home-day-progress-text {
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+}
+.home-redesign .home-day-progress-text b {
+  color:var(--primary);
+  font-size:21px;
+  font-weight:850;
+  line-height:1.1;
+}
+.home-redesign .home-day-progress-text span {
+  color:var(--text-3);
+  font-size:10px;
+}
+
+/* 今日课程 */
+.home-redesign .home-course-card { display:flex; flex-direction:column; padding:0!important; }
+.home-redesign .home-course-card #today-courses {
+  flex:1 1 auto;
+  min-height:0;
+  padding:0 18px 14px!important;
+  overflow:auto;
+}
+.home-redesign .home-course-card .course-row {
+  display:flex;
+  align-items:center;
+  min-height:58px;
+  padding:9px 4px;
+  border-bottom:1px solid var(--line);
+}
+.home-redesign .home-course-card .course-time {
+  width:84px;
+  flex:0 0 84px;
+  color:var(--text-2);
+  font-size:12px;
+  font-weight:750;
+  line-height:1.5;
+}
+.home-redesign .home-course-card .course-name {
+  color:var(--text);
+  font-size:13px;
+  font-weight:750;
+}
+.home-redesign .home-course-card .course-meta { margin-top:4px; color:var(--text-2); }
+.home-redesign .home-course-card .course-action { margin-left:auto; }
+
+/* 今日事项和快速添加 */
+.home-redesign .home-todo-card { display:flex; flex-direction:column; padding:0!important; }
+.home-redesign .home-todo-card .home-quick-add {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  padding:0 18px 12px;
+}
+.home-redesign .home-quick-input-wrap {
+  display:flex;
+  align-items:center;
+  flex:1 1 180px;
+  min-width:0;
+  height:40px;
+  padding:0 8px 0 11px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--bg);
+}
+.home-redesign .home-quick-input {
+  flex:1;
+  min-width:0;
+  width:100%;
+  height:100%;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-size:12px;
+}
+.home-redesign .home-quick-input::placeholder { color:var(--text-3); }
+.home-redesign .home-quick-time {
+  display:grid;
+  place-items:center;
+  flex:0 0 28px;
+  width:28px;
+  height:28px;
+  border:0;
+  border-radius:8px;
+  background:var(--primary-weak);
+  color:var(--primary);
+}
+.home-redesign .home-quick-save {
+  flex:0 0 auto;
+  height:40px;
+  padding:0 16px;
+  border:0;
+  border-radius:11px;
+  background:var(--primary);
+  color:#fff;
+  font-size:12px;
+  font-weight:750;
+}
+.home-redesign .home-quick-hint {
+  flex:0 0 100%;
+  min-height:0;
+  color:var(--text-2);
+  font-size:10px;
+}
+.home-redesign .home-quick-hint:empty { display:none; }
+.home-redesign .home-todo-card #today-items {
+  flex:1 1 auto;
+  min-height:0;
+  padding:0 18px 16px!important;
+  overflow:auto;
+}
+.home-redesign .home-todo-card .task-row {
+  min-height:56px;
+  padding:9px 4px;
+  border-bottom:1px solid var(--line);
+}
+.home-redesign .home-todo-card .task-title {
+  color:var(--text);
+  font-size:13px;
+  font-weight:650;
+}
+.home-redesign .home-todo-card .task-sub { color:var(--text-2); }
+
+/* 日历：继续使用原有日期点击联动、月/周切换和事项标记 */
+.home-redesign .home-calendar-card {
+  display:flex;
+  flex-direction:column;
+  padding:0!important;
+}
+.home-redesign .home-calendar-card .hc-head { padding:17px 18px 10px; }
+.home-redesign .home-calendar-card .cal-head { flex-wrap:nowrap; gap:5px; }
+.home-redesign .home-calendar-card .cal-title {
+  color:var(--text);
+  font-size:15px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.home-redesign .home-calendar-card .cal-grid { gap:7px 3px; }
+.home-redesign .home-calendar-card .cal-day {
+  margin:7px 18px 0;
+  padding-top:8px;
+  border-top:1px solid var(--line);
+}
+.home-redesign .home-calendar-card .cal-collapse-row { padding:0 18px 10px; }
+
+/* 今日天气与七天预报 */
+.home-redesign .home-weather-card {
+  display:flex;
+  flex-direction:column;
+  padding:0!important;
+  background:var(--card)!important;
+}
+.home-redesign .home-weather-card .home-card-head { padding-bottom:8px; }
+.home-redesign .home-weather-card .wx-body {
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  gap:12px;
+  min-height:0;
+  padding:0 18px 16px;
+  overflow:auto;
+}
+.home-redesign .home-weather-card #wx-brief { width:100%; }
+.home-redesign .home-weather-card .wxb-city {
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:var(--text-2);
+  font-size:12px;
+}
+.home-redesign .home-weather-card .wxb-main {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin:9px 0 5px;
+}
+.home-redesign .home-weather-card .wxb-emoji { font-size:40px; }
+.home-redesign .home-weather-card .wxb-temp {
+  color:var(--text);
+  font-size:46px;
+  font-weight:850;
+  letter-spacing:-2px;
+  line-height:1;
+}
+.home-redesign .home-weather-card .wxb-side { display:flex; flex-direction:column; gap:5px; }
+.home-redesign .home-weather-card .wxb-desc { color:var(--text); font-size:16px; font-weight:750; }
+.home-redesign .home-weather-card .wxb-range { color:var(--text-2); font-size:11px; }
+.home-redesign .home-weather-card .wxb-outfit {
+  margin-top:5px;
+  padding:7px 9px;
+  border-radius:9px;
+  background:var(--primary-weak);
+  color:var(--text-2);
+  font-size:11px;
+  line-height:1.5;
+}
+.home-redesign .home-weather-week {
+  padding-top:10px;
+  border-top:1px dashed var(--line);
+}
+.home-redesign .home-weather-week:empty { display:none; }
+.home-redesign .home-weather-week .wx-days {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px 12px;
+}
+.home-redesign .home-weather-week .wx-day {
+  display:grid;
+  grid-template-columns:34px 20px 31px minmax(12px,1fr) 31px;
+  align-items:center;
+  gap:4px;
+  min-width:0;
+  padding:3px 0;
+  border-bottom:1px dashed var(--line);
+  background:transparent;
+  color:var(--text-2);
+  font-size:10px;
+}
+.home-redesign .home-weather-week .wx-day .e { font-size:14px; }
+.home-redesign .home-weather-week .wx-day .wx-bar {
+  display:block;
+  position:relative;
+  height:4px;
+  border-radius:99px;
+  background:var(--bg-sunken,var(--line));
+}
+.home-redesign .home-weather-week .wx-day .wx-bar i {
+  position:absolute;
+  top:0;
+  height:4px;
+  border-radius:99px;
+  background:var(--primary);
+}
+.home-redesign .home-weather-week .wx-day .hi {
+  color:var(--text);
+  text-align:right;
+}
+
+/* 其余辅助卡片保留在自定义布局管理中 */
+.home-redesign .home-mini-card { height:100%; padding:0!important; }
+.home-redesign .home-mini-head { padding:15px 18px; }
+
+/* 深色主题也完全跟随变量，不叠加旧版固定浅蓝背景 */
+html[data-theme="dark"] .home-redesign .home-welcome-card,
+html[data-theme="dark"] .home-redesign .home-clock-card,
+html[data-theme="dark"] .home-redesign .home-weather-card { background:var(--card)!important; }
+
+@media(max-width:1180px) {
+  .home-redesign .home-layout-intro { margin-bottom:12px; }
+  .home-redesign #home-grid { gap:12px; }
+  .home-redesign .home-clock-card .clock { font-size:clamp(34px,4vw,48px); }
+  .home-redesign .home-day-progress-wrap { flex-basis:86px; width:86px; height:86px; }
+  .home-redesign .home-profile-head .ah-btn { flex-basis:56px; width:56px!important; height:56px!important; }
+}
+@media(max-width:900px) {
+  .home-redesign-app>.main.home-redesign { width:100%; padding:14px 14px 28px; }
+  .home-redesign .home-welcome-card,
+  .home-redesign .home-clock-card { padding:16px!important; }
+  .home-redesign .home-calendar-card .cal-grid { gap:5px 2px; }
+  .home-redesign .home-weather-week .wx-days { grid-template-columns:1fr; }
+}
+@media(max-width:640px) {
+  .home-redesign-app>.main.home-redesign { padding:10px 10px calc(82px + env(safe-area-inset-bottom)); }
+  .home-redesign .home-layout-intro { align-items:flex-start; flex-direction:column; gap:9px; }
+  .home-redesign .home-top-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+  .home-redesign .home-action { width:100%; min-width:0; }
+  .home-redesign #home-grid.hg-mobile { grid-auto-rows:auto!important; gap:11px; }
+  .home-redesign .home-welcome-card { min-height:245px; }
+  .home-redesign .home-profile-actions { top:10px; right:10px; gap:6px; }
+  .home-redesign .home-profile-actions .home-action { flex-basis:32px; width:32px; min-width:32px; height:32px; min-height:32px; }
+  .home-redesign .home-profile-head { padding-right:72px; }
+  .home-redesign .home-clock-card { min-height:210px; }
+  .home-redesign .home-clock-card .clock { font-size:43px; }
+  .home-redesign .home-day-progress-wrap { flex-basis:92px; width:92px; height:92px; }
+  .home-redesign .home-course-card { min-height:235px; }
+  .home-redesign .home-todo-card { min-height:280px; }
+  .home-redesign .home-calendar-card { min-height:410px; }
+  .home-redesign .home-weather-card { min-height:345px; }
+  .home-redesign .home-course-card #today-courses,
+  .home-redesign .home-todo-card #today-items { padding-left:14px!important; padding-right:14px!important; }
+  .home-redesign .home-weather-week .wx-days { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+
+/* 首页桌面端：直接覆盖 #main:has(#home-grid) 的高优先级规则，
+   取消1920px上限与自动居中，让主内容从侧栏右侧一直铺到视口右边。
+   1100px以下侧栏切换为移动布局，不在这里改变其宽度策略。 */
+@media (min-width:1101px) {
+  #main.main:has(#home-grid) {
+    flex:1 1 0;
+    width:0;
+    max-width:none;
+    min-width:0;
+    margin:0;
+    box-sizing:border-box;
+    padding:20px clamp(16px,2.2vw,34px) 36px;
+  }
+}
+/* 日历标题分两层：固定标题「日历」，下方显示 年月。 */
+.home-redesign .home-calendar-card .cal-heading {
+  display:flex; flex:0 0 auto; flex-direction:column; align-items:flex-start;
+  justify-content:center; gap:2px; min-width:0;
+}
+.home-redesign .home-calendar-card .cal-heading-label {
+  color:var(--text); font-size:15px; font-weight:800; line-height:1.25;
+}
+.home-redesign .home-calendar-card .cal-title {
+  color:var(--text-3); font-size:11px; font-weight:650; line-height:1.25;
+}
+/* 选中日期后的24小时安排固定显示窗口，内容在卡片内部独立滚动。 */
+.home-redesign .home-calendar-card .cal-day-content {
+  height:150px;
+  max-height:150px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:var(--line) transparent;
+  touch-action:pan-y;
+}
+.home-redesign .home-calendar-card .cal-day-content::-webkit-scrollbar { width:6px; }
+.home-redesign .home-calendar-card .cal-day-content::-webkit-scrollbar-thumb {
+  border-radius:99px;
+  background:var(--line);
+}
+.home-redesign .home-calendar-card .cal-day-timeline { padding:0 0 10px; }
+.home-redesign .home-calendar-card .cal-day-timeline-head {
+  position:sticky;
+  top:0;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:7px 2px 8px;
+  background:var(--card);
+  color:var(--text);
+  font-size:12px;
+}
+.home-redesign .home-calendar-card .cal-day-timeline-head span { color:var(--text-3); font-size:10px; font-weight:500; }
+.home-redesign .home-calendar-card .cal-day-all-day {
+  display:grid; grid-template-columns:58px minmax(0,1fr); align-items:center;
+  gap:8px; padding:5px 0 8px; border-bottom:1px solid var(--line);
+}
+.home-redesign .home-calendar-card .cal-day-all-day>span { color:var(--text-3); font-size:10px; font-weight:650; }
+.home-redesign .home-calendar-card .cal-day-hours { display:flex; flex-direction:column; }
+.home-redesign .home-calendar-card .cal-day-hour-row {
+  display:grid; grid-template-columns:58px minmax(0,1fr); align-items:stretch;
+  gap:8px; min-height:29px; border-bottom:1px solid color-mix(in srgb,var(--line) 72%,transparent);
+}
+.home-redesign .home-calendar-card .cal-day-hour-label {
+  display:flex; align-items:flex-start; padding-top:7px; color:var(--text-3);
+  font-size:10px; font-variant-numeric:tabular-nums;
+}
+.home-redesign .home-calendar-card .cal-day-hour-events {
+  display:flex; align-items:center; flex-wrap:wrap; gap:5px;
+  min-width:0; padding:3px 0;
+}
+.home-redesign .home-calendar-card .cal-day-hour-empty {
+  display:block; width:100%; height:1px; background:color-mix(in srgb,var(--line) 55%,transparent);
+}
+.home-redesign .home-calendar-card .cal-day-event {
+  display:flex; flex:1 1 150px; flex-direction:column; align-items:flex-start; gap:2px;
+  min-width:0; max-width:100%; padding:5px 9px;
+  border:1px solid color-mix(in srgb,var(--cal-event-color,var(--primary)) 22%,var(--line));
+  border-left:3px solid var(--cal-event-color,var(--primary)); border-radius:7px;
+  background:color-mix(in srgb,var(--cal-event-color,var(--primary)) 9%,var(--card));
+  color:var(--text); text-align:left; cursor:pointer;
+}
+.home-redesign .home-calendar-card .cal-day-event:hover { filter:brightness(.98); }
+.home-redesign .home-calendar-card .cal-day-event-time {
+  color:var(--cal-event-color,var(--primary)); font-size:9px; font-weight:750; font-variant-numeric:tabular-nums;
+}
+.home-redesign .home-calendar-card .cal-day-event b { overflow-wrap:anywhere; font-size:11px; font-weight:750; }
+.home-redesign .home-calendar-card .cal-day-event small { color:var(--text-2); font-size:9px; line-height:1.4; }
+.home-redesign .home-calendar-card .cal-day-all-day .cal-day-event { flex:1 1 180px; }
+.home-redesign .home-calendar-card .cal-grid { gap:5px 2px; }
+.home-redesign .home-calendar-card .cal-cell { min-height:23px; }
+@media(max-width:860px) {
+  .home-redesign .home-calendar-card .cal-day-content { height:142px; max-height:142px; }
+}
+ 
+/* 首页个人信息与日历标题：统一使用主题强调色图标。 */
+.home-redesign .home-welcome-card {
+  justify-content:flex-start;
+  gap:8px;
+  padding:14px 18px 12px!important;
+}
+.home-redesign .home-profile-heading {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:22px;
+  margin:0 0 2px;
+  color:var(--text);
+  font-size:15px;
+  font-weight:800;
+  line-height:1.3;
+}
+.home-redesign .home-profile-heading svg {
+  flex:0 0 auto;
+  color:var(--primary);
+}
+.home-redesign .home-profile-head { gap:12px; }
+.home-redesign .home-profile-head .ah-btn {
+  flex:0 0 60px;
+  width:60px!important;
+  height:60px!important;
+}
+.home-redesign .home-quote { margin-top:auto; padding-top:8px; }
+.home-redesign .home-quote-head { margin-bottom:4px; }
+.home-redesign .home-quote .quote-zh { margin-top:3px; }
+
+.home-redesign .home-calendar-card .cal-heading-main {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.home-redesign .home-calendar-card .cal-heading-main>svg {
+  flex:0 0 auto;
+  color:var(--primary);
+}
+.home-redesign .home-calendar-card .cal-day[hidden] { display:none!important; }
+.home-redesign .home-calendar-card .cal-day {
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  min-height:0;
+  margin:8px 18px 0;
+  padding-top:9px;
+  border-top:1px solid var(--line);
+}
+.home-redesign .home-calendar-card .cal-day-content {
+  flex:1 1 auto;
+  min-height:360px;
+  height:auto;
+  max-height:none;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:var(--line) transparent;
+  touch-action:pan-y;
+}
+.home-redesign .home-calendar-card .cal-day-content::-webkit-scrollbar { width:6px; }
+.home-redesign .home-calendar-card .cal-day-content::-webkit-scrollbar-thumb {
+  border-radius:99px;
+  background:var(--line);
+}
+.home-redesign .home-calendar-card.is-day-open .cal-day { min-height:0; }
+@media(max-width:860px) {
+  .home-redesign .home-calendar-card .cal-day-content { min-height:320px; }
+  .home-redesign .home-calendar-card.is-day-open {
+    min-height:690px!important;
+    height:auto!important;
+  }
+  .home-redesign #home-grid.hg-mobile > .hg-item[data-hcard="calendar"].is-day-open { min-height:690px; }
+}
+@media(max-width:640px) {
+  .home-redesign .home-calendar-card .cal-day { margin-left:14px; margin-right:14px; }
+  .home-redesign .home-calendar-card .cal-day-content { min-height:320px; }
+}
+
+/* 2026-11-07：首页时间、天气与日历细节修复 */
+.home-redesign .home-clock-card { position:relative; }
+.home-redesign .home-clock-main {
+  position:relative;
+  display:block;
+  flex:1 1 auto;
+  min-height:116px;
+  padding-bottom:25px;
+}
+.home-redesign .home-clock-time-wrap {
+  position:absolute;
+  left:50%;
+  top:43%;
+  width:max-content;
+  max-width:calc(100% - 124px);
+  min-width:0;
+  transform:translate(-50%,-50%);
+  text-align:center;
+}
+.home-redesign .home-clock-card .clock { font-size:clamp(42px,3.2vw,58px); }
+.home-redesign .home-clock-foot {
+  position:absolute;
+  left:0;
+  bottom:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:0;
+  white-space:nowrap;
+  font-size:13px;
+}
+.home-redesign .home-clock-foot strong { font-size:18px; }
+.home-redesign .home-day-progress-wrap {
+  position:absolute;
+  right:0;
+  top:43%;
+  width:92px;
+  height:92px;
+  transform:translateY(-50%);
+}
+.home-redesign .home-weather-card .wx-body { overflow:hidden; }
+.home-redesign .home-weather-card .home-weather-week { display:none!important; }
+.home-redesign .home-weather-card .home-card-head { align-items:center; }
+.home-redesign .home-weather-card #wx-more { margin-left:auto; }
+.home-redesign .hg-item[data-hcard="calendar"] { transform:translateY(8px); }
+@media(max-width:640px) {
+  .home-redesign .home-clock-main { min-height:106px; padding-bottom:23px; }
+  .home-redesign .home-clock-time-wrap { max-width:calc(100% - 88px); }
+  .home-redesign .home-clock-card .clock { font-size:clamp(32px,8vw,42px); letter-spacing:-1px; }
+  .home-redesign .home-day-progress-wrap { width:68px; height:68px; }
+  .home-redesign .home-clock-foot { gap:6px; font-size:11px; }
+  .home-redesign .home-clock-foot strong { font-size:14px; }
+}
+
+/* 天气卡操作入口：城市/定位在右上角，详细天气固定在右下角 */
+.home-redesign .home-weather-card .home-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.home-redesign .home-weather-card #wx-city-pick { margin-left:auto; flex:0 0 auto; }
+.home-redesign .home-weather-card .home-weather-footer {
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  padding:0 18px 14px;
+}
+.home-redesign .home-weather-card #wx-more { margin:0; }
+
+
+/* 首页截图微调：日期分类、个人资料字号与日历底部图例 */
+.home-redesign .home-clock-top .clock-date {
+  flex-wrap:nowrap;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+  white-space:nowrap;
+}
+.home-redesign .home-clock-top .clock-date > span {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  box-sizing:border-box;
+  min-height:26px;
+  padding:4px 8px;
+  border:1px solid transparent;
+  border-radius:8px;
+  font-size:11px;
+  font-weight:750;
+  line-height:1;
+  white-space:nowrap;
+}
+.home-redesign .home-clock-top .clock-date .home-date-full {
+  background:#edf4ff;
+  border-color:#dbe8ff;
+  color:#2563eb;
+}
+.home-redesign .home-clock-top .clock-date .wd-badge {
+  background:#fff2e8;
+  border-color:#ffe1c9;
+  color:#e87924;
+}
+.home-redesign .home-clock-top .clock-date .home-week-badge {
+  background:#f3edff;
+  border-color:#e5d9ff;
+  color:#7c3aed;
+}
+.home-redesign .home-profile-meta,
+.home-redesign .home-profile-role {
+  margin-top:4px;
+  color:var(--text-2);
+  font-size:14px;
+  font-weight:650;
+  line-height:1.45;
+}
+.home-redesign .home-calendar-card .cal-legend {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px 14px;
+  width:100%;
+  box-sizing:border-box;
+  margin-top:auto;
+  padding:12px 18px 16px;
+}
+.home-redesign .home-calendar-card .cal-legend span {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  white-space:nowrap;
+}
+.home-redesign .home-calendar-card .cal-legend i {
+  flex:0 0 6px;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+}
+html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-date-full {
+  background:rgba(37,99,235,.18);
+  border-color:rgba(96,165,250,.34);
+  color:#93c5fd;
+}
+html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .wd-badge {
+  background:rgba(234,121,36,.18);
+  border-color:rgba(251,146,60,.34);
+  color:#fdba74;
+}
+html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-week-badge {
+  background:rgba(124,58,237,.2);
+  border-color:rgba(167,139,250,.34);
+  color:#c4b5fd;
+}
+@media(max-width:640px) {
+  .home-redesign .home-clock-top .clock-date { gap:3px; }
+  .home-redesign .home-clock-top .clock-date > span {
+    min-height:23px;
+    padding:3px 5px;
+    font-size:9px;
+  }
+  .home-redesign .home-profile-meta,
+  .home-redesign .home-profile-role { font-size:12px; }
+  .home-redesign .home-calendar-card .cal-legend { gap:7px 10px; padding:10px 14px 13px; }
+}
+
+
+/* 首页个人名片：左侧问候完整显示，右侧资料按确认稿分两层排布 */
+.home-redesign .home-profile-head {
+  position:relative;
+  display:grid;
+  grid-template-columns:60px minmax(0,1fr);
+  align-items:start;
+  gap:12px;
+  min-width:0;
+  min-height:96px;
+  padding-right:0;
+}
+.home-redesign .home-profile-info {
+  width:min(100%,225px);
+  min-width:0;
+  max-width:225px;
+}
+.home-redesign .home-profile-info .clk-greet {
+  display:block;
+  max-width:none;
+  overflow:visible;
+  white-space:nowrap;
+  text-overflow:clip;
+}
+.home-redesign .home-profile-info .clk-greet-sub {
+  display:block;
+  max-width:none;
+  overflow:visible;
+  white-space:normal;
+  text-overflow:clip;
+  overflow-wrap:normal;
+}
+.home-redesign .home-profile-details {
+  position:absolute;
+  right:0;
+  bottom:10px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-end;
+  gap:8px;
+  width:46%;
+  max-width:700px;
+  min-width:0;
+  color:var(--text-2);
+  font-size:12px;
+  font-weight:650;
+  line-height:1.45;
+  text-align:center;
+}
+.home-redesign .home-profile-details-school {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:nowrap;
+  gap:10px;
+  min-width:0;
+  white-space:nowrap;
+}
+.home-redesign .home-profile-detail-item {
+  min-width:0;
+  white-space:nowrap;
+  overflow-wrap:normal;
+}
+.home-redesign .home-profile-separator {
+  flex:0 0 auto;
+  color:var(--text-3);
+  font-weight:500;
+}
+.home-redesign .home-profile-details-role {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.home-redesign .home-profile-role-line {
+  display:block;
+  width:100%;
+  height:1px;
+  background:color-mix(in srgb,var(--primary) 30%,var(--line));
+}
+.home-redesign .home-profile-role-pill {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:5px 14px;
+  border:1px solid color-mix(in srgb,var(--primary) 10%,var(--line));
+  border-radius:999px;
+  background:var(--primary-weak);
+  color:var(--text);
+  font-size:13px;
+  font-weight:750;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.home-redesign .home-quote {
+  position:relative;
+  padding-bottom:30px;
+}
+.home-redesign .home-quote .quote-en {
+  display:block;
+  padding-right:0;
+}
+.home-redesign .home-quote .speak-btn {
+  position:absolute;
+  right:0;
+  bottom:0;
+  margin:0;
+}
+.home-redesign .home-quote .quote-author {
+  padding-right:36px;
+}
+.home-redesign .home-calendar-card .cal-title {
+  color:var(--text);
+  font-size:18px;
+  font-weight:850;
+  line-height:1.35;
+}
+.home-redesign .home-calendar-card .cal-grid {
+  display:grid;
+  flex:1 1 auto;
+  min-height:0;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  grid-auto-rows:minmax(34px,1fr);
+  align-content:stretch;
+  gap:5px 3px;
+}
+.home-redesign .home-calendar-card .cal-cell {
+  height:100%;
+  min-height:0;
+  aspect-ratio:auto;
+  border-radius:10px;
+}
+.home-redesign .home-calendar-card.is-day-open .cal-grid {
+  flex:0 0 auto;
+  grid-auto-rows:minmax(40px,auto);
+}
+.home-redesign .home-calendar-card.is-day-open .cal-day {
+  flex:1 1 auto;
+}
+@media(max-width:900px) {
+  .home-redesign .home-profile-head {
+    grid-template-columns:56px minmax(0,1fr);
+    align-items:start;
+    min-height:0;
+    padding-right:0;
+  }
+  .home-redesign .home-profile-head .ah-btn {
+    width:56px!important;
+    height:56px!important;
+    flex-basis:56px;
+  }
+  .home-redesign .home-profile-info {
+    width:100%;
+    max-width:none;
+  }
+  .home-redesign .home-profile-details {
+    position:static;
+    grid-column:1 / -1;
+    width:100%;
+    max-width:none;
+    margin-top:14px;
+    font-size:12px;
+  }
+  .home-redesign .home-calendar-card .cal-grid {
+    grid-auto-rows:minmax(32px,1fr);
+  }
+}
+@media(max-width:640px) {
+  .home-redesign .home-profile-head {
+    grid-template-columns:48px minmax(0,1fr);
+    gap:9px;
+    min-height:0;
+  }
+  .home-redesign .home-profile-head .ah-btn {
+    width:48px!important;
+    height:48px!important;
+    flex-basis:48px;
+  }
+  .home-redesign .home-profile-info {
+    width:100%;
+    max-width:none;
+  }
+  .home-redesign .home-profile-details {
+    grid-column:1 / -1;
+    width:100%;
+    margin-top:12px;
+    padding-left:0;
+    font-size:11px;
+  }
+  .home-redesign .home-profile-details-school {
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .home-redesign .home-profile-role-pill {
+    padding:4px 12px;
+    font-size:12px;
+  }
+  .home-redesign .home-calendar-card .cal-title {
+    font-size:16px;
+  }
+  .home-redesign .home-calendar-card .cal-grid {
+    grid-auto-rows:minmax(30px,1fr);
+    gap:4px 2px;
+  }
+}
+
+
+/* 首页桌面端整屏平铺：搜索栏保留自然高度，六张主卡片填满剩余视口 */
+@media (min-width: 1180px) {
+  .app:has(#home-grid) {
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .main:has(#home-grid) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    min-height: 0;
+    max-height: 100vh;
+    overflow: hidden;
+    padding: clamp(12px, 1.5vh, 20px) clamp(14px, 1.6vw, 28px);
+  }
+  .main:has(#home-grid) .home-topbar {
+    flex: 0 0 auto;
+    min-height: 54px;
+    margin-bottom: clamp(8px, 1.2vh, 14px);
+  }
+  .main:has(#home-grid) .home-layout-toolbar:not([hidden]) {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+  }
+  .main:has(#home-grid) #home-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    align-content: stretch;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: clamp(10px, 1.3vh, 16px);
+  }
+  .main:has(#home-grid) #home-grid.hg-fill-viewport {
+    overflow: visible;
+  }
+  .main:has(#home-grid) #home-grid > .hg-item {
+    min-height: 0;
+  }
+  .main:has(#home-grid) #home-grid > .hg-item > .card {
+    height: 100%;
+    min-height: 0;
+  }
+  /* 日历月份格子跟随卡片高度伸展，日期和标记仍在原有网格中 */
+  .main:has(#home-grid) .home-calendar-card {
+    min-height: 0;
+  }
+  .main:has(#home-grid) .home-calendar-card .cal-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-auto-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+  .main:has(#home-grid) .home-calendar-card .cal-cell {
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+  /* 点击日期展开安排时，恢复自然页面滚动，避免详情被视口裁切 */
+  .main:has(#home-grid):has(#home-grid .is-day-open) {
+    overflow-y: auto;
+  }
+  .main:has(#home-grid) #home-grid.hg-expanded-layout {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+}
+
+/* 搜索按钮图标加大并加粗，保持原有蓝色按钮和搜索行为 */
+.main:has(#home-grid) .teacher-toolbar .sb-go {
+  width: 48px;
+  height: 44px;
+  border-radius: 13px;
+}
+.main:has(#home-grid) .teacher-toolbar .sb-go svg {
+  width: 23px;
+  height: 23px;
+  stroke-width: 2.9;
+}
+
+@media (max-width: 1179px) {
+  .app:has(#home-grid) {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .main:has(#home-grid) {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+  .main:has(#home-grid) #home-grid {
+    flex: initial;
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+  }
+}
+/* 首页桌面端整屏平铺：搜索栏保留自然高度，主卡片填满剩余视口 */
+@media (min-width: 1180px) {
+  .app:has(#home-grid) {
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .main:has(#home-grid) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    min-height: 0;
+    max-height: 100vh;
+    overflow: hidden;
+    padding: clamp(12px, 1.5vh, 20px) clamp(14px, 1.6vw, 28px);
+  }
+  .main:has(#home-grid) .home-topbar {
+    flex: 0 0 auto;
+    min-height: 54px;
+    margin-bottom: clamp(8px, 1.2vh, 14px);
+  }
+  .main:has(#home-grid) .home-layout-toolbar:not([hidden]) {
+    flex: 0 0 auto;
+    margin-bottom: 10px;
+  }
+  .main:has(#home-grid) #home-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    align-content: stretch;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .main:has(#home-grid) #home-grid.hg-fill-viewport {
+    overflow: visible;
+  }
+  .main:has(#home-grid) #home-grid > .hg-item {
+    min-height: 0;
+  }
+  .main:has(#home-grid) #home-grid > .hg-item > .card {
+    height: 100%;
+    min-height: 0;
+  }
+  /* 日历月份格子跟随卡片高度伸展 */
+  .main:has(#home-grid) .home-calendar-card {
+    min-height: 0;
+  }
+  .main:has(#home-grid) .home-calendar-card .cal-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-auto-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+  .main:has(#home-grid) .home-calendar-card .cal-cell {
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+}
+
+/* 搜索按钮图标加大并加粗，保留原有蓝色按钮和搜索行为 */
+.main:has(#home-grid) .teacher-toolbar .sb-go {
+  width: 48px;
+  height: 44px;
+  border-radius: 13px;
+}
+.main:has(#home-grid) .teacher-toolbar .sb-go svg {
+  width: 23px;
+  height: 23px;
+  stroke-width: 2.9;
+}
+
+@media (max-width: 1179px) {
+  .app:has(#home-grid) {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .main:has(#home-grid) {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+  .main:has(#home-grid) #home-grid {
+    flex: initial;
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+  }
+}
+
+
+/* 首页天气城市选择：简洁白色居中弹窗，蓝色强调，兼容深色与移动端 */
+.sheet.weather-city-sheet {
+  width: min(448px, calc(100vw - 32px));
+  max-width: 448px;
+  border: 1px solid rgba(220, 230, 244, .9);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(20, 42, 78, .2);
+}
+.sheet.weather-city-sheet .sheet-head {
+  min-height: 58px;
+  padding: 17px 18px 13px;
+  border-bottom: 1px solid #e8eef7;
+}
+.sheet.weather-city-sheet .sheet-title { color:#172d4d; font-size:15px; font-weight:750; }
+.sheet.weather-city-sheet .sheet-body { padding: 8px 18px 18px; }
+.weather-city-content { display:flex; flex-direction:column; gap:0; }
+.weather-city-current {
+  display:flex; align-items:center; gap:11px; padding:13px 0 15px;
+  border-bottom:1px solid #edf1f7;
+}
+.weather-city-current-icon,.weather-city-result-icon {
+  display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px;
+  border-radius:11px; color:#2563eb; background:#edf4ff;
+}
+.weather-city-current-copy { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.weather-city-current-copy span { color:#8a9bb3; font-size:11px; }
+.weather-city-current-copy strong {
+  overflow:hidden; color:#1d3557; font-size:13px; font-weight:700;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.weather-city-search-wrap { padding-top:14px; }
+.weather-city-input {
+  width:100%; height:42px; border:1px solid #dce4ef; border-radius:11px;
+  background:#fff; color:#203653; font-size:13px; padding:0 12px;
+  outline:none; transition:border-color .16s,box-shadow .16s;
+}
+.weather-city-input:focus { border-color:#4b83ee; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+.weather-city-tip { min-height:31px; padding:8px 1px 5px; color:#8b9db5; font-size:11.5px; line-height:1.45; }
+.weather-city-tip.is-warn { color:#c47b20; }
+.weather-city-results { display:grid; gap:4px; max-height:220px; overflow:auto; padding:2px 0 9px; }
+.weather-city-results[hidden] { display:none; }
+.weather-city-result {
+  display:flex; align-items:center; gap:10px; width:100%; padding:9px 8px;
+  border:1px solid transparent; border-radius:11px; background:#fff; text-align:left;
+}
+.weather-city-result:hover,.weather-city-result:focus-visible { border-color:#dce8ff; background:#f5f8ff; outline:none; }
+.weather-city-result-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:3px; }
+.weather-city-result-copy strong { color:#243c5d; font-size:12.5px; font-weight:700; }
+.weather-city-result-copy small { color:#8b9bb0; font-size:10.5px; }
+.weather-city-result-arrow { color:#9aacc3; }
+.weather-city-section-label { margin:10px 0 8px; color:#667d9c; font-size:11.5px; font-weight:700; }
+.weather-city-recent { display:grid; gap:7px; }
+.weather-city-chip {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; padding:9px 11px; border:1px solid #e7edf5; border-radius:10px;
+  background:#fbfcfe; text-align:left;
+}
+.weather-city-chip strong { color:#344b6a; font-size:12px; }
+.weather-city-chip small { overflow:hidden; color:#8b9bb0; font-size:10.5px; text-overflow:ellipsis; white-space:nowrap; }
+.weather-city-chip.on { border-color:#cbdcff; background:#f3f7ff; }
+.weather-city-locate-row {
+  display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:16px;
+  padding-top:14px; border-top:1px solid #edf1f7;
+}
+.weather-city-locate {
+  display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:0 11px;
+  border:0; border-radius:9px; background:#edf4ff; color:#2563eb;
+  font-size:12px; font-weight:700;
+}
+.weather-city-locate:disabled { opacity:.55; cursor:wait; }
+.weather-city-locate-hint { color:#91a1b7; font-size:10.5px; }
+.home-redesign .home-weather-card .wxb-city { align-items:center; gap:9px; }
+.home-redesign .home-weather-card .wxb-location-pin { display:grid; place-items:center; color:#3478e8; }
+.home-redesign .home-weather-card .wxb-location-copy { display:flex; min-width:0; flex-direction:column; gap:2px; }
+.home-redesign .home-weather-card .wxb-location-name {
+  overflow:hidden; color:#314d70; font-size:12px; font-weight:750;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.home-redesign .home-weather-card .wxb-location-source { color:#94a5bb; font-size:10px; }
+.home-redesign .home-weather-card .wxb-city .icon-btn { flex:0 0 auto; }
+html[data-theme="dark"] .sheet.weather-city-sheet { border-color:#334861; background:#1b2a3e; }
+html[data-theme="dark"] .sheet.weather-city-sheet .sheet-head { border-color:#334861; }
+html[data-theme="dark"] .sheet.weather-city-sheet .sheet-title,
+html[data-theme="dark"] .weather-city-current-copy strong,
+html[data-theme="dark"] .weather-city-result-copy strong,
+html[data-theme="dark"] .weather-city-chip strong { color:#e5eefb; }
+html[data-theme="dark"] .weather-city-input,
+html[data-theme="dark"] .weather-city-result,
+html[data-theme="dark"] .weather-city-chip { border-color:#344a64; background:#20334b; color:#e5eefb; }
+html[data-theme="dark"] .weather-city-locate-row { border-color:#344a64; }
+html[data-theme="dark"] .home-redesign .home-weather-card .wxb-location-name { color:#dbe8fa; }
+@media(max-width:640px) {
+  .sheet-mask:has(> .sheet.weather-city-sheet) { align-items:center; padding:12px; }
+  .sheet.weather-city-sheet { width:calc(100vw - 24px); max-width:448px; border-radius:17px; }
+  .sheet.weather-city-sheet .sheet-head { padding:15px 16px 11px; }
+  .sheet.weather-city-sheet .sheet-body { padding:7px 16px 16px; }
+  .weather-city-locate-row { align-items:flex-start; flex-direction:column; gap:7px; }
+}
+
+
+/* 首页每日一句：喇叭按钮微调上移，不改变按钮尺寸和卡片布局 */
+.home-redesign .home-quote .speak-btn {
+  bottom:6px;
+}

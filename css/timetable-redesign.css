@@ -1,0 +1,870 @@
+/* ==========================================================================
+   我的课表 · 按 PRD 与上传原型实现
+   仅作用于 .tt-workspace，沿用工作台主题变量。
+   ========================================================================== */
+.tt-workspace{width:100%;min-width:0;padding:2px 0 0;color:var(--text)}
+.tt-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 12px}
+.tt-workspace-title-wrap{display:flex;align-items:center;min-width:0}
+.tt-workspace-title{display:flex;align-items:center;gap:9px;margin:0;color:var(--text);font-size:18px;line-height:1.35;font-weight:750}
+.tt-workspace-title:before{content:"";width:3px;height:18px;flex:0 0 3px;border-radius:3px;background:var(--primary)}
+.tt-toolbar-actions{display:flex;align-items:center;justify-content:flex-end;flex:0 0 auto;gap:8px;flex-wrap:wrap}
+.tt-toolbar-actions>.btn{min-height:34px;padding:0 12px;border-radius:8px;font-size:12.5px}
+.tt-toolbar-actions>.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.tt-reminder{display:flex;align-items:center;gap:20px;min-height:108px;padding:18px 22px;border-radius:10px;color:#fff;background:linear-gradient(135deg,#2563EB 0%,#7C3AED 100%)}
+.tt-reminder.free{background:linear-gradient(135deg,#059669 0%,#10B981 100%)}
+.tt-reminder.class{background:linear-gradient(135deg,#D97706 0%,#F59E0B 100%)}
+.tt-reminder-date{flex:0 0 auto;min-width:112px;padding-right:20px;border-right:1px solid rgba(255,255,255,.25)}
+.tt-reminder-weekday{font-size:22px;font-weight:750;line-height:1.3}
+.tt-reminder-date-text{font-size:13px;opacity:.92}
+.tt-reminder-status{flex:1;min-width:0}
+.tt-reminder-title{font-size:16px;font-weight:700;margin-bottom:4px}
+.tt-reminder-desc{font-size:12.5px;line-height:1.65;opacity:.93}
+.tt-reminder-countdown{text-align:right;flex:0 0 auto}
+.tt-reminder-number{font-size:clamp(23px,3vw,32px);font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tt-reminder-label{font-size:11px;opacity:.9;margin-top:5px}
+.tt-query-bar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:15px 16px;border:1px solid var(--line);border-radius:9px;background:var(--card)}
+.tt-query-item{display:flex;flex-direction:column;gap:6px;color:var(--text-2);font-size:12px}
+.tt-query-item select{min-width:180px;min-height:36px;padding:7px 11px;border:1px solid var(--line-2);border-radius:7px;background:var(--card);color:var(--text);font:inherit}
+.tt-current-tag{margin:-4px 0 0;color:var(--text-3);font-size:13px}
+.tt-current-tag b{color:var(--text);font-weight:700}
+.tt-grid-scroll{width:100%;max-width:100%;overflow:auto;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:9px;background:var(--card);scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.tt-grid-table{width:100%;min-width:1180px;table-layout:fixed;border:0;border-collapse:separate;border-spacing:0;background:var(--card);color:var(--text);font-size:12px}
+.tt-grid-table .tt-col-period{width:130px}.tt-grid-table .tt-col-day{width:auto}
+.tt-grid-table thead th{height:43px;padding:10px 7px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-sunken);color:var(--text-2);font-size:13px;font-weight:700;text-align:center;white-space:nowrap}
+.tt-grid-table thead th:last-child{border-right:0}
+.tt-grid-table thead th.is-today{background:var(--primary);color:#fff;border-bottom-color:var(--primary)}
+.tt-grid-table tbody td{height:92px;padding:7px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--card);text-align:center;vertical-align:middle}
+.tt-grid-table tbody tr:last-child td{border-bottom:0}.tt-grid-table tbody td:last-child{border-right:0}
+.tt-grid-table .tt-period-cell{background:var(--bg-sunken);color:var(--text-2);white-space:nowrap}
+.tt-period-cell strong,.tt-period-cell span{display:block}.tt-period-cell strong{font-size:12px;font-weight:750}.tt-period-cell span{margin-top:4px;font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--text-3)}
+.tt-slot{position:relative;cursor:pointer;transition:background-color .14s ease,box-shadow .14s ease}
+.tt-slot.is-empty:hover{background:var(--primary-weak)}
+.tt-empty-add{display:inline-grid;place-items:center;width:25px;height:25px;border:0;border-radius:7px;background:transparent;color:var(--text-3);font-size:17px;opacity:.55;cursor:pointer}
+.tt-slot.is-empty:hover .tt-empty-add{background:var(--card);color:var(--primary);opacity:1}
+.tt-course-block{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-width:0;min-height:68px;margin:2px 0;padding:8px 9px;overflow:hidden;border-left:3px solid var(--primary);border-radius:7px;background:var(--primary-weak);color:var(--primary-deep);text-align:left;cursor:grab;user-select:none;transition:box-shadow .14s ease,transform .14s ease}
+.tt-course-block:active{cursor:grabbing}
+.tt-course-block.tt-grade-1{border-left-color:#2563EB;background:#EEF4FF;color:#1D4ED8}
+.tt-course-block.tt-grade-2{border-left-color:#7C3AED;background:#F3EEFF;color:#6D28D9}
+.tt-course-block.tt-grade-3{border-left-color:#DC2626;background:#FEECEC;color:#B91C1C}
+.tt-course-block.tt-grade-all{border-left-color:#059669;background:#E8F8F1;color:#047857}
+.tt-course-block.now{box-shadow:0 0 0 2px #D97706}
+.tt-course-subject{display:block;max-width:100%;overflow:hidden;font-size:12px;font-weight:800;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.tt-grade-tag{display:inline-block;padding:1px 6px;border-radius:999px;background:#2563EB;color:#fff;font-size:9.5px;line-height:1.5}
+.tt-grade-tag.tt-grade-2{background:#7C3AED}.tt-grade-tag.tt-grade-3{background:#DC2626}.tt-grade-tag.tt-grade-all{background:#059669}
+.tt-course-class,.tt-course-time{display:block;max-width:100%;overflow:hidden;color:inherit;font-size:10px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap;opacity:.88}
+.tt-course-actions{position:absolute;z-index:2;top:4px;right:4px;display:none;gap:3px}
+.tt-course-block:hover .tt-course-actions,.tt-course-block:focus-within .tt-course-actions{display:flex}
+.tt-course-action{display:grid;place-items:center;width:21px;height:21px;padding:0;border:1px solid rgba(255,255,255,.75);border-radius:5px;background:rgba(255,255,255,.94);color:#344054;cursor:pointer}
+.tt-course-action:hover{background:var(--primary);color:#fff}.tt-course-action.danger:hover{background:#DC2626}
+.tt-course-lunch{border-left-color:#D97706!important;background:#FFF4E5!important;color:#92400E!important}
+.tt-course-block.tt-dragging{opacity:.4}
+.tt-slot.tt-drop-target{outline:3px solid var(--primary);outline-offset:-3px;background:var(--primary-weak)}
+.tt-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-height:220px;padding:28px 16px;border:1px dashed var(--line-2);border-radius:10px;background:var(--card);color:var(--text-2);text-align:center}
+.tt-state b{font-size:15px;color:var(--text)}
+.tt-state span{font-size:12px;color:var(--text-3)}
+.tt-empty-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--primary-weak);color:var(--primary)}
+.tt-state-error{color:var(--red)}
+.tt-spinner{width:24px;height:24px;border:3px solid var(--line);border-top-color:var(--primary);border-radius:50%;animation:tt-spin .8s linear infinite}
+@keyframes tt-spin{to{transform:rotate(360deg)}}
+.tt-summary-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-sunken);color:var(--text-3);font-size:11px;line-height:1.5}
+.tt-time-wrap{position:relative;display:flex;gap:6px}.tt-time-wrap>.input{flex:1;min-width:0}
+.tt-time-pick{display:grid;place-items:center;width:38px;min-width:38px;border:1px solid var(--line-2);border-radius:7px;background:var(--card);color:var(--text-2)}
+.tt-native-time{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.tt-export-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0 4px}
+.tt-export-option{display:flex;flex-direction:column;align-items:center;gap:7px;min-height:120px;padding:17px 10px;border:1px dashed var(--line-2);border-radius:9px;background:var(--card);color:var(--text);cursor:pointer}
+.tt-export-option:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-weak)}
+.tt-export-option>span{font-size:25px}.tt-export-option b{font-size:13px}.tt-export-option small{font-size:10px;color:var(--text-3)}
+.tt-import-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.tt-import-check{display:flex;align-items:center;gap:8px;margin:8px 0;color:var(--text-2);font-size:12px}
+.tt-file-drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:90px;margin:14px 0;padding:15px;border:1px dashed var(--line-2);border-radius:9px;background:var(--bg-sunken);color:var(--text-2);cursor:pointer}
+.tt-file-drop input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.tt-file-drop b{font-size:13px;color:var(--text)}.tt-file-drop span,.tt-import-status{font-size:11px;color:var(--text-3)}
+.tt-import-status{padding:8px 10px;border-radius:7px;background:var(--bg-sunken)}
+.tt-import-summary{margin:10px 0;padding:9px 10px;border-radius:7px;background:var(--primary-weak);color:var(--text-2);font-size:12px}
+.tt-import-table-wrap{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.tt-import-table{width:100%;min-width:760px;border-collapse:collapse;font-size:11px}
+.tt-import-table th,.tt-import-table td{padding:6px;border-bottom:1px solid var(--line);text-align:left}
+.tt-import-table th{position:sticky;top:0;background:var(--bg-sunken);color:var(--text-2)}
+.tt-import-table input,.tt-import-table select{width:100%;min-width:65px;padding:5px;border:1px solid var(--line-2);border-radius:5px;background:var(--card);color:var(--text);font:inherit}
+.tt-import-table tr.needs-check{background:#FFF7ED}
+.tt-import-empty{padding:15px;color:var(--text-3);font-size:12px}
+@media(max-width:900px){.tt-workspace-head{align-items:flex-start}.tt-grid-table{min-width:1100px}.tt-summary-bar{align-items:flex-start;flex-direction:column;gap:4px}}
+@media(max-width:640px){.tt-workspace-head{flex-direction:column;gap:9px}.tt-toolbar-actions{width:100%;justify-content:flex-start}.tt-reminder{align-items:flex-start;gap:10px;padding:14px;flex-wrap:wrap}.tt-reminder-date{min-width:84px;padding-right:10px}.tt-reminder-weekday{font-size:18px}.tt-reminder-countdown{margin-left:auto}.tt-reminder-number{font-size:22px}.tt-query-item{flex:1;min-width:130px}.tt-query-item select{min-width:0;width:100%}.tt-import-settings{grid-template-columns:1fr}.tt-export-options{gap:6px}.tt-export-option{padding:12px 5px}}
+
+.tt-period-editor-row{display:grid;grid-template-columns:minmax(130px,1.4fr) minmax(90px,1fr) minmax(90px,1fr) repeat(3,auto);align-items:center;gap:7px;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg-sunken)}
+.tt-period-editor-row .input{min-width:0;width:100%}
+@media(max-width:720px){.tt-period-editor-row{grid-template-columns:1fr 1fr;}.tt-period-editor-row input:first-child{grid-column:1/-1}}
+
+.tt-grid-title{padding:12px 10px;text-align:center;border:1px solid var(--line);border-bottom:0;border-radius:9px 9px 0 0;background:var(--card);color:#7b4aa6;font-size:22px;font-weight:600;letter-spacing:2px}
+.tt-grid-title+.tt-grid-scroll{border-top-left-radius:0;border-top-right-radius:0}
+.tt-lunch-row .tt-period-cell{font-weight:700}
+.tt-lunch-cell{height:48px!important;background:var(--bg-sunken)!important;text-align:center!important;color:var(--primary)!important;font-weight:700;font-size:13px;letter-spacing:1px}
+
+.tt-grid-table .tt-col-period{width:58px}
+.tt-grid-table .tt-col-time{width:128px}
+.tt-grid-table .tt-time-cell{background:var(--card);color:var(--text-2);text-align:center;white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}
+.tt-grid-table .tt-time-cell span{display:block}
+
+
+/* ==========================================================================
+   我的课表 · 紫色教师课表驾驶舱（2026-11）
+   本区仅覆盖 .tt-workspace，不影响工作台其他模块；课程数据与交互逻辑保持原样。
+   ========================================================================== */
+.tt-workspace{
+  --tt-accent:#7042e8;
+  --tt-accent-deep:#4c239b;
+  --tt-accent-soft:#f2edff;
+  --tt-accent-line:#e5dcfb;
+  --tt-ink:#292044;
+  --tt-muted:#766d91;
+  width:100%;
+  min-width:0;
+  color:var(--text);
+}
+.tt-workspace-head{align-items:center;gap:14px;margin:0 0 14px}
+.tt-workspace-title{gap:11px;font-size:21px;letter-spacing:.1px;font-weight:780}
+.tt-workspace-title:before{width:4px;height:22px;flex-basis:4px;border-radius:5px;background:linear-gradient(180deg,#8c68f3,#5c32d3)}
+.tt-toolbar-actions{gap:8px;flex-wrap:wrap}
+.tt-toolbar-actions>.btn{
+  min-height:38px;
+  padding:0 13px;
+  border:1px solid #e6e0f2;
+  border-radius:10px;
+  background:#fff;
+  color:#554b70;
+  box-shadow:0 2px 7px rgba(64,42,116,.045);
+  font-size:12px;
+  font-weight:650;
+  white-space:nowrap;
+}
+.tt-toolbar-actions>.btn:hover{border-color:#cdbdf8;background:#faf8ff;color:#5b2fc9}
+.tt-toolbar-actions>.btn.primary{
+  border-color:#6840e5;
+  background:linear-gradient(135deg,#8058f0,#5c32d4);
+  color:#fff;
+  box-shadow:0 5px 14px rgba(103,64,221,.2);
+}
+.tt-toolbar-actions>.btn.primary:hover{background:linear-gradient(135deg,#7046e4,#4f27c4);color:#fff}
+.tt-reminder,
+.tt-reminder.free,
+.tt-reminder.class{
+  position:relative;
+  display:grid;
+  grid-template-columns:142px minmax(210px,1.15fr) 180px minmax(220px,1fr) 76px;
+  align-items:center;
+  gap:17px;
+  min-height:116px;
+  margin:0 0 14px;
+  padding:17px 20px;
+  overflow:hidden;
+  border:1px solid #e8e0fb;
+  border-radius:16px;
+  background:linear-gradient(112deg,#f0eaff 0%,#f8f5ff 52%,#f0edff 100%);
+  color:var(--tt-ink);
+  box-shadow:0 7px 22px rgba(78,48,147,.065);
+}
+.tt-reminder:before{
+  content:"";
+  position:absolute;
+  width:310px;
+  height:190px;
+  right:48px;
+  top:-112px;
+  border-radius:50%;
+  background:rgba(255,255,255,.56);
+  pointer-events:none;
+}
+.tt-reminder-date,.tt-reminder-status,.tt-reminder-countdown,.tt-reminder-facts,.tt-reminder-art{position:relative;z-index:1;min-width:0}
+.tt-reminder-date{display:flex;align-items:center;gap:12px;min-height:60px;padding-right:15px;border-right:1px solid #d9cef4}
+.tt-reminder-date-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 44px;
+  width:44px;
+  height:44px;
+  border-radius:14px;
+  background:linear-gradient(145deg,#8967f2,#6037d5);
+  color:#fff;
+  box-shadow:0 5px 12px rgba(104,65,216,.2);
+}
+.tt-reminder-date-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tt-reminder-weekday{display:block;color:#4d25a2;font-size:29px;font-weight:820;line-height:1.1;white-space:nowrap}
+.tt-reminder-date-text{display:block;color:#746a8d;font-size:12px;white-space:nowrap}
+.tt-reminder-status{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.tt-reminder-kicker{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:2px 9px;
+  border-radius:7px;
+  background:#e4d9ff;
+  color:#6036ce;
+  font-size:11px;
+  font-weight:750;
+}
+.tt-reminder.class .tt-reminder-kicker{background:#fff0df;color:#bd650d}
+.tt-reminder-title{margin:0;color:#30234e;font-size:16px;font-weight:780;line-height:1.4}
+.tt-reminder-desc{max-width:100%;overflow:hidden;color:#766b91;font-size:11.5px;line-height:1.5;text-overflow:ellipsis}
+.tt-reminder-countdown{
+  padding:10px 12px;
+  border:1px solid rgba(219,207,248,.9);
+  border-radius:13px;
+  background:rgba(255,255,255,.72);
+  text-align:center;
+}
+.tt-reminder-label{margin:0 0 3px;color:#d97720;font-size:11px;font-weight:700}
+.tt-reminder-number{color:#4f249e;font-size:29px;font-weight:850;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:.5px;white-space:nowrap}
+.tt-reminder-facts{display:flex;align-items:center;justify-content:space-around;gap:14px}
+.tt-reminder-fact{display:flex;align-items:center;gap:9px;min-width:0}
+.tt-reminder-fact-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 36px;
+  width:36px;
+  height:36px;
+  border-radius:11px;
+  background:rgba(255,255,255,.84);
+  color:#7042e8;
+  box-shadow:0 2px 7px rgba(74,47,130,.06);
+}
+.tt-reminder-fact-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tt-reminder-fact-copy small{color:#817694;font-size:10px;white-space:nowrap}
+.tt-reminder-fact-copy b{overflow:hidden;color:#332650;font-size:13px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}
+.tt-reminder-art{
+  display:grid;
+  place-items:center;
+  width:68px;
+  height:68px;
+  border:1px solid rgba(218,207,249,.9);
+  border-radius:18px;
+  background:linear-gradient(145deg,#fff,#eee8ff);
+  color:#8057e8;
+  box-shadow:0 7px 16px rgba(84,55,151,.1);
+}
+.tt-reminder-art:after{
+  content:"";
+  position:absolute;
+  right:-2px;
+  bottom:8px;
+  width:35px;
+  height:6px;
+  border-radius:8px;
+  background:#c6b4fa;
+  box-shadow:0 -7px 0 #ded5fb;
+  transform:rotate(-8deg);
+}
+.tt-reminder-art svg{position:relative;z-index:1}
+.tt-query-bar{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+  padding:12px 15px;
+  border:1px solid #e8e3f1;
+  border-radius:13px;
+  background:#fff;
+  box-shadow:0 3px 12px rgba(57,44,93,.045);
+}
+.tt-query-item{gap:5px;color:#807691;font-size:11px;font-weight:650}
+.tt-query-item select{
+  min-width:174px;
+  min-height:38px;
+  padding:7px 32px 7px 11px;
+  border:1px solid #ded8eb;
+  border-radius:9px;
+  background:#fff;
+  color:#332b49;
+  font-size:12px;
+  font-weight:650;
+  outline:none;
+}
+.tt-query-item select:focus{border-color:#9274ed;box-shadow:0 0 0 3px rgba(112,66,232,.1)}
+.tt-query-bar>.btn.primary{
+  min-height:38px;
+  padding:0 15px;
+  border:0;
+  border-radius:9px;
+  background:linear-gradient(135deg,#8058f0,#5c32d4);
+  box-shadow:0 4px 10px rgba(103,64,221,.18);
+  font-size:12px;
+  font-weight:700;
+}
+.tt-current-tag{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-height:36px;
+  margin:0 0 0 auto;
+  padding:0 0 0 16px;
+  border-left:1px solid #e6e0ef;
+  color:#807691;
+  font-size:11px;
+  white-space:nowrap;
+}
+.tt-current-tag b{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:3px 10px;
+  border-radius:8px;
+  background:#f0eaff;
+  color:#6338cf;
+  font-size:11px;
+  font-weight:750;
+}
+.tt-grid-title{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:54px;
+  margin-top:14px;
+  padding:10px 14px;
+  border:1px solid #e8e1f4;
+  border-bottom:0;
+  border-radius:14px 14px 0 0;
+  background:linear-gradient(180deg,#fff,#fbf9ff);
+  color:#5d32bf;
+  font-size:20px;
+  font-weight:800;
+  letter-spacing:.3px;
+}
+.tt-grid-title-icon{display:grid;place-items:center;color:#754ce2}
+.tt-grid-title strong{font-weight:800}
+.tt-grid-title-note{margin-left:5px;color:#9589ae;font-size:10px;font-weight:550;letter-spacing:0}
+.tt-grid-title+.tt-grid-scroll{border-top-left-radius:0;border-top-right-radius:0}
+.tt-grid-scroll{
+  border:1px solid #e7e2f0;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 5px 18px rgba(52,42,87,.045);
+}
+.tt-grid-table{
+  min-width:1190px;
+  border:0;
+  border-collapse:separate;
+  border-spacing:0;
+  background:#fff;
+  color:#332c48;
+  font-size:12px;
+}
+.tt-grid-table .tt-col-period{width:66px}
+.tt-grid-table .tt-col-time{width:126px}
+.tt-grid-table thead th{
+  height:44px;
+  padding:9px 7px;
+  border-right:1px solid #e9e4f1;
+  border-bottom:1px solid #e5e0ee;
+  background:#f3f0fa;
+  color:#665d7d;
+  font-size:12px;
+  font-weight:750;
+}
+.tt-grid-table thead th.is-today{
+  border-color:#6536d6;
+  border-radius:8px 8px 0 0;
+  background:linear-gradient(135deg,#7950e9,#5c30d1);
+  color:#fff;
+}
+.tt-grid-table tbody td{
+  height:66px;
+  padding:5px 6px;
+  border-right:1px solid #ece8f3;
+  border-bottom:1px solid #ece8f3;
+  background:#fff;
+  vertical-align:middle;
+}
+.tt-grid-table .tt-period-cell{background:#faf9fd;color:#665c7d}
+.tt-period-cell strong{font-size:11.5px;font-weight:780}
+.tt-period-cell span{color:#958ba8;font-size:10px}
+.tt-grid-table .tt-time-cell{background:#fff;color:#786e8e;font-size:11px}
+.tt-grid-table .tt-lunch-row td{height:43px;background:#f4f0fb}
+.tt-grid-table .tt-lunch-cell{
+  height:43px!important;
+  background:linear-gradient(90deg,#f4f0fb,#eee8fc)!important;
+  color:#7042e8!important;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.5px;
+}
+.tt-slot{padding:5px!important;transition:background .15s ease}
+.tt-slot.is-empty:hover{background:#faf7ff}
+.tt-empty-add{width:25px;height:25px;border-radius:8px;color:#aaa1c0;font-size:17px;opacity:.58}
+.tt-slot.is-empty:hover .tt-empty-add{background:#f0eaff;color:#6338cf;opacity:1}
+.tt-course-block{
+  display:grid;
+  grid-template-columns:29px minmax(0,1fr);
+  align-items:center;
+  gap:0 8px;
+  min-height:55px;
+  margin:0;
+  padding:6px 8px;
+  overflow:hidden;
+  border:1px solid #e7dcfb;
+  border-left:3px solid #8057e8;
+  border-radius:10px;
+  background:linear-gradient(110deg,#f3edff,#eee7ff);
+  color:#5427a6;
+  box-shadow:0 2px 6px rgba(82,49,151,.055);
+  cursor:grab;
+}
+.tt-course-block:hover{box-shadow:0 5px 13px rgba(82,49,151,.12);transform:translateY(-1px)}
+.tt-course-block.tt-grade-1{border-color:#dce8ff;border-left-color:#3977e8;background:linear-gradient(110deg,#edf4ff,#e7efff);color:#2457ae}
+.tt-course-block.tt-grade-2{border-color:#e7dcfb;border-left-color:#8057e8;background:linear-gradient(110deg,#f3edff,#eee7ff);color:#5427a6}
+.tt-course-block.tt-grade-3{border-color:#f7dcdc;border-left-color:#df5a68;background:linear-gradient(110deg,#fff0f1,#fde9eb);color:#a83248}
+.tt-course-block.tt-grade-all{border-color:#d8efe4;border-left-color:#2caa75;background:linear-gradient(110deg,#eaf8f1,#e3f5ec);color:#14734f}
+.tt-course-icon{
+  display:grid;
+  place-items:center;
+  grid-column:1;
+  grid-row:1;
+  width:28px;
+  height:28px;
+  border-radius:9px;
+  background:linear-gradient(145deg,#956ef1,#6a3bdc);
+  color:#fff;
+  box-shadow:0 3px 8px rgba(94,54,191,.18);
+}
+.tt-course-block.tt-grade-1 .tt-course-icon{background:linear-gradient(145deg,#6595f0,#3470df)}
+.tt-course-block.tt-grade-3 .tt-course-icon{background:linear-gradient(145deg,#ef8a96,#d84c5c)}
+.tt-course-block.tt-grade-all .tt-course-icon{background:linear-gradient(145deg,#55c391,#249c6c)}
+.tt-course-content{display:flex;flex-direction:column;gap:2px;grid-column:2;grid-row:1;min-width:0}
+.tt-course-heading{display:flex;align-items:center;gap:5px;min-width:0}
+.tt-course-subject{
+  display:block;
+  flex:1;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  color:inherit;
+  font-size:11.5px;
+  font-weight:850;
+  line-height:1.3;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.tt-grade-tag{
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+  padding:1px 5px;
+  border-radius:999px;
+  background:#7a50e6;
+  color:#fff;
+  font-size:9px;
+  font-weight:750;
+  line-height:1.4;
+}
+.tt-grade-tag.tt-grade-1{background:#3977e8}
+.tt-grade-tag.tt-grade-2{background:#7a50e6}
+.tt-grade-tag.tt-grade-3{background:#d94f61}
+.tt-grade-tag.tt-grade-all{background:#249c6c}
+.tt-course-class,.tt-course-time{
+  display:block;
+  max-width:100%;
+  overflow:hidden;
+  color:inherit;
+  font-size:10px;
+  line-height:1.3;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  opacity:.82;
+}
+.tt-course-actions{top:4px;right:4px}
+.tt-course-action{width:22px;height:22px;border-radius:7px}
+.tt-course-block.now{outline:2px solid #e69a36;outline-offset:-2px;box-shadow:0 0 0 3px rgba(230,154,54,.12)}
+.tt-course-lunch{border-left-color:#d97720!important;background:#fff5e9!important;color:#9b5414!important}
+.tt-summary-bar{
+  margin-top:11px;
+  padding:10px 13px;
+  border:1px solid #e9e4f1;
+  border-radius:10px;
+  background:#faf9fd;
+  color:#827891;
+  font-size:11px;
+}
+html[data-theme="dark"] .tt-workspace{
+  --tt-ink:#eee8ff;
+  --tt-muted:#b9aed0;
+}
+html[data-theme="dark"] .tt-reminder,
+html[data-theme="dark"] .tt-reminder.free,
+html[data-theme="dark"] .tt-reminder.class{
+  border-color:#43365f;
+  background:linear-gradient(112deg,#282039 0%,#211d30 55%,#29213d 100%);
+  color:#eee8ff;
+}
+html[data-theme="dark"] .tt-reminder-title,
+html[data-theme="dark"] .tt-reminder-fact-copy b{color:#eee8ff}
+html[data-theme="dark"] .tt-reminder-date-text,
+html[data-theme="dark"] .tt-reminder-desc,
+html[data-theme="dark"] .tt-reminder-fact-copy small{color:#b9aed0}
+html[data-theme="dark"] .tt-reminder-countdown,
+html[data-theme="dark"] .tt-reminder-fact-icon,
+html[data-theme="dark"] .tt-reminder-art{border-color:#4b3d68;background:#302744;color:#cbb8ff}
+html[data-theme="dark"] .tt-query-bar,
+html[data-theme="dark"] .tt-grid-scroll,
+html[data-theme="dark"] .tt-grid-table,
+html[data-theme="dark"] .tt-grid-table tbody td{background:#1e1b29;color:#e9e2f6}
+html[data-theme="dark"] .tt-query-item select{border-color:#514664;background:#282337;color:#eee8ff}
+html[data-theme="dark"] .tt-grid-title{border-color:#45395d;background:#282337;color:#cdbaff}
+html[data-theme="dark"] .tt-grid-table thead th,
+html[data-theme="dark"] .tt-grid-table .tt-period-cell{border-color:#45395d;background:#292438;color:#c5b8df}
+html[data-theme="dark"] .tt-grid-table .tt-time-cell{background:#211e2c;color:#b9aed0}
+html[data-theme="dark"] .tt-grid-table tbody td{border-color:#40374f}
+html[data-theme="dark"] .tt-course-block{border-color:#51416d;background:#302644;color:#e1d4ff}
+html[data-theme="dark"] .tt-course-block.tt-grade-1{background:#1f2b45;color:#b9d0ff}
+html[data-theme="dark"] .tt-course-block.tt-grade-3{background:#3a242e;color:#ffd0d5}
+html[data-theme="dark"] .tt-course-block.tt-grade-all{background:#1f352d;color:#c0f0d8}
+html[data-theme="dark"] .tt-course-icon{background:#6746c6}
+html[data-theme="dark"] .tt-grid-table .tt-lunch-row td,
+html[data-theme="dark"] .tt-grid-table .tt-lunch-cell{background:#2b253b!important;color:#cbb8ff!important}
+html[data-theme="dark"] .tt-current-tag{border-color:#4b3d68;color:#b9aed0}
+html[data-theme="dark"] .tt-current-tag b{background:#302644;color:#d4c5ff}
+@media(max-width:1320px){
+  .tt-reminder{grid-template-columns:128px minmax(180px,1fr) 165px minmax(190px,1fr)}
+  .tt-reminder-art{display:none}
+  .tt-reminder-facts{gap:10px}
+}
+@media(max-width:1080px){
+  .tt-workspace-head{align-items:flex-start}
+  .tt-reminder{grid-template-columns:120px minmax(0,1fr) 160px;gap:12px;padding:15px}
+  .tt-reminder-facts{grid-column:1/-1;justify-content:flex-start;padding-top:10px;border-top:1px solid #ded4f4}
+  .tt-current-tag{margin-left:0}
+}
+@media(max-width:760px){
+  .tt-workspace-head{flex-direction:column;align-items:stretch}
+  .tt-toolbar-actions{width:100%;justify-content:flex-start}
+  .tt-reminder{grid-template-columns:1fr 1fr;gap:12px}
+  .tt-reminder-date{border-right:0;padding-right:0}
+  .tt-reminder-status{grid-column:1/-1}
+  .tt-reminder-countdown{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left}
+  .tt-reminder-label{margin:0}
+  .tt-reminder-number{font-size:24px}
+  .tt-reminder-facts{grid-column:1/-1;flex-wrap:wrap}
+  .tt-query-bar{align-items:stretch;gap:10px}
+  .tt-query-item{flex:1 1 145px;min-width:0}
+  .tt-query-item select{width:100%;min-width:0}
+  .tt-query-bar>.btn{align-self:flex-end}
+  .tt-current-tag{width:100%;padding:9px 0 0;border-left:0;border-top:1px solid #e6e0ef;white-space:normal}
+  .tt-grid-title{justify-content:flex-start;font-size:17px}
+  .tt-grid-title-note{display:none}
+  .tt-grid-table{min-width:1120px}
+}
+@media(max-width:520px){
+  .tt-toolbar-actions>.btn{min-height:36px;padding:0 10px;font-size:11px}
+  .tt-reminder{grid-template-columns:1fr;padding:14px}
+  .tt-reminder-status,.tt-reminder-countdown,.tt-reminder-facts{grid-column:1}
+  .tt-reminder-date{padding-bottom:10px;border-bottom:1px solid #ded4f4}
+  .tt-reminder-countdown{display:flex;align-items:center;justify-content:space-between}
+  .tt-reminder-number{font-size:22px}
+  .tt-reminder-facts{justify-content:space-between}
+  .tt-course-block{min-height:52px;padding:5px 6px;grid-template-columns:25px minmax(0,1fr);gap:0 6px}
+  .tt-course-icon{width:24px;height:24px}
+}
+
+
+/* ==========================================================================
+   我的课表 · 当前浏览器视口自适应
+   只作用于课表页面：根据可用视口高度动态压缩节次行高，桌面端尽量一屏看完整周课表。
+   ========================================================================== */
+@media (min-width:1081px) {
+  .app:has(.tt-workspace) .main {
+    max-width:none;
+    padding:14px 18px 10px;
+  }
+  .tt-workspace {
+    --tt-row-height:clamp(26px,calc((100vh - 330px) / var(--tt-period-count, 12)),52px);
+  }
+  @supports (height:100dvh) {
+    .tt-workspace {
+      --tt-row-height:clamp(26px,calc((100dvh - 330px) / var(--tt-period-count, 12)),52px);
+    }
+  }
+  .tt-workspace-head {
+    display:grid;
+    grid-template-columns:minmax(120px,1fr) auto;
+    align-items:center;
+    gap:10px;
+    min-height:34px;
+    margin:0 0 10px;
+  }
+  .tt-workspace-title {font-size:20px;line-height:1.2}
+  .tt-toolbar-actions {flex-wrap:nowrap;gap:6px;min-width:0}
+  .tt-toolbar-actions>.btn {min-height:34px;padding:0 10px;font-size:11.5px;white-space:nowrap}
+  .tt-reminder,.tt-reminder.free,.tt-reminder.class {
+    display:grid;
+    grid-template-columns:112px minmax(150px,1fr) 148px minmax(170px,1.1fr) 46px;
+    align-items:center;
+    gap:10px;
+    height:88px;
+    min-height:88px;
+    margin:0 0 10px;
+    padding:9px 14px;
+    border-radius:14px;
+  }
+  .tt-reminder-date {display:flex;align-items:center;gap:8px;min-height:48px;padding-right:9px}
+  .tt-reminder-date-icon {display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:11px}
+  .tt-reminder-date-icon svg {width:21px;height:21px}
+  .tt-reminder-weekday {font-size:22px;line-height:1.1}
+  .tt-reminder-date-text {font-size:10px}
+  .tt-reminder-status {display:flex;flex-direction:column;gap:3px;min-width:0}
+  .tt-reminder-kicker {min-height:18px;padding:1px 7px;font-size:9px}
+  .tt-reminder-title {margin:0;font-size:13px;line-height:1.2}
+  .tt-reminder-desc {font-size:9.5px;line-height:1.25}
+  .tt-reminder-countdown {padding:6px 8px;border-radius:10px}
+  .tt-reminder-label {margin:0 0 2px;font-size:9px}
+  .tt-reminder-number {font-size:23px;line-height:1.1}
+  .tt-reminder-facts {justify-content:space-around;gap:7px}
+  .tt-reminder-fact {gap:6px}
+  .tt-reminder-fact-icon {flex-basis:28px;width:28px;height:28px;border-radius:8px}
+  .tt-reminder-fact-icon svg {width:16px;height:16px}
+  .tt-reminder-fact-copy {gap:2px}
+  .tt-reminder-fact-copy small {font-size:9px}
+  .tt-reminder-fact-copy b {font-size:10.5px}
+  .tt-reminder-art {width:40px;height:40px;border-radius:11px}
+  .tt-reminder-art svg {width:30px;height:30px}
+  .tt-reminder-art:after {display:none}
+  .tt-query-bar {
+    min-height:58px;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:10px;
+    padding:7px 12px;
+    border-radius:12px;
+  }
+  .tt-query-item {gap:3px;font-size:10px;white-space:nowrap}
+  .tt-query-item select {min-width:145px;min-height:34px;padding:5px 9px;font-size:11px}
+  .tt-query-bar>.btn.primary {min-height:34px;padding:0 12px;font-size:11px;white-space:nowrap}
+  .tt-current-tag {display:flex;align-items:center;gap:7px;flex:0 0 auto;min-height:30px;margin:0 0 0 auto;padding-left:11px;border-left:1px solid #e6e0ef;font-size:10px}
+  .tt-current-tag b {min-height:24px;padding:2px 8px;font-size:10px}
+  .tt-grid-title {min-height:40px;margin-top:9px;padding:5px 10px;font-size:17px;letter-spacing:0}
+  .tt-grid-title-icon svg {width:17px;height:17px}
+  .tt-grid-title-note {font-size:9px}
+  .tt-grid-scroll {border-radius:0 0 11px 11px}
+  .tt-grid-table {min-width:1040px;font-size:10px}
+  .tt-grid-table .tt-col-period {width:58px}
+  .tt-grid-table .tt-col-time {width:104px}
+  .tt-grid-table thead th {height:34px;padding:4px 5px;font-size:10.5px}
+  .tt-grid-table tbody td {height:var(--tt-row-height);padding:2px 4px}
+  .tt-grid-table .tt-period-cell strong {font-size:10px}
+  .tt-grid-table .tt-time-cell {font-size:9.5px}
+  .tt-grid-table .tt-lunch-row td {height:calc(var(--tt-row-height) - 4px);padding:0 4px}
+  .tt-grid-table .tt-lunch-cell {font-size:10px;letter-spacing:.2px}
+  .tt-empty-add {width:18px;height:18px;font-size:14px}
+  .tt-course-block {
+    grid-template-columns:20px minmax(0,1fr);
+    align-items:center;
+    gap:0 5px;
+    width:100%;
+    height:calc(var(--tt-row-height) - 6px);
+    min-height:0;
+    margin:0;
+    padding:2px 4px;
+    border-radius:8px;
+  }
+  .tt-course-icon {width:20px;height:20px;border-radius:7px}
+  .tt-course-icon svg {width:13px;height:13px}
+  .tt-course-content {gap:0}
+  .tt-course-heading {gap:3px}
+  .tt-course-subject {font-size:clamp(9px,1.05vh,10.5px);line-height:1.08}
+  .tt-grade-tag {padding:0 4px;font-size:8px}
+  .tt-course-class,.tt-course-time {font-size:clamp(8px,.9vh,9px);line-height:1.08}
+  .tt-course-actions {top:2px;right:2px}
+  .tt-course-action {width:17px;height:17px;border-radius:5px}
+  .tt-course-action svg {width:10px;height:10px}
+  .tt-summary-bar {display:none}
+}
+
+@media (min-width:1081px) and (max-height:760px) {
+  .app:has(.tt-workspace) .main {padding:8px 14px 6px}
+  .tt-workspace {--tt-row-height:clamp(28px,calc((100vh - 260px) / var(--tt-period-count, 12)),42px)}
+  @supports (height:100dvh) {
+    .tt-workspace {--tt-row-height:clamp(28px,calc((100dvh - 260px) / var(--tt-period-count, 12)),42px)}
+  }
+  .tt-workspace-head {min-height:30px;margin-bottom:6px}
+  .tt-workspace-title {font-size:18px}
+  .tt-toolbar-actions>.btn {min-height:30px;padding:0 8px;font-size:10.5px}
+  .tt-reminder,.tt-reminder.free,.tt-reminder.class {
+    grid-template-columns:96px minmax(130px,1fr) 126px minmax(145px,1fr) 36px;
+    gap:7px;
+    height:72px;
+    min-height:72px;
+    margin-bottom:6px;
+    padding:6px 10px;
+  }
+  .tt-reminder-date {min-height:40px;gap:6px;padding-right:7px}
+  .tt-reminder-date-icon {flex-basis:30px;width:30px;height:30px}
+  .tt-reminder-weekday {font-size:19px}
+  .tt-reminder-date-text {font-size:9px}
+  .tt-reminder-kicker {min-height:16px;font-size:8px}
+  .tt-reminder-title {font-size:11.5px}
+  .tt-reminder-desc {font-size:8.5px}
+  .tt-reminder-countdown {padding:4px 6px}
+  .tt-reminder-number {font-size:20px}
+  .tt-reminder-fact-icon {flex-basis:25px;width:25px;height:25px}
+  .tt-reminder-fact-copy small {font-size:8px}
+  .tt-reminder-fact-copy b {font-size:9.5px}
+  .tt-reminder-art {width:32px;height:32px}
+  .tt-reminder-art svg {width:25px;height:25px}
+  .tt-query-bar {min-height:52px;gap:8px;padding:5px 9px}
+  .tt-query-item {font-size:9px}
+  .tt-query-item select {min-width:132px;min-height:31px;font-size:10px}
+  .tt-query-bar>.btn.primary {min-height:31px;font-size:10px}
+  .tt-current-tag {min-height:26px;font-size:9px}
+  .tt-current-tag b {min-height:21px;font-size:9px}
+  .tt-grid-title {min-height:34px;margin-top:6px;font-size:15px}
+  .tt-grid-table thead th {height:30px;font-size:9.5px}
+  .tt-grid-table .tt-period-cell strong {font-size:9px}
+  .tt-grid-table .tt-time-cell {font-size:8.5px}
+  .tt-grid-table .tt-lunch-row td {height:calc(var(--tt-row-height) - 4px)}
+  .tt-course-block {grid-template-columns:18px minmax(0,1fr);gap:0 4px;height:calc(var(--tt-row-height) - 5px);padding:1px 3px}
+  .tt-course-icon {width:18px;height:18px}
+  .tt-course-icon svg {width:12px;height:12px}
+  .tt-course-subject {font-size:9px;line-height:1.02}
+  .tt-course-class,.tt-course-time {font-size:8px;line-height:1.02}
+  .tt-summary-bar {display:none}
+}
+
+@media (min-width:1081px) and (max-height:650px) {
+  .app:has(.tt-workspace) .main {padding:6px 12px 4px}
+  .tt-workspace {--tt-row-height:clamp(24px,calc((100vh - 240px) / var(--tt-period-count, 12)),36px)}
+  @supports (height:100dvh) {
+    .tt-workspace {--tt-row-height:clamp(24px,calc((100dvh - 240px) / var(--tt-period-count, 12)),36px)}
+  }
+  .tt-workspace-head {min-height:27px;margin-bottom:4px}
+  .tt-workspace-title {font-size:16px}
+  .tt-toolbar-actions>.btn {min-height:27px;padding:0 7px;font-size:9.5px}
+  .tt-reminder,.tt-reminder.free,.tt-reminder.class {
+    grid-template-columns:88px minmax(120px,1fr) 112px minmax(130px,1fr) 30px;
+    gap:5px;
+    height:60px;
+    min-height:60px;
+    margin-bottom:4px;
+    padding:4px 8px;
+  }
+  .tt-reminder-date {min-height:34px;gap:5px;padding-right:5px}
+  .tt-reminder-date-icon {flex-basis:26px;width:26px;height:26px}
+  .tt-reminder-date-icon svg {width:17px;height:17px}
+  .tt-reminder-weekday {font-size:17px}
+  .tt-reminder-date-text {font-size:8px}
+  .tt-reminder-kicker {min-height:14px;padding:0 5px;font-size:7.5px}
+  .tt-reminder-title {font-size:10px}
+  .tt-reminder-desc {font-size:7.5px}
+  .tt-reminder-countdown {padding:3px 5px}
+  .tt-reminder-number {font-size:17px}
+  .tt-reminder-label {font-size:8px}
+  .tt-reminder-fact-icon {flex-basis:22px;width:22px;height:22px}
+  .tt-reminder-fact-copy small {font-size:7px}
+  .tt-reminder-fact-copy b {font-size:8.5px}
+  .tt-reminder-art {width:27px;height:27px}
+  .tt-reminder-art svg {width:21px;height:21px}
+  .tt-query-bar {min-height:44px;gap:6px;padding:3px 7px}
+  .tt-query-item {font-size:8px}
+  .tt-query-item select {min-width:120px;min-height:27px;padding:3px 7px;font-size:9px}
+  .tt-query-bar>.btn.primary {min-height:27px;padding:0 8px;font-size:9px}
+  .tt-current-tag {min-height:23px;font-size:8px}
+  .tt-current-tag b {min-height:18px;font-size:8px}
+  .tt-grid-title {min-height:30px;margin-top:4px;font-size:14px}
+  .tt-grid-table thead th {height:26px;padding:2px 4px;font-size:8.5px}
+  .tt-grid-table .tt-period-cell strong,.tt-grid-table .tt-time-cell {font-size:8px}
+  .tt-course-block {grid-template-columns:16px minmax(0,1fr);gap:0 3px;height:calc(var(--tt-row-height) - 4px);padding:1px 2px}
+  .tt-course-icon {width:16px;height:16px;border-radius:5px}
+  .tt-course-icon svg {width:10px;height:10px}
+  .tt-course-subject {font-size:8.5px;line-height:1}
+  .tt-course-class,.tt-course-time {font-size:7.5px;line-height:1}
+}
+
+
+/* ===== 课表主题外观联动：强调色统一读取全局主题变量 ===== */
+html[data-theme] .tt-workspace {
+  --tt-accent: var(--primary);
+  --tt-accent-deep: var(--primary-deep);
+  --tt-accent-soft: var(--primary-weak);
+  --tt-accent-line: var(--line-2);
+  --tt-ink: var(--text);
+  --tt-muted: var(--text-2);
+}
+html[data-theme] .tt-workspace .tt-workspace-title:before { background:var(--primary); }
+html[data-theme] .tt-workspace .tt-toolbar-actions > .btn {
+  border-color:var(--line-2);background:var(--card);color:var(--text-2);
+}
+html[data-theme] .tt-workspace .tt-toolbar-actions > .btn:hover {
+  border-color:var(--primary);background:var(--primary-weak);color:var(--primary-deep);
+}
+html[data-theme] .tt-workspace .tt-toolbar-actions > .btn.primary,
+html[data-theme] .tt-workspace .tt-query-bar > .btn.primary {
+  border-color:var(--primary);background:linear-gradient(135deg,var(--primary),var(--primary-deep));color:#fff;
+}
+html[data-theme] .tt-workspace .tt-reminder,
+html[data-theme] .tt-workspace .tt-reminder.free,
+html[data-theme] .tt-workspace .tt-reminder.class {
+  border-color:var(--primary-weak);background:linear-gradient(112deg,var(--primary),var(--primary-deep));color:#fff;
+}
+html[data-theme] .tt-workspace .tt-reminder-date { border-color:rgba(255,255,255,.3); }
+html[data-theme] .tt-workspace .tt-reminder-date-icon { background:linear-gradient(145deg,var(--primary-deep),var(--primary));color:#fff; }
+html[data-theme] .tt-workspace .tt-reminder-weekday,
+html[data-theme] .tt-workspace .tt-reminder-title { color:#fff; }
+html[data-theme] .tt-workspace .tt-reminder-date-text,
+html[data-theme] .tt-workspace .tt-reminder-desc { color:rgba(255,255,255,.9); }
+html[data-theme] .tt-workspace .tt-reminder-kicker,
+html[data-theme] .tt-workspace .tt-reminder.class .tt-reminder-kicker { background:var(--primary-weak);color:var(--primary-deep); }
+html[data-theme] .tt-workspace .tt-reminder-countdown,
+html[data-theme] .tt-workspace .tt-reminder-fact-icon,
+html[data-theme] .tt-workspace .tt-reminder-art { border-color:var(--line);background:var(--card);color:var(--primary); }
+html[data-theme] .tt-workspace .tt-reminder-label,
+html[data-theme] .tt-workspace .tt-reminder-number { color:var(--primary-deep); }
+html[data-theme] .tt-workspace .tt-reminder-fact-copy small { color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-reminder-fact-copy b { color:var(--text); }
+html[data-theme] .tt-workspace .tt-reminder-art:after { background:var(--primary-weak);box-shadow:0 -7px 0 var(--primary-weak); }
+html[data-theme] .tt-workspace .tt-query-bar { border-color:var(--line);background:var(--card); }
+html[data-theme] .tt-workspace .tt-query-item { color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-query-item select { border-color:var(--line-2);background:var(--card);color:var(--text); }
+html[data-theme] .tt-workspace .tt-query-item select:focus { border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-weak); }
+html[data-theme] .tt-workspace .tt-current-tag { border-color:var(--line);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-current-tag b { background:var(--primary-weak);color:var(--primary-deep); }
+html[data-theme] .tt-workspace .tt-grid-title { border-color:var(--line);background:var(--card);color:var(--primary-deep); }
+html[data-theme] .tt-workspace .tt-grid-title-icon { color:var(--primary); }
+html[data-theme] .tt-workspace .tt-grid-title-note { color:var(--text-3); }
+html[data-theme] .tt-workspace .tt-grid-scroll,
+html[data-theme] .tt-workspace .tt-grid-table { border-color:var(--line);background:var(--card);color:var(--text); }
+html[data-theme] .tt-workspace .tt-grid-table thead th { border-color:var(--line);background:var(--bg-sunken);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-grid-table thead th.is-today {
+  border-color:var(--primary);background:linear-gradient(135deg,var(--primary),var(--primary-deep));color:#fff;
+}
+html[data-theme] .tt-workspace .tt-grid-table tbody td { border-color:var(--line);background:var(--card);color:var(--text); }
+html[data-theme] .tt-workspace .tt-grid-table .tt-period-cell,
+html[data-theme] .tt-workspace .tt-grid-table .tt-lunch-row td { background:var(--bg-sunken);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-grid-table .tt-time-cell { background:var(--card);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-grid-table .tt-lunch-cell { background:var(--primary-weak)!important;color:var(--primary-deep)!important; }
+html[data-theme] .tt-workspace .tt-slot.is-empty:hover { background:var(--primary-weak); }
+html[data-theme] .tt-workspace .tt-empty-add { color:var(--text-3); }
+html[data-theme] .tt-workspace .tt-slot.is-empty:hover .tt-empty-add { background:var(--card);color:var(--primary); }
+html[data-theme] .tt-workspace .tt-course-block,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-1,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-2,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-3,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-all {
+  border-color:var(--tt-accent-line);border-left-color:var(--primary);background:var(--primary-weak);color:var(--primary-deep);
+}
+html[data-theme] .tt-workspace .tt-course-block:hover { box-shadow:var(--shadow-m); }
+html[data-theme] .tt-workspace .tt-course-icon,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-1 .tt-course-icon,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-2 .tt-course-icon,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-3 .tt-course-icon,
+html[data-theme] .tt-workspace .tt-course-block.tt-grade-all .tt-course-icon {
+  background:linear-gradient(145deg,var(--primary),var(--primary-deep));color:#fff;
+}
+html[data-theme] .tt-workspace .tt-grade-tag,
+html[data-theme] .tt-workspace .tt-grade-tag.tt-grade-1,
+html[data-theme] .tt-workspace .tt-grade-tag.tt-grade-2,
+html[data-theme] .tt-workspace .tt-grade-tag.tt-grade-3,
+html[data-theme] .tt-workspace .tt-grade-tag.tt-grade-all { background:var(--primary);color:#fff; }
+html[data-theme] .tt-workspace .tt-course-block.now { outline-color:var(--primary);box-shadow:0 0 0 3px var(--primary-weak); }
+html[data-theme] .tt-workspace .tt-course-lunch { border-left-color:var(--primary)!important;background:var(--primary-weak)!important;color:var(--primary-deep)!important; }
+html[data-theme] .tt-workspace .tt-course-action { border-color:var(--line);background:var(--card);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-course-action:hover { border-color:var(--primary);background:var(--primary);color:#fff; }
+html[data-theme] .tt-workspace .tt-course-action.danger:hover { border-color:var(--red);background:var(--red);color:#fff; }
+html[data-theme] .tt-workspace .tt-summary-bar { border-color:var(--line);background:var(--bg-sunken);color:var(--text-2); }
+html[data-theme] .tt-workspace .tt-reminder-facts { border-color:var(--line-2); }
+

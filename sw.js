@@ -30,7 +30,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-test-v128-network-first-startup-recovery';
+const CACHE = 'wb-production-v173-attendance-release';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -44,6 +44,9 @@ const ASSETS = [
   './css/app.css',
   './css/teacher-ui.css',
   './css/attendance-workspace.css',
+  './css/attendance-prd.css',
+  './css/workbench-unified.css',
+  './css/timetable-redesign.css',
   './css/auth-redesign.css',
   './assets/teacher-ui/hero-scene.webp',
   './assets/teacher-ui/brand-avatar.png',
@@ -66,17 +69,26 @@ const ASSETS = [
   './js/localapi.js',
   './js/localdb.js',
   './js/prep-domain.mjs',
+  './js/timetable-periods.mjs',
+  './js/invigilation.js',
+  './js/invigilation-domain.mjs',
   /* 各业务页面 */
   './js/home.js',
   './js/work.js',
+  './js/class-records.js',
+  './js/prep.js',
+  './js/timetable.js',
   './js/daily.js',
   './js/study.js',
   './js/me.js',
   './js/repairs.js',
+  './js/repairs-domain.mjs',
   './js/recycle.js',
   './js/selfstudy.js',
   /* 功能模块 */
   './js/attendance.js',
+  './js/attendance-prd.js',
+  './js/attendance-prd-domain.mjs',
   './js/ocr.js',
   './js/alarm.js',
   './js/qrdecode.js',
@@ -89,6 +101,7 @@ const ASSETS = [
   './js/att-parse.js',
   './js/attvoice.js',
   './js/attstats.js',
+  './js/attleave.js',
   './js/attday.js',
   './js/attendance-domain.mjs',
   './js/attendance-export.mjs',
@@ -96,6 +109,7 @@ const ASSETS = [
   './js/attindex.js',
   './js/attreset.js',
   './js/roster-import.mjs',
+  './js/roster-batch.mjs',
   './js/roster-photo-parser.mjs',
   './js/roster-structure.mjs',
 ];
