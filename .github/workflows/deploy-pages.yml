@@ -1,9 +1,6 @@
 name: Deploy mywork-master to GitHub Pages
 
 on:
-  push:
-    branches:
-      - test
   workflow_dispatch:
 
 permissions:
