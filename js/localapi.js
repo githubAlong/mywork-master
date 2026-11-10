@@ -1,4 +1,5 @@
 import { isPrepType } from './prep-domain.mjs';
+import { prepareStudyImport, studyPayload, studyView } from './study-records-domain.mjs';
 /* ============================================================================
    localapi.js —— 把服务端 126 个 /api/* 接口，在浏览器里逐个实现一遍。
 
@@ -4073,6 +4074,18 @@ on('POST', '/backup/restore', ({ body }) => {
   return { imported: n };
 });
 
+on('POST', '/study/records/import', ({ body }) => {
+  // Validate the whole file before changing data; invalid rows cannot partially import.
+  let records;
+  try { records = prepareStudyImport(body?.rows); } catch (error) { fail(422, error.message); }
+  const db = load();
+  const max = Math.max(Number(db.seqs['id:studies']) || 0, 0, ...db.studies.map(row=>Number(row.id)||0));
+  const created_at = nowISO();
+  const rows = records.map((record,index)=>({...record,id:max+index+1,seq:nextSeq('study'),source:'manual',created_at,updated_at:created_at,deleted_at:null}));
+  db.studies.push(...rows);db.seqs['id:studies']=max+rows.length;save();
+  return {imported:rows.length};
+});
+
 /* ---- 通用 CRUD（必须放在最后，避免抢走具体路由） ---- */
 /* 服务端的自动路由表：/api/{table} 的 GET / POST / PATCH / bulk。
    表名来自 localdb.TABLES 里与服务端 CRUD 对齐的那 18 张。 */
@@ -4086,6 +4099,10 @@ for (const table of CRUD_TABLES) {
   on('GET', '/' + table, ({ query }) => listTable(table, query));
   on('POST', '/' + table, ({ body }) => {
     const b = { ...(body || {}) };
+    if (table === 'studies') {
+      try { Object.assign(b, studyPayload({...studyView(b),status:b.status ?? (b.minutes != null ? 'done' : 'todo')})); }
+      catch (error) { fail(422, error.message); }
+    }
     /* 【表级必填，服务端兜底】
        前端各表单已经拦了，这里再拦一道 —— 接口是可以被"导入""批量"等
        别的入口调到的，只在界面拦等于没拦。
@@ -4126,6 +4143,15 @@ for (const table of CRUD_TABLES) {
   });
   on('PATCH', `/${table}/:id`, ({ params, body }) => {
     const b = normalizeBody(body || {});
+    if (table === 'studies') {
+      const existing = byId('studies', params.id);
+      if (!existing) fail(404, '学习记录不存在');
+      const merged = studyView({...existing,...b});
+      if (b.status !== undefined) merged.status = b.status;
+      if (b.minutes !== undefined && b.actual_duration === undefined) merged.actual_duration = b.minutes+'分钟';
+      try { Object.assign(b, studyPayload(merged)); }
+      catch (error) { fail(422, error.message); }
+    }
     if (table === 'preps' && b.prep_type !== undefined
       && !(isPrepType(b.prep_type) || b.prep_type === 'unclassified')) {
       fail(422, '备课类型不正确');

@@ -40,7 +40,7 @@ export const TABLES = {
   preps: ['date', 'class_name', 'subject', 'prep_type', 'topic', 'content', 'progress', 'next_step', 'minutes', 'status', 'lesson_id', 'remark'],
   categories: ['scope', 'name', 'sort'],
   homework: ['title', 'grade', 'class_name', 'subject', 'assign_date', 'due_date', 'content'],
-  studies: ['date', 'category_id', 'title', 'content', 'minutes', 'source', 'tags'],
+  studies: ['date', 'category_id', 'title', 'content', 'minutes', 'source', 'tags', 'goal', 'planned_duration', 'actual_duration', 'status', 'remark'],
   students: ['grade', 'class_name', 'name', 'no'],
   rosters: ['grade', 'class_name', 'count', 'names'],
   punishments: ['text', 'level', 'active'],
