@@ -265,7 +265,7 @@ function authError(j, status, operation = '登录') {
   }
   if (/signup_disabled|signups not allowed/i.test(detail)) return '当前 Supabase 项目未开放新用户注册，请在 Authentication 设置中启用新用户注册。';
   if (/phone.*disabled|phone_provider_disabled/i.test(detail)) return '当前 Supabase 项目尚未启用账号密码登录通道。请管理员在 Authentication → Providers → Phone 开启 Phone，并关闭 Phone confirmations；本系统不发送短信，也不验证号码归属。';
-  if (/Invalid login credentials|invalid_credentials/i.test(detail)) return '账号或密码不正确。';
+  if (/Invalid login credentials|invalid_credentials|账号或密码不匹配/i.test(detail)) return '账号或密码不匹配';
   if (/already registered|already exists|user_already_exists|phone_exists/i.test(detail)) return '该账号已注册，请直接登录。';
   if (/weak_password|Password should|password.*characters/i.test(detail)) return '密码强度不足，请设置至少 8 位的密码。';
   if (/phone.*not.*confirmed|phone_not_confirmed/i.test(detail)) return '当前账号仍要求确认。请管理员关闭 Phone confirmations；本系统不发送短信，也不验证号码归属。';
