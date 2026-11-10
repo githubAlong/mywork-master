@@ -2,7 +2,9 @@ name: Deploy validated production to GitHub Pages
 
 on:
   push:
-    branches: [master]
+    # The existing github-pages environment permits test as the trigger branch.
+    # Production source remains master, matching the established release path.
+    branches: [test]
   workflow_dispatch:
 
 permissions:
