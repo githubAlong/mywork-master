@@ -394,6 +394,7 @@ function syncTaskMessages() {
 function tickReminders() {
   const db = load();
   const now = Date.now();
+  let changed = false;
   for (const r of T('reminders') || []) {
     if (r.status !== 'scheduled' || !r.fire_at) continue;
     if (Number(r.fire_at) > now + 1000) continue;
@@ -407,13 +408,14 @@ function tickReminders() {
        这样关掉页面再回来，没确认的提醒还会补弹一次，不会悄悄消失。 */
     if (r.notified_at) continue;   // 同一条只推一次消息，避免每次 GET 都堆一条
     r.notified_at = now;
+    changed = true;
     pushMessage({
       type: 'remind', title: r.title,
       body: r.body || ('提醒时间：' + String(r.due_at || '').replace('T', ' ')),
       refType: 'reminder', refId: r.id,
     });
   }
-  save();
+  if (changed) save();
 }
 
 function addReminder({ title, body = '', due_at, advance_min = 0, repeat = 'none', ring = 'chime', kind = 'item', item_id = null }) {

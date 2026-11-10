@@ -79,7 +79,9 @@ export function load() {
 }
 export function save() {
   try {
-    localStorage.setItem(DB_KEY, JSON.stringify(_db));
+    const serialized = JSON.stringify(_db);
+    if (localStorage.getItem(DB_KEY) === serialized) return true;
+    localStorage.setItem(DB_KEY, serialized);
   } catch (e) {
     /* 【不能再静默吞掉】
        早先这里只 console.warn 就过去了：内存已经改了、界面提示「已保存」，
@@ -235,7 +237,9 @@ export function updateRow(t, id, body = {}) {
      一旦 id 被复用（彻底删除后新建），就会改到一条完全不相干的新数据上。 */
   const row = (db[t] || []).find((r) => String(r.id) === String(id) && !r.deleted_at);
   if (!row) throw new Error('记录不存在');
-  for (const f of (TABLES[t] || [])) if (f in body) row[f] = body[f];
+  const fields = (TABLES[t] || []).filter((field) => field in body && JSON.stringify(row[field]) !== JSON.stringify(body[field]));
+  if (!fields.length) return hydrate(t, row);
+  for (const field of fields) row[field] = body[field];
   row.updated_at = nowISO();
   save();
   return hydrate(t, row);
@@ -257,3 +261,4 @@ function randomCode(n = 6) {
 }
 
 export { randomCode, nowISO, hydrate };
+
