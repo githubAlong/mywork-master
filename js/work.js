@@ -3008,10 +3008,11 @@ async function materialEditor(m, catId, reload) {
   let savedMaterial = m;
   const uploadedFiles = new Set();
   const cats = await api.get('/categories', { scope: 'material' });
+  const initialCategory = cats.find(category => String(category.id) === String(m?.category_id ?? catId));
   const body = el(`<div class="sheet-body">
     <div class="field"><label class="field-label">标题</label><input class="input" id="t" value="${esc(m?.title || '')}"></div>
     <div class="form-grid">
-      <div class="field"><label class="field-label">分类</label><select class="input" id="cat"><option value="">未分类</option>${cats.map((c) => `<option value="${c.id}" ${Number(m?.category_id || catId) === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="field"><label class="field-label" for="cat">分类</label><input class="input" id="cat" type="text" value="${esc(initialCategory?.name || '')}" placeholder="手动输入分类名称，留空则为未分类"></div>
       <div class="field"><label class="field-label">班级</label><input class="input" id="cls" value="${esc(m?.class_name || '')}"></div>
       <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(m?.grade || '')}"></div>
       <div class="field"><label class="field-label">学生可见</label><select class="input" id="pub"><option value="1" ${m?.public !== 0 ? 'selected' : ''}>是（短链可看）</option><option value="0" ${m?.public === 0 ? 'selected' : ''}>否</option></select></div>
@@ -3032,7 +3033,15 @@ async function materialEditor(m, catId, reload) {
     if (selected.length > 20) throw new Error('每次最多选择 20 个文件');
     for (const file of selected) if (file.size > MAX_MATERIAL_SIZE) throw new Error('「' + file.name + '」超过 50 MB，请压缩后上传');
     if (selected.reduce((total, file) => total + file.size, 0) > MAX_MATERIAL_SIZE) throw new Error('每批文件合计不能超过 50 MB，请分批上传');
-    const payload = { title: body.querySelector('#t').value.trim() || '未命名课件', category_id: Number(body.querySelector('#cat').value) || null,
+    const categoryName = body.querySelector('#cat').value.trim();
+    let categoryId = null;
+    if (categoryName) {
+      const currentCategories = await api.get('/categories', { scope: 'material' });
+      const category = currentCategories.find(item => String(item.name || '').trim() === categoryName)
+        || await api.post('/categories', { scope: 'material', name: categoryName });
+      categoryId = category.id;
+    }
+    const payload = { title: body.querySelector('#t').value.trim() || '未命名课件', category_id: categoryId,
       class_name: body.querySelector('#cls').value, grade: body.querySelector('#grade').value,
       descr: body.querySelector('#d').value, public: Number(body.querySelector('#pub').value) };
     const r = savedMaterial ? await api.patch('/materials/' + savedMaterial.id, { ...payload, public: savedMaterial.public }) : await api.post('/materials', { ...payload, public: 0 });
