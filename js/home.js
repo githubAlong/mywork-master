@@ -1267,26 +1267,32 @@ function renderTodayItems(rowsOverride = null, dateOverride = '') {
         <div class="task-title ${done ? 'done' : ''}">${esc(it.title)}</div>
         <div class="task-sub">${it.kind !== '事项' ? `<span class="chip" style="height:19px;font-size:10.5px">${esc(it.kind)}</span>` : ''}${it.detail ? esc(it.detail) : ''}${it.source === '便签' ? '<span class="chip amber" style="height:19px;font-size:10.5px">来自便签</span>' : ''}${t ? `<span class="task-time">${t}</span>` : ''}</div>
       </div>
+      <select class="home-task-status" data-home-status="${esc(it.id)}" aria-label="${esc(it.title)}的状态">${[['todo', '待完成'], ['doing', '进行中'], ['done', '已完成']].map(([value, label]) => `<option value="${value}" ${it.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
     </div>`;
   }).join('');
-  box.querySelectorAll('[data-check]').forEach((button) => {
-    button.onclick = async () => {
-      const nextStatus = button.dataset.status === 'done' ? 'todo' : 'done';
+  const setItemStatus = async (id, nextStatus) => {
+      const controls = box.querySelectorAll('[data-check="' + id + '"], [data-home-status="' + id + '"]');
+      controls.forEach(control => { control.disabled = true; });
       try {
-        await api.patch('/items/' + button.dataset.check, { status: nextStatus });
-        const item = rows.find((row) => String(row.id) === button.dataset.check);
+        await api.patch('/items/' + id, { status: nextStatus });
+        const item = rows.find((row) => String(row.id) === id);
         if (item) item.status = nextStatus;
         if (date === homeData.date) {
-          const todayItem = (homeData.items || []).find((row) => String(row.id) === button.dataset.check);
+          const todayItem = (homeData.items || []).find((row) => String(row.id) === id);
           if (todayItem) todayItem.status = nextStatus;
         }
         if (nextStatus === 'done') toast('已完成');
+        renderTodayItems(rows, date);
         if (calState.dayOpen && calState.selected === date) await loadDay(date);
       } catch (error) {
         toast(error.message || '更新事项失败', 'err');
+        renderTodayItems(rows, date);
       }
-    };
+  };
+  box.querySelectorAll('[data-check]').forEach((button) => {
+    button.onclick = () => setItemStatus(button.dataset.check, button.dataset.status === 'done' ? 'todo' : 'done');
   });
+  box.querySelectorAll('[data-home-status]').forEach(select => { select.onchange = () => setItemStatus(select.dataset.homeStatus, select.value); });
   box.querySelectorAll('[data-edit-item]').forEach((button) => {
     button.onclick = () => {
       const item = rows.find((row) => String(row.id) === button.dataset.editItem);
@@ -2263,4 +2269,5 @@ function openWeatherSheet() {
 
 /* 清理计时器（切换页面时） */
 window.addEventListener('hashchange', () => { clearInterval(cdTimer); clearInterval(clockTimer); });
+
 

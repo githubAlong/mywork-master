@@ -30,7 +30,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v184-student-material-sharing';
+const CACHE = 'wb-v185-home-sticky-status-sync';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -85,6 +85,7 @@ const ASSETS = [
   './js/daily.js',
   './js/sticky-notes.js',
   './js/sticky-notes-domain.mjs',
+  './js/todo-item-sync.mjs',
   './js/study.js',
   './js/me.js',
   './js/repairs.js',
@@ -273,6 +274,7 @@ self.addEventListener('fetch', (e) => {
     }
   })());
 });
+
 
 
 

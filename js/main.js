@@ -1,6 +1,8 @@
 import { state, loadMe, render, parseHash, loadAuthConfig } from './ui.js';
 import { ls, toast, STATIC, api } from './core.js';
 import { setActiveAccount, activeAccountId } from './localdb.js';
+import { load as loadTaskData, save as saveTaskData } from './localdb.js';
+import { reconcileTaskLinks } from './todo-item-sync.mjs';
 import { takeRetiredResetParam } from './startup-safety.mjs';
 
 /* 【第 30 条 · 白屏】
@@ -112,6 +114,7 @@ if (E2E_LOCAL) {
   }, { silent: true });
 }
 state.user = E2E_LOCAL ? (e2eLocalUser?.user || null) : (cloudSession?.uid ? await loadMe() : null);
+if (state.user && (accountSyncReady || E2E_LOCAL) && reconcileTaskLinks(loadTaskData())) saveTaskData();
 if (!location.hash) location.hash = '#/home';
 window.addEventListener('hashchange', () => render());
 
@@ -340,3 +343,4 @@ import('./ttimage.js').then((m) => {
   window.__wbShear = m._shear;
   window.__wbCols = m._cols;
 }).catch(() => {});
+

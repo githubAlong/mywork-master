@@ -21,6 +21,7 @@ import {
   randomCode, nowISO, pad2, ymd, hydrate,
 } from './localdb.js';
 import { accountIdentifierFromPhone } from './auth-identifier.mjs';
+import { reconcileTaskLinks } from './todo-item-sync.mjs';
 import { attRowState } from './att-parse.js';
 import { buildInvigSummary as buildInvigSummaryV2 } from './invigilation-domain.mjs';
 import {
@@ -59,7 +60,8 @@ const todayStr = () => ymd(new Date());
 /* 北京时区日期：与原服务端 cnDate() 口径一致。
    不能用 toISOString().slice(0,10)——那是 UTC，凌晨 0~8 点会差一天。 */
 export function cnDate(d = new Date()) {
-  return ymd(new Date(d.getTime() + 8 * 3600 * 1000));
+  const shifted = new Date(d.getTime() + 8 * 3600 * 1000);
+  return `${shifted.getUTCFullYear()}-${pad2(shifted.getUTCMonth() + 1)}-${pad2(shifted.getUTCDate())}`;
 }
 function isoToCnDate(iso) {
   if (!iso) return '';
@@ -432,19 +434,7 @@ function addReminder({ title, body = '', due_at, advance_min = 0, repeat = 'none
 
 /* ============================ 便签 ↔ 事项 同源 ============================ */
 function syncItemToTodo(itemId, changed) {
-  const db = load();
-  const todo = (T('todos') || []).find((t) => !t.deleted_at && String(t.ref_item_id) === String(itemId))
-    || (T('todos') || []).find((t) => {
-      if (t.deleted_at) return false;
-      const it = (T('items') || []).find((i) => String(i.id) === String(itemId));
-      return it && String(it.ref_id) === String(t.id);
-    });
-  if (!todo) return;
-  if (changed.status) todo.status = changed.status;
-  if (changed.title !== undefined) todo.title = changed.title;
-  if (changed.start_at !== undefined) todo.due_at = changed.start_at || null;
-  todo.updated_at = nowISO();
-  if (!todo.ref_item_id) todo.ref_item_id = Number(itemId);
+  reconcileTaskLinks(load(), { sourceTable: 'items', sourceId: itemId, fields: Object.keys(changed || {}) });
   save();
 }
 
@@ -1950,6 +1940,7 @@ on('POST', '/items', ({ body }) => {
     created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
   };
   T('items').push(row);
+  reconcileTaskLinks(db, { sourceTable: 'items', sourceId: row.id });
   save();
   if (body.remind_min !== undefined && body.remind_min !== null && body.remind_min !== '' && body.start_at) {
     addReminder({
@@ -1963,8 +1954,13 @@ on('POST', '/items', ({ body }) => {
 on('PATCH', '/items/:id', ({ params, body }) => {
   const row = byId('items', params.id);
   if (!row) fail(404, '事项不存在');
+  reconcileTaskLinks(load());
+  let changed = false;
   for (const k of ['title', 'detail', 'kind', 'start_at', 'end_at', 'status', 'priority']) {
-    if (k in (body || {})) row[k] = body[k] === '' ? null : body[k];
+    if (k in (body || {})) {
+      const value = body[k] === '' ? null : body[k];
+      if (row[k] !== value) { row[k] = value; changed = true; }
+    }
   }
   if (body?.remind_min !== undefined) {
     const db = load();
@@ -1974,8 +1970,7 @@ on('PATCH', '/items/:id', ({ params, body }) => {
     }
     save();
   }
-  row.updated_at = nowISO();
-  save();
+  if (changed) row.updated_at = nowISO();
   syncItemToTodo(row.id, body || {});
   return row;
 });
@@ -2099,42 +2094,21 @@ on('POST', '/todos', ({ body }) => {
     pin: 0, ref_item_id: null, created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
   };
   T('todos').push(row);
+  reconcileTaskLinks(db, { sourceTable: 'todos', sourceId: row.id });
   save();
-  if (body.sync_home) {
-    const items = T('items');
-    const iid = items.reduce((mx, x) => Math.max(mx, num(x.id)), 0) + 1;
-    items.push({
-      id: iid, seq: nextSeq('item'), kind: '事项', title: body.title, detail: body.content || '',
-      start_at: body.due_at || null, end_at: null, status: 'todo', priority: 'normal',
-      source: '便签', ref_id: id, created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
-    });
-    row.ref_item_id = iid;
-    save();
-  }
   return row;
 });
 on('PATCH', '/todos/:id', ({ params, body }) => {
   const row = byId('todos', params.id);
   if (!row) fail(404, '便签不存在');
+  reconcileTaskLinks(load());
+  let changed = false;
   for (const k of ['title', 'content', 'status', 'color', 'pin', 'due_at']) {
-    if (k in (body || {})) row[k] = body[k];
+    if (k in (body || {}) && row[k] !== body[k]) { row[k] = body[k]; changed = true; }
   }
-  row.updated_at = nowISO();
+  if (changed) row.updated_at = nowISO();
+  reconcileTaskLinks(load(), { sourceTable: 'todos', sourceId: row.id, fields: Object.keys(body || {}) });
   save();
-  // 状态、标题、时间改任一边，另一边都跟着变（同源）
-  const db = load();
-  const linked = row.ref_item_id || (T('items') || []).find((i) => !i.deleted_at && String(i.ref_id) === String(row.id) && i.source === '便签')?.id;
-  if (linked) {
-    const it = (T('items') || []).find((i) => String(i.id) === String(linked));
-    if (it) {
-      if (body?.status) it.status = body.status;
-      if (body?.title !== undefined) it.title = body.title;
-      if (body?.due_at !== undefined) it.start_at = body.due_at || null;
-      it.updated_at = nowISO();
-      if (!row.ref_item_id) row.ref_item_id = it.id;
-      save();
-    }
-  }
   return row;
 });
 
@@ -5029,4 +5003,5 @@ export function getSeedFileText(path) {
 
 /* 给前端读的「当前是不是静态版」标记 */
 export const STATIC_MODE = true;
+
 
