@@ -135,8 +135,7 @@ test('首页和工作页面共用后台品牌，首页不把品牌替换为个�
   await expect(brand.locator('.brand-name')).toHaveText('我的工作台', { timeout: 20000 });
   await expect(brand.locator('.brand-sub')).toHaveText('Workbench');
   await expect(brand).not.toHaveClass(/home-side-profile/);
-  await page.locator('.sidebar [data-nav-toggle="work"]').click();
-  await page.locator('.sidebar [data-nav="work/lessons"]').click();
+  await page.locator('.sidebar [data-nav="lessons"]').click();
   await expect(page.locator('#main')).not.toBeEmpty();
   await expect(brand.locator('.brand-name')).toHaveText('我的工作台');
   await expect(brand.locator('.brand-sub')).toHaveText('Workbench');

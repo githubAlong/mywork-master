@@ -126,7 +126,7 @@ test('首页布局编辑入口位于顶栏且卡片管理仍然可用', () => {
 });
 
 test('首页保留的工作与个人中心导航目标已注册', () => {
-  assert.match(ui, /id: 'work', label: '工作'/);
+  assert.doesNotMatch(ui, /id: 'work', label: '工作'/);
   assert.match(ui, /id: 'timetable', label: '课表'/);
   assert.match(ui, /id: 'invigilation', label: '监考'/);
   assert.match(ui, /id: 'me', label: '我的'/);

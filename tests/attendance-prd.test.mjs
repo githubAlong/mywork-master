@@ -17,7 +17,7 @@ test('PRD 固定六页签字段顺序', () => {
 test('三态循环保持未登记、在岗、未在岗语义', () => {
   assert.equal(nextTriState('u'),'y');
   assert.equal(nextTriState('y'),'n');
-  assert.equal(nextTriState('n'),'y');
+  assert.equal(nextTriState('n'),'u');
 });
 
 test('请假区间按开始与结束日期覆盖当前日期', () => {

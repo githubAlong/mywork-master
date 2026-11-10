@@ -23,7 +23,7 @@ export const ATTENDANCE_COLUMNS = {
 };
 
 export function nextTriState(value) {
-  return value === 'y' ? 'n' : 'y';
+  return value === 'y' ? 'n' : value === 'n' ? 'u' : 'y';
 }
 
 export function leaveCoversDate(leave, date) {
@@ -195,13 +195,19 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
   if (type === 'class') legacy.listen = deriveLegacyRosterState(teacher, { ...context, classRows: rows }).listen;
   const row = rows.find(item => !rowData(item).__deleted && matchesGridTeacher(item, teacher));
   const saved = gridRecord(row, context.period || 1) || {};
-  return {
+  const result = {
     class: legacy.class, sit: legacy.sit, listen: legacy.listen ? 'y' : 'u',
     research: legacy.research ? 'y' : 'u', leave: legacy.leave,
     remark: type === 'seat' ? legacy.seatRecord?.remark || ''
       : rowData(row).__classRecord?.remark || rowData(row).__research?.remark || '',
     ...saved,
   };
+  // Historical multi-category entries display one category without rewriting history.
+  const preferred = {seat:'sit',class:'class',research:'research'}[type];
+  const selected = [preferred, ...GRID_KEYS.filter(key => key !== preferred)]
+    .find(key => result[key] === 'y' || result[key] === 'n');
+  for (const key of GRID_KEYS) if (key !== selected) result[key] = 'u';
+  return result;
 }
 
 export function updateTeacherGrid(rows, teacher, type, period, key, value, context = {}) {
@@ -215,6 +221,10 @@ export function updateTeacherGrid(rows, teacher, type, period, key, value, conte
   }
   const record = deriveTableGridState(teacher, type, rows, { ...context, period });
   const next = { ...record, [key]: value };
+  if (GRID_KEYS.includes(key)) {
+    if (!['u','y','n'].includes(value)) throw new Error('无效的考勤状态');
+    for (const other of GRID_KEYS) if (other !== key) next[other] = 'u';
+  }
   row.teacher = teacher.name;
   row.subject = teacher.subject || '';
   row.data = {

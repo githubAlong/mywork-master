@@ -100,9 +100,7 @@ const navGroupOverrides = new Map();
 
 export const NAV = [
   { id: 'home', label: '首页', icon: 'home' },
-  {
-    id: 'work', label: '工作', icon: 'work',
-    sub: [
+
       { id: 'lessons', label: '上课', icon: 'zap' },
       /* 上课之后紧跟课表：先知道今天上什么，再记上没上。 */
       { id: 'timetable', label: '课表', icon: 'cal' },
@@ -113,8 +111,6 @@ export const NAV = [
       { id: 'invigilation', label: '监考', icon: 'shield' },
       { id: 'trips', label: '出差', icon: 'car' },
       { id: 'notes', label: '笔记', icon: 'edit' },
-    ],
-  },
   {
     id: 'materials', label: '小助手', icon: 'folder',
     sub: [
@@ -132,7 +128,7 @@ export const NAV = [
 
 /* 旧的「工作页页签」列表由上面的 NAV 派生，不再单独维护一份，
    否则改一处漏一处（以前 WORK_TABS 和页面里的 if 链就是两份清单）。 */
-export const WORK_TABS = (NAV.find((n) => n.id === 'work')?.sub || []).map((t) => ({ id: t.id, label: t.label }));
+export const WORK_TABS = NAV.filter(n => ['lessons','timetable','prep','repairs','attendance','invigilation','trips','notes'].includes(n.id)).map(({id,label}) => ({id,label}));
 export const DAILY_TABS = [
   { id: 'notes', label: '便签' },
   { id: 'homework', label: '作业' },
@@ -357,7 +353,7 @@ function subNavHTML(n) {
 function isActive(id) {
   const r = state.route;
   if (id === 'home') return r === 'home' || r === '';
-  if (id === 'work') return r.startsWith('work') || r === 'repairs';
+  if (WORK_TABS.some(item => item.id === id)) return r === id || r.startsWith(id + '/');
   if (id === 'materials') return r === 'materials' || r.startsWith('materials/');
   if (id === 'daily') return r.startsWith('daily');
   if (id === 'study') return r.startsWith('study');
@@ -460,27 +456,17 @@ export async function render() {
   if (seg === 'work' && ['selfstudy', 'textbook', 'pick', 'mystery'].includes(tab)) {
     path = 'materials/' + tab; location.replace('#/' + path); return render();
   }
-  if (seg === 'repairs') { path = 'work/repairs'; location.replace('#/' + path); return render(); }
-  /* #/work 没有第二段时补一个默认二级，否则侧栏高亮会落空 */
-  if (seg === 'work' && !tab) { path = 'work/lessons'; location.replace('#/' + path); return render(); }
-  /* 其他一级导航补默认二级（#/daily → #/daily/notes），
-     否则侧栏高亮只匹配到一级，「日常」下面的「便签」没有选中态。 */
-  if (seg === 'daily' && !tab) { path = 'daily/notes'; location.replace('#/' + path); return render(); }
-  /* 旧版 #/work/selfstudy 等简写已在上方迁移到 materials/<tab>。 */
-  /* 【#/timetable、#/attendance 这类「二级直接当一级用」的老地址】
-     改造前「工作」的二级页是 #/work/lessons 这种形式，但用户手工改地址、
-     或者从旧页面里复制出来的链接很可能是 #/timetable ——
-     那时候 render() 只按第一段找视图，找不到就退首页，至少还能打开。
-     现在第一段必须是 NAV 里的 id，找不到会直接白屏（用户反馈「课表没变」，
-     很可能就是停在了一个空白页上）。这里统一把已知的二级 id 补回 work/ 前面。
-     判断依据直接读 NAV，新加二级项时不用再来改这段。 */
-  if (!tab && WORK_TABS.some((x) => x.id === seg)) {
-    path = 'work/' + seg; location.replace('#/' + path); return render();
+  // Keep bookmarks and in-app links working after promoting work modules.
+  if (seg === 'work') {
+    path = (tab || 'lessons') + (third ? '/' + third : '');
+    location.replace('#/' + path); return render();
   }
+  if (seg === 'daily' && !tab) { path = 'daily/notes'; location.replace('#/' + path); return render(); }
   [seg, tab, third] = path.split('/');
 
   let viewName = seg;
-  if (seg === 'work') viewName = 'work';
+  const isWorkModule = WORK_TABS.some(item => item.id === seg);
+  if (isWorkModule) viewName = 'work';
   if (seg === 'daily') viewName = 'daily';
   if (seg === 'study') viewName = 'study';
   if (seg === 'messages' || seg === 'profile') viewName = 'me';
@@ -590,7 +576,7 @@ export async function render() {
     requestAnimationFrame(initEdge);
   }
   try {
-    await fn(main, { tab: tab || defaultTab(seg), third: third || '', query });
+    await fn(main, { tab: isWorkModule ? seg : tab || defaultTab(seg), third: isWorkModule ? tab || '' : third || '', query });
     // 期间又发生了一次 render：本次结果作废（DOM 已被新一次接管）
     if (mySeq !== renderSeq) return;
   } catch (e) {

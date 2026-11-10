@@ -30,7 +30,7 @@ test('保存后重新读取保留全部勾选、请假及备注；其他节次�
   updateTeacherGrid(secondPeriod,teacher,'seat',2,'sit','n',context);
   const restored = JSON.parse(JSON.stringify(mergeTeacherGridRows(saved,secondPeriod,2)));
   const first = deriveTableGridState(teacher,'seat',restored,context);
-  assert.deepEqual(first,{class:'n',sit:'y',listen:'y',research:'n',leave:'病假',remark:'上午登记'});
+  assert.deepEqual(first,{class:'u',sit:'u',listen:'u',research:'n',leave:'病假',remark:'上午登记'});
   assert.equal(deriveTableGridState(teacher,'seat',restored,{...context,period:2}).sit,'n');
   assert.equal(saved[0].data.__teacherGrid['2'],undefined);
 });
@@ -58,7 +58,7 @@ test('同名不同学科、不同年级教师不会共用登记数据，新增�
   updateTeacherGrid(rows,renamed,'seat',1,'listen','y',context);
   assert.equal(rows.length,1);
   assert.equal(rows[0].teacher,'李新名');
-  assert.equal(deriveTableGridState(renamed,'seat',rows,context).sit,'y');
+  assert.equal(deriveTableGridState(renamed,'seat',rows,context).sit,'u');
 });
 
 test('编辑当前节次保留旧的班级、教研安排、其他节次和历史字段', () => {
@@ -80,7 +80,7 @@ test('汇总统计读取已保存的统一表格，不再遗漏勾选', () => {
   const seatRows=[],classRows=[],researchRows=[];
   updateTeacherGrid(seatRows,teacher,'seat',1,'sit','y',context);
   updateTeacherGrid(classRows,teacher,'class',1,'class','y',context);
-  updateTeacherGrid(classRows,teacher,'class',1,'listen','y',context);
+  updateTeacherGrid(classRows,teacher,'class',2,'listen','y',context);
   updateTeacherGrid(researchRows,teacher,'research',1,'research','y',context);
   updateTeacherGrid(researchRows,teacher,'research',1,'leave','事假',context);
   const summary=calculateDailySummary({...context,teachers:[teacher],seatRows,classRows,researchRows});
@@ -100,4 +100,20 @@ test('空数据、已删除行、未登记和明确未到不混淆', () => {
   assert.equal(deriveRosterState(teacher,{...context,seatRows:rows}).sit,'n');
   rows[0].data.__deleted=true;
   assert.equal(deriveRosterState(teacher,{...context,seatRows:rows}).sit,'u');
+});
+
+test('三张表每节只能选择一种类别，默认全空并支持循环清空', () => {
+  for (const type of ['seat','class','research']) {
+    const rows=[];
+    const keys=['class','sit','listen','research'];
+    assert.deepEqual(keys.map(key=>deriveTableGridState(teacher,type,rows,context)[key]),['u','u','u','u']);
+    for (const key of keys) {
+      for (const value of ['y','n','u']) {
+        updateTeacherGrid(rows,teacher,type,1,key,value,context);
+        const restored=deriveTableGridState(teacher,type,JSON.parse(JSON.stringify(rows)),context);
+        assert.equal(restored[key],value);
+        assert.ok(keys.filter(other=>other!==key).every(other=>restored[other]==='u'));
+      }
+    }
+  }
 });

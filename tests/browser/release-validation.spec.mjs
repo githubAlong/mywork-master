@@ -3,6 +3,8 @@ import {test,expect} from '@playwright/test';
 async function seed(page,extra={}) {
   // Isolated localhost-only account; all modifications stay in this browser context.
   await page.addInitScript(extra=>{
+    if(sessionStorage.getItem("release-fixture-seeded")) return;
+    sessionStorage.setItem("release-fixture-seeded","1");
     const db={seqs:{},meta:{seeded:true,rosterSeeded:1},teachers:[],repairs:[],courses:[],periods:[],...extra};
     const text=JSON.stringify(db);
     localStorage.setItem('wb_static_db_v1',text);
@@ -86,4 +88,34 @@ test('首页和个人中心：个人名片可见，个人信息默认收起并�
   await expect(profile).toHaveJSProperty('open',false);
   await profile.locator('summary').click();
   await expect(profile).toHaveJSProperty('open',true);
+});
+
+test('导航提升为一级，三张表每位教师只选一种状态并可回到空白',async({page})=>{
+  await seed(page,{teachers:[{id:1,name:'李老师',subject:'语文',grade:'高一',active:1}]});
+  await page.goto('/?e2e=1#/work/attendance/高一');
+  await expect(page).toHaveURL(/#\/attendance\//);
+  await expect(page.locator('.sidebar [data-nav-toggle="work"]')).toHaveCount(0);
+  for(const id of ['lessons','timetable','prep','repairs','attendance','invigilation','trips','notes']) {
+    await expect(page.locator('.sidebar .side-nav > [data-nav="'+id+'"]')).toBeVisible();
+  }
+  for(const type of ['seat','class','research']) {
+    await page.locator('[data-tab="'+type+'"]').click();
+    const mark=key=>page.locator('[data-grid-person="1"][data-grid-key="'+key+'"]');
+    for(const key of ['class','sit','listen','research']) await expect(mark(key)).toHaveText('—');
+    await mark('class').click(); await expect(mark('class')).toHaveText('✓');
+    await mark('class').click(); await expect(mark('class')).toHaveText('✗');
+    await mark('class').click(); await expect(mark('class')).toHaveText('—');
+    await mark('sit').click(); await mark('listen').click();
+    await expect(mark('sit')).toHaveText('—'); await expect(mark('listen')).toHaveText('✓');
+    await page.locator('[data-grid-save]').click();
+    await expect(page.locator('[data-grid-save]')).toBeEnabled();
+    await page.reload();
+    await page.locator('[data-tab="'+type+'"]').click();
+    await expect(mark('listen')).toHaveText('✓');
+    await expect(mark('sit')).toHaveText('—');
+    await mark('listen').click(); await mark('listen').click();
+    await page.locator('[data-grid-save]').click();
+    await expect(page.locator('[data-grid-save]')).toBeEnabled();
+    await page.reload(); await page.locator('[data-tab="'+type+'"]').click(); await expect(mark('listen')).toHaveText('—');
+  }
 });
