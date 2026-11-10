@@ -7,6 +7,7 @@ import { renderTimetable as renderMyTimetable } from './timetable.js';
 import { detectTimetable } from './ttimage.js';
 import { loginBanner, hookBanner } from './auth.js';
 import { renderPreps } from './prep.js';
+import { renderTripManagement } from './trips.js';
 import { MAX_MATERIAL_SIZE, syncMaterialSharing } from './material-sharing.mjs';
 
 const M = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
@@ -107,7 +108,7 @@ registerView(async function work(main, { tab, third }) {
     repairs: ['维修记录表', '按月份查看维修记录、处理状态与待跟踪事项'],
     attendance: ['考勤', '按年级分开管：花名册、每日三张表、统计'],
     invigilation: ['监考', '监考场次、时间、补贴，一场不漏'],
-    trips: ['出差', '行程、报销、补贴，按天自动算'],
+    trips: ['出差', '行程、报销记录'],
     notes: ['笔记', '随手记的教学笔记，可搜索、可归档'],
   }[t] || ['工作', ''];
 
@@ -146,7 +147,7 @@ registerView(async function work(main, { tab, third }) {
     return renderAttendancePRD(body, { grade });
   }
   if (t === 'invigilation') return renderInvigilation(body);
-  if (t === 'trips') return renderTrips(body);
+  if (t === 'trips') { headEl.remove(); return renderTripManagement(body); }
   if (t === 'repairs') {
     const m = await import('./repairs.js');
     return m.renderRepairsBody(body);
@@ -3199,4 +3200,3 @@ function mdToHtml(md) {
 }
 
 export { courseEditor, monthShift };
-
