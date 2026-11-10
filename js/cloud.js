@@ -583,6 +583,19 @@ export async function saveWorkbenchSnapshot(payload, expectedRevision = 0) {
   return row;
 }
 
+export async function uploadMaterialFiles(files, ownerId) {
+  const config = cfg(), token = await freshToken();
+  if (!token) throw new Error('请先登录教师账号后上传教材');
+  const form = new FormData();
+  form.append('owner_id', String(ownerId));
+  for (const file of files) form.append('files', new Blob([file.data], { type: file.mime || 'application/octet-stream' }), file.filename);
+  const response = await fetch(config.url + '/functions/v1/material-sharing', { method: 'POST', headers: { apikey: config.anon, Authorization: 'Bearer ' + token }, body: form });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || '教材上传失败，请稍后重试');
+  if (!Array.isArray(result.files) || result.files.length !== files.length) throw new Error('教材上传未完成，请重试');
+  return result.files;
+}
+
 /* ---------------- 字段清洗与表配置 ---------------- */
 
 /* 前端传进来的字段可能带这些「本地专用」的东西，云端不认，剔掉
@@ -1018,3 +1031,4 @@ export async function listAttendance(query = {}) {
     rows: rows.filter((r) => ids.has(String(r.table_id))),
   };
 }
+

@@ -3684,6 +3684,13 @@ on('POST', '/upload', async ({ body }) => {
   const ownerType = body?.fields?.owner_type || 'misc';
   const ownerId = Number(body?.fields?.owner_id || 0);
 
+  if (ownerType === 'material' && await cloudReady()) {
+    for (const file of files) if (byteLen(file.data) > 50 * 1024 * 1024) fail(413, '教材单个文件不能超过 50 MB');
+    const cloud = await import('./cloud.js');
+    const uploaded = await cloud.uploadMaterialFiles(files, ownerId);
+    return uploaded.map(file => ({ ...file, id: saveAttachment(ownerType, ownerId, file.name, file.mime, file.size, file.url) }));
+  }
+
   /* 先把所有文件都量一遍再动手写。
      原来是一个个循环里校验、边校验边写：第 3 个超限时，前 2 个已经落库了，
      用户看到的是"报错了"，但库里其实多了两个 —— 重试就变成四个。
@@ -3771,7 +3778,7 @@ on('GET', '/links', () => (load().links || [])
 on('POST', '/links', ({ body }) => {
   const db = load();
   db.links = db.links || [];
-  const code = body?.code && /^[a-z0-9]{4,20}$/.test(body.code) ? body.code : randomCode(6);
+  const code = body?.code && /^[a-z0-9]{12,64}$/.test(body.code) ? body.code : crypto.randomUUID().replace(/-/g, '');
   const id = T('links').reduce((mx, x) => Math.max(mx, num(x.id)), 0) + 1;
   const row = {
     id, code, title: body?.title || '班级资料站',
@@ -5022,3 +5029,4 @@ export function getSeedFileText(path) {
 
 /* 给前端读的「当前是不是静态版」标记 */
 export const STATIC_MODE = true;
+
