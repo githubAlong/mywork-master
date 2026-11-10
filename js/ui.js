@@ -92,10 +92,6 @@ export const state = {
   geoMode: ls.get('geoMode', 'auto'),
 };
 
-/* 一级目录：首页 / 工作 / 小助手 / 日常 / 学习 / 回收站 / 我的。
-   工作下面只放教师日常工作模块；小助手独立成一级目录，
-   自习、教材、抽人、盲盒全部作为它的二级入口。
-   这里只调整教师工作台导航层级，不改变各模块的数据和业务。 */
 const navGroupOverrides = new Map();
 
 export const NAV = [
@@ -111,16 +107,11 @@ export const NAV = [
       { id: 'invigilation', label: '监考', icon: 'shield' },
       { id: 'trips', label: '出差', icon: 'car' },
       { id: 'notes', label: '笔记', icon: 'edit' },
-  {
-    id: 'materials', label: '小助手', icon: 'folder',
-    sub: [
-      { id: 'selfstudy', label: '自习', icon: 'clock' },
-      { id: 'textbook', label: '教材', icon: 'book' },
-      { id: 'pick', label: '抽人', icon: 'dice' },
-      { id: 'mystery', label: '盲盒', icon: 'gift' },
-    ],
-  },
-  { id: 'daily', label: '日常', icon: 'daily' },
+  { id: 'selfstudy', label: '自习', icon: 'clock' },
+  { id: 'textbook', label: '教材', icon: 'book' },
+  { id: 'pick', label: '抽人', icon: 'dice' },
+  { id: 'mystery', label: '盲盒', icon: 'gift' },
+  { id: 'daily', label: '便签', icon: 'daily' },
   { id: 'study', label: '学习', icon: 'study' },
   { id: 'recycle', label: '回收站', icon: 'trash' },
   { id: 'me', label: '我的', icon: 'me' },
@@ -354,6 +345,7 @@ function isActive(id) {
   const r = state.route;
   if (id === 'home') return r === 'home' || r === '';
   if (WORK_TABS.some(item => item.id === id)) return r === id || r.startsWith(id + '/');
+  if (['selfstudy', 'textbook', 'pick', 'mystery'].includes(id)) return r === id || r.startsWith(id + '/');
   if (id === 'materials') return r === 'materials' || r.startsWith('materials/');
   if (id === 'daily') return r.startsWith('daily');
   if (id === 'study') return r.startsWith('study');
@@ -444,17 +436,15 @@ export async function render() {
   if (previousRoute !== path) navGroupOverrides.clear();
   let [seg, tab, third] = path.split('/');
 
-  /* 【旧地址兼容】
-     #/selfstudy、#/repairs 以前是一级导航，收藏夹、群里的链接都可能是这个。
-     直接 404 到首页太粗暴，原地 translate 成新地址，看起来只是「跳了一下」。 */
-  if (seg === 'selfstudy') { path = 'materials/selfstudy'; location.replace('#/' + path); return render(); }
-  /* 兼容旧版「工作 → 小助手」地址，统一迁移到新的一级「小助手」目录。 */
+  if (seg === 'materials' && ['selfstudy', 'textbook', 'pick', 'mystery'].includes(tab)) {
+    path = path.split('/').slice(1).join('/'); location.replace('#/' + path); return render();
+  }
   if (seg === 'work' && tab === 'materials') {
-    path = third ? 'materials/' + third : 'materials';
+    path = third ? path.split('/').slice(2).join('/') : 'materials';
     location.replace('#/' + path); return render();
   }
   if (seg === 'work' && ['selfstudy', 'textbook', 'pick', 'mystery'].includes(tab)) {
-    path = 'materials/' + tab; location.replace('#/' + path); return render();
+    path = path.split('/').slice(1).join('/'); location.replace('#/' + path); return render();
   }
   // Keep bookmarks and in-app links working after promoting work modules.
   if (seg === 'work') {
@@ -466,7 +456,9 @@ export async function render() {
 
   let viewName = seg;
   const isWorkModule = WORK_TABS.some(item => item.id === seg);
+  const isToolModule = ['selfstudy', 'textbook', 'pick', 'mystery'].includes(seg);
   if (isWorkModule) viewName = 'work';
+  if (isToolModule) viewName = 'materials';
   if (seg === 'daily') viewName = 'daily';
   if (seg === 'study') viewName = 'study';
   if (seg === 'messages' || seg === 'profile') viewName = 'me';
@@ -576,7 +568,7 @@ export async function render() {
     requestAnimationFrame(initEdge);
   }
   try {
-    await fn(main, { tab: isWorkModule ? seg : tab || defaultTab(seg), third: isWorkModule ? tab || '' : third || '', query });
+    await fn(main, { tab: isWorkModule || isToolModule ? seg : tab || defaultTab(seg), third: isWorkModule || isToolModule ? tab || '' : third || '', query });
     // 期间又发生了一次 render：本次结果作废（DOM 已被新一次接管）
     if (mySeq !== renderSeq) return;
   } catch (e) {
@@ -1329,3 +1321,4 @@ export function setUser(u) { state.user = u; }
 export { authLogin };
 
 window.addEventListener('wb:unauth', () => { if (state.user) { state.user = null; renderAuth(); } });
+

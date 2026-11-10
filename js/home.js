@@ -2124,7 +2124,7 @@ function bindHome() {
       qi.value = ''; quickAt = '';
       if (qh) { qh.textContent = ''; qh.classList.remove('on'); }
       if (qtBtn) qtBtn.classList.remove('on');
-      toast('已记一笔，进「今日事项」和「日常」便签');
+      toast('已记一笔，可在「今日事项」和「便签」查看');
       await refreshHome();
       // 刷新后焦点回到输入框，方便连着记第二笔
       const ni = document.getElementById('quick-input');
@@ -2263,3 +2263,4 @@ function openWeatherSheet() {
 
 /* 清理计时器（切换页面时） */
 window.addEventListener('hashchange', () => { clearInterval(cdTimer); clearInterval(clockTimer); });
+
