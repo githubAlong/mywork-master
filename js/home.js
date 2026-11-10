@@ -1,3 +1,4 @@
+import { resolvePlace, locationWarning } from './weather-location.mjs';
 import { api, el, esc, toast, sheet, confirmDialog, promptDialog, ymd, pad2, WD_CN, WD_SHORT, fmtTime, fmtDateTime, relDay, parseDT, countdown, speak, stopSpeak, colorOf, ls, exportUrl, download, addToSystemCalendar } from './core.js';
 import { registerView, state, icon, go, render, refreshUnread, paintUnread, onViewLeave } from './ui.js';
 import { syncDay, DAY_SYNC } from './homelayout.js';
@@ -151,41 +152,21 @@ function pushRecentCity(c) {
    Asia/Shanghai → "Shanghai"。整个中国大陆同属一个时区，所以不管人
    在北京还是成都，定位完都显示 Shanghai。看着像定位成功了，其实城市名从来没对过。
 
-   现在改用 BigDataCloud 的免费反查接口（无需 key，支持中文）。
+   优先使用 BigDataCloud，失败时由独立的地区查询模块切换 Photon 备用服务。
    它有 city / principalSubdivision 两级，直辖市 city 就等于省，去重一下。
    反查失败不阻塞定位：坐标本身是准的，退成「当前位置」照样能查天气。 */
 async function reverseGeocode(lat, lon) {
-  try {
-    const r = await fetch(
-      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`,
-      { signal: AbortSignal.timeout(7000) },
-    ).then((x) => (x.ok ? x.json() : null));
-
-    // 「上海市」→「上海」，"北京市" → "北京"
-    const trim = (s) => String(s || '').replace(/市$/, '').trim();
-    const city = trim(r?.city);
-    if (city) return city;
-
-    // 有的地方 city 为空，退到省/州一级
-    const prov = trim(r?.principalSubdivision);
-    if (prov) return prov;
-
-    // 连行政区都没查到时，别把「39.90, 116.41」这种坐标串当成城市名存进设置：
-    // 首页标题会显示成一串数字，而且会被当成「用户选的城市」长期留着。
-    return '';
-  } catch {
-    return '';
-  }
+  return resolvePlace(lat, lon, { previous: state.city });
 }
 async function locate() {
   if (!navigator.geolocation) return toast('当前设备不支持定位', 'warn');
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      const name = (await reverseGeocode(latitude, longitude)) || '当前位置';
+      const resolved = await reverseGeocode(latitude, longitude);
       /* 定位用 GPS 原始坐标，不往任何城市表上吸附。
          天气接口本身按坐标算，GPS 落点比「市中心」还准。 */
-      state.city = { name, lat: latitude, lon: longitude };
+      state.city = { ...resolved, lat: latitude, lon: longitude };
       state.weather = null;
       ls.set('city', state.city);
       pushRecentCity(state.city);
@@ -427,12 +408,23 @@ function pickCity() {
 
   body.querySelector('#use-geo').onclick = async () => {
     const c = await locate();
-    if (c) { s.close(); toast('已定位：' + c.name); applyCityWeather(); }
+    if (c) {
+      s.close();
+      if (c.locationResolved) toast('已定位：' + c.fullName);
+      else toast(locationWarning(c), 'warn', 8000);
+      applyCityWeather();
+    }
   };
 }
 
 /* 顶栏用的「简要天气」：只留一眼要看的——温度、天气、穿搭。
    湿度/风速/日出日落、小时预报、7 天预报都折进「详细天气」里 */
+function weatherLocationCredit(city) {
+  return city?.locationProvider === 'photon'
+    ? '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="font-size:10px;color:var(--muted)">地名 © OpenStreetMap</a>'
+    : '';
+}
+
 function weatherBriefHTML() {
   const w = state.weather?.raw;
   const c = state.city;
@@ -440,7 +432,7 @@ function weatherBriefHTML() {
      早先这里只输出城市名，一旦天气拉不到（断网 / 接口被墙），
      整个天气卡就只剩一行字，连切城市和重试的按钮都没有 ——
      用户就被卡死在「北京 天气加载中」，怎么点都没用（第 8 条）。 */
-  if (!w) return `<div class="wxb-city">${icon('loc', 12)} ${esc(c.name)}
+  if (!w) return `<div class="wxb-city">${icon('loc', 12)} ${esc(c.fullName || c.name)}${weatherLocationCredit(c)}
       <button class="loc-btn" data-pick-city title="选择所在城市">${icon('loc', 10)} 选城市</button>
       <span style="flex:1"></span>
       <button class="icon-btn sm" data-wx-refresh title="重新加载天气">${icon('refresh', 14)}</button>
@@ -451,7 +443,7 @@ function weatherBriefHTML() {
   const cur = w.current; const [emo, desc] = wxInfo(cur.weather_code);
   const day = w.daily;
   const rainToday = (day.precipitation_probability_max?.[0] || 0) > 40 || cur.precipitation > 0;
-  return `<div class="wxb-city">${icon('loc', 12)} ${esc(c.name)}
+  return `<div class="wxb-city">${icon('loc', 12)} ${esc(c.fullName || c.name)}${weatherLocationCredit(c)}
       <button class="loc-btn" data-pick-city title="选择所在城市">${icon('loc', 10)} 选城市</button>
       <span style="flex:1"></span>
       <button class="icon-btn sm" data-wx-refresh title="刷新天气">${icon('refresh', 14)}</button>
