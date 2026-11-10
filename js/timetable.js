@@ -2,7 +2,7 @@ import { api, el, esc, toast, sheet, saving, confirmDialog, WD_SHORT, ymd } from
 import { state, icon, onViewLeave } from './ui.js';
 import { detectTimetable } from './ttimage.js';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
-import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
+import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods, completeTimetablePeriods } from './timetable-periods.mjs';
 
 const DAYS = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -253,16 +253,17 @@ export async function renderTimetable(box) {
     const key = appliedType + "|" + appliedGrade;
     const configured = periodDefinitions[key];
     if (Array.isArray(configured) && configured.length) {
-      return [...configured].sort((a, b) => Number(a.order) - Number(b.order)).map((item) => ({
+      const configuredRows = [...configured].sort((a, b) => Number(a.order) - Number(b.order)).map((item) => ({
         id: item.id || "custom-" + item.period_no,
         period_no: Number(item.period_no),
         name: String(item.name || ("第" + item.period_no + "节")),
         start_time: cleanPeriodTime(item.start_time),
         end_time: cleanPeriodTime(item.end_time),
       }));
+      return completeTimetablePeriods(configuredRows, visibleCourses, { periodTimes, scheduleType: appliedType });
     }
     const byNo = new Map(allPeriods.map((period) => [Number(period.period_no), period]));
-    for (const number of [0, 1, 2, 3, 4, 5, 5.5, 6, 7, 8, 9]) {
+    for (const number of [0, 1, 2, 3, 4, 5, 5.5, 6, 7, 8, 9, 10]) {
       if (byNo.has(number)) continue;
       const fallback = periodDefaults(number, appliedType);
       byNo.set(number, {
@@ -270,7 +271,7 @@ export async function renderTimetable(box) {
         name: periodName({ period_no: number }), start_time: fallback[0] || "", end_time: fallback[1] || "",
       });
     }
-    return sortPeriods([...byNo.values()].filter((period) => [0, 1, 2, 3, 4, 5, 5.5, 6, 7, 8, 9, 10].includes(Number(period.period_no))));
+    return sortPeriods(completeTimetablePeriods([...byNo.values()], visibleCourses, { periodTimes, scheduleType: appliedType }));
   }
 
   function currentLesson(courses) {

@@ -124,3 +124,4 @@
   outline:none;border-color:#6b9cff;box-shadow:0 0 0 3px rgba(22,93,255,.08);
 }
 .attendance-prd .aprd-toolbar button:disabled{opacity:.48;cursor:not-allowed}
+.attendance-prd span.aprd-mark{display:inline-flex;align-items:center;justify-content:center;cursor:default}

@@ -12,11 +12,12 @@ export const DEFAULT_PERIODS = [
 
 export const LEAVE_TYPES = ['事假', '病假', '婚假', '丧假', '产假', '公假', '调休', '公出'];
 
+const TEACHER_COLUMNS = Object.freeze(['序号', '归属部门', '归属年级', '姓名', '学科', '上课', '坐班', '听课', '教研', '请假', '备注', '操作']);
 export const ATTENDANCE_COLUMNS = {
-  roster: ['序号', '归属部门', '归属年级', '姓名', '学科', '上课', '坐班', '听课', '教研', '请假', '备注', '操作'],
-  seat: ['序号', '姓名', '学科', '年级/部门', '坐班', '请假', '听课', '备注'],
-  class: ['序号', '班级', '节次', '任课教师', '学科', '上课', '听课教师', '备注'],
-  research: ['学科', '节次(时间)', '地点', '主持人', '应到人数', '实到人数', '未到名单', '状态'],
+  roster: TEACHER_COLUMNS,
+  seat: TEACHER_COLUMNS,
+  class: TEACHER_COLUMNS,
+  research: TEACHER_COLUMNS,
   leave: ['姓名', '学科', '类型', '开始', '结束', '天数', '状态', '备注'],
   summary: ['序号', '姓名', '学科', '坐班（在/应到）', '上课节次', '听课次数', '教研（已到/—）', '请假天数', '综合状态'],
 };
@@ -56,7 +57,7 @@ export function matchesAttendancePeriod(value, period) {
   return current >= Number(match[1]) && current <= Number(match[2] || match[1]);
 }
 
-export function deriveRosterState(teacher, {
+function deriveLegacyRosterState(teacher, {
   seatRows = [],
   classRows = [],
   researchRows = [],
@@ -106,7 +107,7 @@ export function deriveRosterState(teacher, {
   };
 }
 
-export function calculateDailySummary({
+function calculateLegacyDailySummary({
   teachers = [],
   seatRows = [],
   classRows = [],
@@ -171,4 +172,138 @@ export function calculateDailySummary({
     leavePeople,
     rows,
   };
+}
+
+const GRID_TYPES = ['seat', 'class', 'research'];
+const GRID_KEYS = ['class', 'sit', 'listen', 'research'];
+const gridRecord = (row, period) => rowData(row).__teacherGrid?.[String(period)];
+export function matchesGridTeacher(row, teacher) {
+  const id = rowData(row).__teacherId;
+  if (id != null && teacher?.id != null) return String(id) === String(teacher.id);
+  return String(row?.teacher || '').trim() === String(teacher?.name || '').trim()
+    && String(row?.subject || '').trim() === String(teacher?.subject || '').trim();
+}
+
+export function deriveTableGridState(teacher, type, rows, context = {}) {
+  const legacy = deriveLegacyRosterState(teacher, {
+    ...context, seatRows: [], classRows: [], researchRows: [],
+    [type + 'Rows']: rows.filter(row => !rowData(row).__deleted && (matchesGridTeacher(row, teacher)
+      || (type === 'research' && rowData(row).__research
+        && String(rowData(row).__research.subject || row.subject || row.teacher || '').trim() === String(teacher.subject || '').trim()))),
+  });
+  // Class listening records name the listener rather than the class teacher.
+  if (type === 'class') legacy.listen = deriveLegacyRosterState(teacher, { ...context, classRows: rows }).listen;
+  const row = rows.find(item => !rowData(item).__deleted && matchesGridTeacher(item, teacher));
+  const saved = gridRecord(row, context.period || 1) || {};
+  return {
+    class: legacy.class, sit: legacy.sit, listen: legacy.listen ? 'y' : 'u',
+    research: legacy.research ? 'y' : 'u', leave: legacy.leave,
+    remark: type === 'seat' ? legacy.seatRecord?.remark || ''
+      : rowData(row).__classRecord?.remark || rowData(row).__research?.remark || '',
+    ...saved,
+  };
+}
+
+export function updateTeacherGrid(rows, teacher, type, period, key, value, context = {}) {
+  if (!GRID_TYPES.includes(type) || ![...GRID_KEYS, 'leave', 'remark'].includes(key)) {
+    throw new Error('无效的考勤表或字段');
+  }
+  let row = rows.find(item => !rowData(item).__deleted && matchesGridTeacher(item, teacher));
+  if (!row) {
+    row = { teacher: teacher.name, subject: teacher.subject || '', data: {} };
+    rows.push(row);
+  }
+  const record = deriveTableGridState(teacher, type, rows, { ...context, period });
+  const next = { ...record, [key]: value };
+  row.teacher = teacher.name;
+  row.subject = teacher.subject || '';
+  row.data = {
+    ...rowData(row), __teacherId: teacher.id,
+    __teacherGrid: { ...(rowData(row).__teacherGrid || {}), [String(period)]: next },
+  };
+  return next;
+}
+
+export function mergeTeacherGridRows(savedRows, draftRows, period) {
+  const rows = savedRows.map(row => ({ ...row, data: { ...rowData(row) } }));
+  for (const draft of draftRows) {
+    const record = gridRecord(draft, period);
+    if (!record || rowData(draft).__deleted) continue;
+    const teacher = { id: rowData(draft).__teacherId, name: draft.teacher, subject: draft.subject };
+    let target = rows.find(row => !rowData(row).__deleted && matchesGridTeacher(row, teacher));
+    if (!target) {
+      target = { teacher: draft.teacher, subject: draft.subject, data: {} };
+      rows.push(target);
+    }
+    target.teacher = draft.teacher;
+    target.subject = draft.subject;
+    target.data = {
+      ...rowData(target), __teacherId: rowData(draft).__teacherId,
+      __teacherGrid: { ...(rowData(target).__teacherGrid || {}), [String(period)]: { ...record } },
+    };
+  }
+  return rows;
+}
+
+export function deriveRosterState(teacher, context = {}) {
+  const legacy = deriveLegacyRosterState(teacher, context);
+  const period = context.period || 1;
+  const hasGrid = GRID_TYPES.some(type => (context[type + 'Rows'] || []).some(row =>
+    !rowData(row).__deleted && matchesGridTeacher(row, teacher) && gridRecord(row, period)));
+  if (!hasGrid) return legacy;
+  const states = GRID_TYPES.map(type => deriveTableGridState(teacher, type, context[type + 'Rows'] || [], context));
+  const aggregate = key => states.some(state => state[key] === 'y') ? 'y'
+    : states.some(state => state[key] === 'n') ? 'n' : 'u';
+  return {
+    ...legacy, class: aggregate('class'), sit: aggregate('sit'),
+    listen: aggregate('listen') === 'y', research: aggregate('research') === 'y',
+    listenStatus: aggregate('listen'), researchStatus: aggregate('research'),
+    leave: states.find(state => state.leave)?.leave || legacy.leave,
+  };
+}
+
+export function calculateDailySummary(context = {}) {
+  const summary = calculateLegacyDailySummary(context);
+  const people = (context.teachers || []).filter(teacher => teacher && Number(teacher.active ?? 1) !== 0);
+  const leavePeople = new Set(activeLeavesFor(context.leaveRecords, context.date)
+    .map(row => String(row.name || row.teacher || '').trim()).filter(Boolean));
+  people.forEach((teacher, index) => {
+    const periods = new Set();
+    for (const type of GRID_TYPES) for (const row of context[type + 'Rows'] || []) {
+      if (rowData(row).__deleted || !matchesGridTeacher(row, teacher)) continue;
+      for (const value of Object.keys(rowData(row).__teacherGrid || {})) periods.add(Number(value));
+    }
+    if (!periods.size) return;
+    const output = summary.rows[index];
+    const states = [...periods].map(period => ({ period, state: deriveRosterState(teacher, { ...context, period }) }));
+    const seats = Array.from({ length: 9 }, (_, i) => deriveRosterState(teacher, { ...context, period: i + 1 }).sit);
+    output.seatPresent = seats.filter(value => value === 'y').length;
+    output.seatExpected = seats.filter(value => value === 'y' || value === 'n').length;
+    // Retain legacy records outside the edited periods, including multiple classes.
+    const classes = (context.classRows || []).filter(row => !rowData(row).__deleted
+      && matchesGridTeacher(row, teacher) && rowData(row).__classRecord?.status === 'y'
+      && !periods.has(Number(rowData(row).__classRecord.period || 1))).length;
+    output.classes = classes + states.filter(item => item.state.class === 'y').length;
+    const seatListens = (context.seatRows || []).filter(row => matchesGridTeacher(row, teacher))
+      .flatMap(row => Object.entries(rowData(row).__periods || {}))
+      .filter(([period, record]) => !periods.has(Number(period)) && !!record.listen_class).length;
+    const classListens = (context.classRows || []).filter(row => !rowData(row).__deleted
+      && !periods.has(Number(rowData(row).__classRecord?.period || 1))
+      && rowData(row).__classRecord?.listeners?.includes(teacher.name)).length;
+    output.listens = seatListens + classListens + states.filter(item => item.state.listen).length;
+    const legacyResearch = (context.researchRows || []).some(row => rowData(row).__research?.attendees?.includes(teacher.name)
+      && ![...periods].some(period => matchesAttendancePeriod(rowData(row).__research.period_time, period)));
+    output.research = legacyResearch || states.some(item => item.state.research) ? '已到' : '—';
+    const onLeave = states.some(item => item.state.leave) || output.leaveDays > 0;
+    if (onLeave) leavePeople.add(teacher.name);
+    output.overall = onLeave ? '请假' : states.some(item => item.state.class === 'n') ? '空堂待核实'
+      : seats.includes('n') ? '未坐班' : output.seatExpected ? '正常' : '未登记';
+  });
+  summary.seatPresent = summary.rows.reduce((sum, row) => sum + row.seatPresent, 0);
+  summary.seatExpected = summary.rows.reduce((sum, row) => sum + row.seatExpected, 0);
+  summary.seatRate = summary.seatExpected ? Math.round(summary.seatPresent / summary.seatExpected * 100) : 0;
+  summary.classes = summary.rows.reduce((sum, row) => sum + row.classes, 0);
+  summary.listens = summary.rows.reduce((sum, row) => sum + row.listens, 0);
+  summary.leavePeople = leavePeople.size;
+  return summary;
 }

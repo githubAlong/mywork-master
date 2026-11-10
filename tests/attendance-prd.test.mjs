@@ -7,9 +7,9 @@ import {
 
 test('PRD 固定六页签字段顺序', () => {
   assert.deepEqual(ATTENDANCE_COLUMNS.roster, ['序号','归属部门','归属年级','姓名','学科','上课','坐班','听课','教研','请假','备注','操作']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.seat, ['序号','姓名','学科','年级/部门','坐班','请假','听课','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.class, ['序号','班级','节次','任课教师','学科','上课','听课教师','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.research, ['学科','节次(时间)','地点','主持人','应到人数','实到人数','未到名单','状态']);
+  for (const type of ['seat','class','research']) {
+    assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
+  }
   assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','天数','状态','备注']);
   assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班（在/应到）','上课节次','听课次数','教研（已到/—）','请假天数','综合状态']);
 });
