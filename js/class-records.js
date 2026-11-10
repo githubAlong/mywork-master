@@ -318,7 +318,7 @@ export async function renderClassRecords(root) {
       const classTime = splitClassTime(r.class_time);
       const status = swap ? '无需结算' : (r.pay_status || '未填写');
       const statusClass = swap ? 'settled' : (status === '已支付' ? 'paid' : status === '未支付' ? 'unpaid' : 'custom');
-      const amount = swap ? '—' : (r.amount == null || r.amount === '' ? '—' : money(r.amount)+' 元');
+      const amount = r.amount == null || r.amount === '' ? '—' : money(r.amount)+' 元';
       const timeLines = [
         classTime.date ? '<strong>'+esc(classTime.date)+'</strong>' : '<strong>—</strong>',
         classTime.period ? '<small>'+esc(classTime.period)+'</small>' : '',
@@ -379,7 +379,7 @@ export async function renderClassRecords(root) {
     type.onchange=toggle;
     function toggle(){
       const swap=type.value==='swap';
-      ['#cr-money-wrap','#cr-paytime-wrap','#cr-status-wrap'].forEach(s=>form.querySelector(s).classList.toggle('cr-hidden',swap));
+      ['#cr-paytime-wrap','#cr-status-wrap'].forEach(s=>form.querySelector(s).classList.toggle('cr-hidden',swap));
       form.querySelector('#cr-original-class-wrap').classList.toggle('cr-hidden',type.value==='normal');
       form.querySelector('#cr-class-label').textContent=type.value==='normal'?'班级':'现班级';
       form.querySelector('#cr-date').parentElement.style.gridColumn=type.value==='normal'?'':'1 / -1';
@@ -447,7 +447,7 @@ export async function renderClassRecords(root) {
         class_name:form.querySelector('#cr-class').value.trim()||null,
         class_time:classTime||null,
         related_person:currentPeople(),
-        amount:type.value==='swap'?null:(moneyInput.value===''?null:Number(moneyInput.value)),
+        amount:moneyInput.value===''?null:Number(moneyInput.value),
         pay_time:type.value==='swap'?null:(form.querySelector('#cr-paytime').value.trim()||null),
         pay_status:type.value==='swap'?null:(form.querySelector('#cr-status').value.trim()||null),
         remark:form.querySelector('#cr-remark').value.trim()||null,
@@ -471,7 +471,7 @@ export async function renderClassRecords(root) {
     const classTime=splitClassTime(r.class_time);
     const people=parseRelatedPeople(r.related_person,r.class_type);
     const originalClass=people.original_class||'';
-    const fields=[['上课类型',TYPE_LABEL[r.class_type]||r.class_type],['学科',r.subject],['班级',r.class_name],['上课日期',classTime.date],['节次',classTime.period],['时间',classTime.time],['代课人',people.substitute_person],['原上课人',people.original_teacher],['金额',r.class_type==='swap'?'无费用':(r.amount==null?'—':money(r.amount)+' 元')],['支付时间',r.class_type==='swap'?'—':r.pay_time],['支付状态',r.class_type==='swap'?'无需结算':r.pay_status],['备注说明',r.remark]];
+    const fields=[['上课类型',TYPE_LABEL[r.class_type]||r.class_type],['学科',r.subject],['班级',r.class_name],['上课日期',classTime.date],['节次',classTime.period],['时间',classTime.time],['代课人',people.substitute_person],['原上课人',people.original_teacher],['金额',r.amount==null||r.amount===''?'—':money(r.amount)+' 元'],['支付时间',r.class_type==='swap'?'—':r.pay_time],['支付状态',r.class_type==='swap'?'无需结算':r.pay_status],['备注说明',r.remark]];
     if(r.class_type!=='normal')fields.splice(2,1,['原班级',originalClass],['现班级',r.class_name]);
     win.document.write('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>上课记录</title><style>body{font-family:Microsoft YaHei,sans-serif;padding:32px;color:#111}h2{font-size:20px;margin:0 0 24px}table{width:100%;border-collapse:collapse}td{border:1px solid #ddd;padding:12px}td:first-child{width:130px;background:#f7f7f7;font-weight:bold}</style><h2>上课记录</h2><table>'+fields.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+esc(v||'—')+'</td></tr>').join('')+'</table><script>window.onload=()=>window.print()<\/script></html>');
     win.document.close();
@@ -494,7 +494,7 @@ export async function renderClassRecords(root) {
         classTime.time,
         people.substitute_person,
         people.original_teacher,
-        r.class_type === 'swap' ? '无费用' : r.amount,
+        r.amount,
         r.pay_time,
         r.class_type === 'swap' ? '无需结算' : r.pay_status,
         r.remark,
