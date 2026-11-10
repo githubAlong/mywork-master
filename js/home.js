@@ -1,3 +1,4 @@
+import { resolvePlace, locationWarning } from './weather-location.mjs';
 import { api, el, esc, toast, sheet, confirmDialog, promptDialog, ymd, pad2, WD_CN, WD_SHORT, fmtTime, fmtDateTime, relDay, parseDT, countdown, speak, stopSpeak, colorOf, ls, exportUrl, download, addToSystemCalendar } from './core.js';
 import { registerView, state, icon, go, render, refreshUnread, paintUnread, onViewLeave } from './ui.js';
 import { syncDay, DAY_SYNC } from './homelayout.js';
@@ -263,42 +264,7 @@ function pushRecentCity(c) {
 
 /* 把实时 GPS 坐标反查为省、市、区县；不再只取 city 一个字段。 */
 async function reverseGeocode(lat, lon) {
-  const fallback = {
-    name: '当前位置',
-    fullName: '当前位置',
-    source: 'geo',
-    locationResolved: false,
-  };
-  try {
-    const r = await fetch(
-      'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='
-        + encodeURIComponent(lat) + '&longitude=' + encodeURIComponent(lon) + '&localityLanguage=zh',
-      { signal: AbortSignal.timeout(7000) },
-    ).then((x) => (x.ok ? x.json() : null));
-    if (!r) return fallback;
-
-    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-    const admin = Array.isArray(r.localityInfo?.administrative) ? r.localityInfo.administrative : [];
-    const adminNames = admin.map((item) => clean(item?.name)).filter(Boolean);
-    const province = clean(r.principalSubdivision || adminNames[0]);
-    const prefecture = clean(r.city || adminNames[1]);
-    const district = clean(r.locality || r.localityName || adminNames.at(-1));
-    const parts = [province, prefecture, district]
-      .filter((value, index, all) => value && all.indexOf(value) === index);
-    const name = district || prefecture || province || '当前位置';
-
-    return {
-      name,
-      fullName: parts.join(' · ') || name,
-      province,
-      prefecture,
-      district,
-      source: 'geo',
-      locationResolved: parts.length > 0,
-    };
-  } catch {
-    return fallback;
-  }
+  return resolvePlace(lat, lon, { previous: state.city });
 }
 let geoRequestSeq = 0;
 let cityChoiceSeq = 0;
@@ -684,7 +650,7 @@ function pickCity() {
       if (city.locationResolved) {
         toast('已定位：' + cityFullName(city));
       } else {
-        toast('定位成功，但暂未识别具体地区，天气仍会按当前位置获取', 'warn');
+        toast(locationWarning(city), 'warn', 8000);
       }
       applyCityWeather();
     } finally {
@@ -712,7 +678,7 @@ function weatherCityLineHTML(city) {
     '<span class="wxb-location-pin">' + icon('loc', 13) + '</span>' +
     '<span class="wxb-location-copy">' +
       '<strong class="wxb-location-name" title="' + esc(location) + '">' + esc(location) + '</strong>' +
-      '<small class="wxb-location-source">' + esc(sourceLabel) + '</small>' +
+      '<small class="wxb-location-source">' + esc(sourceLabel) + (city?.locationResolved === false ? ' · 地名暂不可用' : '') + '</small>' + weatherLocationCredit(city) +
     '</span>' +
     '<span style="flex:1"></span>' +
     '<button class="icon-btn sm" data-wx-refresh title="刷新天气">' + icon('refresh', 14) + '</button>' +
@@ -720,6 +686,12 @@ function weatherCityLineHTML(city) {
 }
 
 /* 顶栏简要天气：位置、温度、天气和穿搭。 */
+function weatherLocationCredit(city) {
+  return city?.locationProvider === 'photon'
+    ? '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="font-size:10px;color:var(--muted)">地名 © OpenStreetMap</a>'
+    : '';
+}
+
 function weatherBriefHTML() {
   const w = state.weather?.raw;
   const c = state.city || { name: '北京', lat: 39.9042, lon: 116.4074 };
