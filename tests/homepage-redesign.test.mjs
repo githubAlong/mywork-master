@@ -62,8 +62,8 @@ test('天气城市搜索支持县级行政区和完整行政路径', () => {
 
 test('当前位置定位后保存并显示省市区县完整信息', () => {
   assert.match(home, /async function reverseGeocode\(lat, lon\)/);
-  assert.match(home, /r\.locality \|\| r\.localityName/);
-  assert.match(home, /r\.localityInfo\?\.administrative/);
+  assert.match(home, /return resolvePlace\(lat, lon, \{ previous: state.city \}\)/);
+  assert.match(home, /weather-location\.mjs/);
   assert.match(home, /source: 'geo'/);
   assert.match(home, /wxb-location-source/);
   assert.match(home, /使用当前位置定位/);
