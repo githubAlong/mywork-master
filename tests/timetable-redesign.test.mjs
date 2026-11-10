@@ -81,7 +81,7 @@ test("loading and error states remain while the empty schedule panel is removed"
 test("high-two 2026 autumn timetable keeps source row numbers, lunch span and title", () => {
   for (const marker of [
     "2026年秋季信息课表",
-    "colspan=\"7\"",
+    "colspan=\"8\"",
     "period_no: 1, class_name: \"11班\"",
     "period_no: 3, class_name: \"5班\"",
     "period_no: 5, class_name: \"7班\"",
@@ -127,3 +127,4 @@ test("desktop timetable row density adapts to browser viewport height", () => {
   assert.match(css, /100dvh/);
   assert.match(css, /max-height:760px/);
 });
+
