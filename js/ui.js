@@ -774,7 +774,7 @@ function authPassword() {
     <div class="auth-input"><input id="pwd" type="password" autocomplete="${isReg ? 'new-password' : 'current-password'}"
       placeholder="${isReg ? '设置密码（至少 8 位）' : '密码'}" maxlength="72"></div>
     <button class="auth-btn" id="do-login" style="margin-top:6px">${isReg ? '注册并登录' : '登录'}</button>
-    <div class="small muted" id="auth-hint" style="margin-top:10px;line-height:1.6"></div>
+    <div class="small" id="auth-hint" role="alert" aria-live="assertive" style="margin-top:10px;line-height:1.6;color:var(--red)"></div>
     <div class="small muted" style="margin-top:6px;line-height:1.6">
       ${isReg
       ? '使用11位数字作为账号，设置密码后即可登录。不发送短信，也不验证号码归属。'
@@ -791,6 +791,7 @@ function authPassword() {
     if (!/^\d{11}$/.test(account)) return toast('请输入11位数字账号', 'warn');
     if (!pwd || (isReg && pwd.length < 8)) return toast(isReg ? '密码至少 8 位' : '请填写密码', 'warn');
     const btn = document.getElementById('do-login');
+    say('');
     btn.disabled = true; btn.textContent = isReg ? '注册中…' : '登录中…';
 
     try {
