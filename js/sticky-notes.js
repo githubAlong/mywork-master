@@ -1,5 +1,5 @@
 import { api, el, esc, toast, sheet, saving, confirmDialog } from './core.js';
-import { icon, onViewLeave } from './ui.js';
+import { icon, onViewLeave, refreshUnread } from './ui.js';
 import { NOTE_STATES, noteStatus, searchNotes, quickNote } from './sticky-notes-domain.mjs';
 
 export async function renderStickyNotes(root) {
@@ -68,6 +68,7 @@ export async function renderStickyNotes(root) {
     if (!page.isConnected) return;
     rows = Array.isArray(data) ? data : [];
     paint();
+    await refreshUnread();
   }
   async function changeState(id, value) {
     const note = rows.find(item => String(item.id) === id);

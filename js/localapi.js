@@ -23,6 +23,7 @@ import {
 } from './localdb.js';
 import { accountIdentifierFromPhone } from './auth-identifier.mjs';
 import { reconcileTaskLinks } from './todo-item-sync.mjs';
+import { reconcileTaskMessages } from './task-messages.mjs';
 import { attRowState } from './att-parse.js';
 import { buildInvigSummary as buildInvigSummaryV2 } from './invigilation-domain.mjs';
 import {
@@ -369,27 +370,10 @@ function pushMessage({ type = 'system', title, body = '', link = '', refType = n
 /* 把「今天到期的事项 / 待办」变成任务提醒消息。
    打开消息中心时触发，够用且不用起定时器。 */
 function syncTaskMessages() {
-  try {
-    const today = cnDate();
-    for (const it of rowsOf('items').filter((x) => x.status !== 'done')) {
-      const d = it.start_at ? String(it.start_at).slice(0, 10) : isoToCnDate(it.created_at);
-      if (d !== today) continue;
-      pushMessage({
-        type: 'task', title: it.title,
-        body: it.start_at ? `今天 ${String(it.start_at).slice(11, 16)} 的事项还没完成` : '今天记下的事项还没完成',
-        link: '#/home', refType: 'items', refId: it.id,
-        dedupe: `item-${it.id}-${today}`, skipIfSameTitleToday: true,
-      });
-    }
-    for (const td of rowsOf('todos').filter((x) => x.status !== 'done')) {
-      if (isoToCnDate(td.created_at) !== today) continue;
-      pushMessage({
-        type: 'task', title: td.title, body: '今天的便签还没划掉',
-        link: '#/daily', refType: 'todos', refId: td.id,
-        dedupe: `todo-${td.id}-${today}`, skipIfSameTitleToday: true,
-      });
-    }
-  } catch { /* 静默失败，不影响主流程 */ }
+  const db = load();
+  const linked = reconcileTaskLinks(db);
+  const messages = reconcileTaskMessages(db, { today: cnDate() });
+  if (linked || messages) save();
 }
 
 /* 到点提醒：替代服务端的 setInterval(tick)。
@@ -1832,6 +1816,7 @@ on('DELETE', '/me/avatar', () => {
 
 /* ---- 首页 ---- */
 on('GET', '/home', ({ query }) => {
+  syncTaskMessages();
   const today = query.date || cnDate();
   const digest = todayDigest(today);
   const monthFrom = today.slice(0, 8) + '01';
@@ -1843,7 +1828,7 @@ on('GET', '/home', ({ query }) => {
     .filter((r) => r.status === 'scheduled' && Number(r.fire_at) >= now - 60000)
     .sort((a, b) => Number(a.fire_at) - Number(b.fire_at))
     .slice(0, 5);
-  const unread = (load().messages || []).filter((x) => !x.read).length;
+  const unread = (load().messages || []).filter((x) => !x.deleted_at && !x.read).length;
   const monthStr = today.slice(0, 7);
   const ls = rowsOf('lessons').filter((r) => String(r.date || '').startsWith(monthStr));
   const quote = pickQuote(today);
@@ -1926,8 +1911,10 @@ function buildICS(alarms) {
 }
 
 /* ---- 事项 ---- */
-on('GET', '/items', () => rowsOf('items')
-  .sort((a, b) => String(a.start_at || a.created_at || '').localeCompare(String(b.start_at || b.created_at || ''))));
+on('GET', '/items', () => {
+  syncTaskMessages();
+  return rowsOf('items').sort((a, b) => String(a.start_at || a.created_at || '').localeCompare(String(b.start_at || b.created_at || '')));
+});
 on('POST', '/items', ({ body }) => {
   if (!body?.title) fail(400, '标题不能为空');
   const db = load();
@@ -2043,7 +2030,7 @@ on('POST', '/reminders/:id/snooze', ({ params, body }) => {
 on('GET', '/messages', ({ query }) => {
   syncTaskMessages();
   tickReminders();
-  const all = (load().messages || []).slice().sort((a, b) => b.id - a.id);
+  const all = (load().messages || []).filter(m => !m.deleted_at).sort((a, b) => b.id - a.id);
   const type = query.type;
   const rows = type && type !== 'all' ? all.filter((m) => m.type === type).slice(0, 200) : all.slice(0, 200);
   const counts = { all: 0 };
@@ -2053,29 +2040,33 @@ on('GET', '/messages', ({ query }) => {
 on('POST', '/messages/read', ({ body }) => {
   const db = load();
   for (const m of T('messages') || []) {
-    if (body?.all) m.read = 1;
-    else if (body?.type && m.type === body.type) m.read = 1;
-    else if (Array.isArray(body?.ids) && body.ids.map(String).includes(String(m.id))) m.read = 1;
+    if (m.deleted_at) continue;
+    if (body?.all || (body?.type && m.type === body.type) || (Array.isArray(body?.ids) && body.ids.map(String).includes(String(m.id)))) {
+      m.read = 1;
+      if (m.task_auto_read) m.task_auto_read = false;
+    }
   }
   save();
   return { ok: true };
 });
 on('DELETE', '/messages/:id', ({ params }) => {
   const db = load();
-  db.messages = (db.messages || []).filter((m) => String(m.id) !== String(params.id));
+  const message = (db.messages || []).find(m => String(m.id) === String(params.id));
+  if (message && !message.deleted_at) message.deleted_at = nowISO();
   save();
   return { ok: true };
 });
 on('POST', '/messages/clear', ({ body }) => {
   const db = load();
   const readOnly = body?.readOnly !== false;
-  db.messages = (db.messages || []).filter((m) => (readOnly ? !m.read : false));
+  for (const message of db.messages || []) if (!message.deleted_at && (!readOnly || message.read)) message.deleted_at = nowISO();
   save();
   return { ok: true };
 });
 
 /* ---- 便签 ---- */
 on('GET', '/todos', () => {
+  syncTaskMessages();
   const items = load().items || [];
   return rowsOf('todos')
     .sort((a, b) => (num(b.pin) - num(a.pin)) || (b.id - a.id))

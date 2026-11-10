@@ -1283,6 +1283,7 @@ function renderTodayItems(rowsOverride = null, dateOverride = '') {
         }
         if (nextStatus === 'done') toast('已完成');
         renderTodayItems(rows, date);
+        await refreshUnread();
         if (calState.dayOpen && calState.selected === date) await loadDay(date);
       } catch (error) {
         toast(error.message || '更新事项失败', 'err');

@@ -1292,6 +1292,20 @@ export async function refreshUnread() {
    数字变了要跟着变，不然从 3 变成 1 还显示 3。 */
 export function paintUnread() {
   const n = Number(state.unread) || 0;
+  document.querySelectorAll('.msg-bell').forEach(bell => {
+    let dot = bell.querySelector('.msg-bell-dot');
+    if (n <= 0) { dot?.remove(); return; }
+    if (!dot) { dot = document.createElement('span'); dot.className = 'badge-dot msg-bell-dot'; bell.appendChild(dot); }
+    dot.textContent = n > 99 ? '99+' : String(n);
+  });
+  document.querySelectorAll('[data-me-accordion="messages"] > summary').forEach(summary => {
+    const subtitle = summary.querySelector('small');
+    if (subtitle) subtitle.textContent = n ? n + ' 条未读消息' : '暂无未读消息';
+    let badge = summary.querySelector('.me-accordion-badge');
+    if (!n) { badge?.remove(); return; }
+    if (!badge) { badge = document.createElement('span'); badge.className = 'me-accordion-badge'; summary.insertBefore(badge, summary.querySelector('.me-accordion-chevron')); }
+    badge.textContent = n > 99 ? '99+' : String(n);
+  });
   document.querySelectorAll('[data-nav=me]').forEach((nav) => {
     let dot = nav.querySelector('.badge-dot');
     if (n <= 0) { if (dot) dot.hidden = true; return; }
