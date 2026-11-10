@@ -119,3 +119,26 @@ test('导航提升为一级，三张表每位教师只选一种状态并可回�
     await page.reload(); await page.locator('[data-tab="'+type+'"]').click(); await expect(mark('listen')).toHaveText('—');
   }
 });
+
+test('请假与汇总按学科筛选，统计同步且日期箭头移除',async({page})=>{
+  await seed(page,{teachers:[{id:1,name:'李老师',subject:'语文',grade:'高一',active:1},{id:2,name:'王老师',subject:'数学',grade:'高一',active:1}]});
+  await page.goto('/?e2e=1#/attendance/高一');
+  await expect(page.locator('[data-tab="leave"]')).toHaveText('请假');
+  await expect(page.locator('[data-day]')).toHaveCount(0);
+  await expect(page.locator('#aprd-date')).toBeVisible();
+  await page.evaluate(async today=>{const {api}=await import('/js/core.js');await api.patch('/me',{settings:{attendanceWorkspace:{leaves:[{id:1,name:'李老师',subject:'语文',start_date:today,end_date:today,days:1,type:'事假'},{id:2,name:'王老师',subject:'数学',start_date:today,end_date:today,days:1,type:'病假'}]}}});},today);
+  await page.reload();
+  await page.locator('[data-tab="leave"]').click();
+  const rows=page.locator('.aprd-table-wrap tbody tr');
+  await expect(rows).toHaveCount(2);
+  await page.locator('#aprd-subject').selectOption('数学');
+  await expect(rows).toHaveCount(1);await expect(rows).toContainText('王老师');
+  await page.locator('#aprd-subject').selectOption('');await expect(rows).toHaveCount(2);
+  await page.locator('[data-tab="summary"]').click();
+  await page.locator('#aprd-subject').selectOption('数学');
+  await expect(rows).toHaveCount(1);await expect(rows).toContainText('王老师');
+  await expect(page.locator('.aprd-kpi').first()).toContainText('1人');
+  await expect(page.locator('.aprd-kpi').last()).toContainText('1人');
+  await page.locator('#aprd-subject').selectOption('');await expect(rows).toHaveCount(2);
+  await expect(page.locator('.aprd-kpi').first()).toContainText('2人');
+});
