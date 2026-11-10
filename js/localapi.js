@@ -4224,6 +4224,16 @@ export async function handle(method, path, query = {}, body = undefined) {
       /* 测试库尚未执行迁移时，PostgREST 会报 schema cache / relation not found。
          这类错误不应阻断整张考勤工作台：先回退到本地实现，让用户继续验证界面和交互；
          真实云端数据仍由迁移完成后自动接管。权限、网络和其他云端错误继续明确提示。 */
+      // A cloud-only table must never be looked up in the local database after
+      // an RPC failure: that masks the real error as "table does not exist".
+      if (method === 'POST' && /^\/attendance\/[^/]+\/rows$/.test(clean)) {
+        const message = String(e.message || e);
+        const missingRpc = /wb_save_attendance_rows/i.test(message)
+          && /could not find|schema cache|does not exist/i.test(message);
+        return { ok: false, error: missingRpc
+          ? '云端考勤保存服务尚未就绪，请联系管理员补齐保存函数；当前勾选仍保留，请勿刷新页面'
+          : '云端：' + message, code: 502, cloud: true };
+      }
       if (!isCloudSchemaUnavailable(e)) {
         return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
       }
