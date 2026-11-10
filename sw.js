@@ -30,7 +30,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v185-home-sticky-status-sync';
+const CACHE = 'wb-v187-simple-lesson-plan';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -274,7 +274,3 @@ self.addEventListener('fetch', (e) => {
     }
   })());
 });
-
-
-
-

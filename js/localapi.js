@@ -1,3 +1,4 @@
+import { isPrepType } from './prep-domain.mjs';
 /* ============================================================================
    localapi.js —— 把服务端 126 个 /api/* 接口，在浏览器里逐个实现一遍。
 
@@ -4114,7 +4115,7 @@ for (const table of CRUD_TABLES) {
         }
       }
     }
-    if (table === 'preps' && !['information', 'specialty'].includes(String(b.prep_type || '').trim())) {
+    if (table === 'preps' && !isPrepType(b.prep_type)) {
       fail(422, '请选择备课类型');
     }
     // 监考表旧列 type 是 NOT NULL，新逻辑用 duty_type，这里补一份映射
@@ -4135,7 +4136,7 @@ for (const table of CRUD_TABLES) {
   on('PATCH', `/${table}/:id`, ({ params, body }) => {
     const b = normalizeBody(body || {});
     if (table === 'preps' && b.prep_type !== undefined
-      && !['information', 'specialty', 'unclassified'].includes(String(b.prep_type).trim())) {
+      && !(isPrepType(b.prep_type) || b.prep_type === 'unclassified')) {
       fail(422, '备课类型不正确');
     }
     return updateRow(table, params.id, b);
@@ -4146,7 +4147,7 @@ for (const table of CRUD_TABLES) {
     for (const item of rows) {
       if (table === 'preps' && !item?.id) {
         if (!String(item?.topic || '').trim()) fail(422, '请填写备课主题');
-        if (!['information', 'specialty'].includes(String(item?.prep_type || '').trim())) fail(422, '请选择备课类型');
+        if (!isPrepType(item?.prep_type)) fail(422, '请选择备课类型');
       }
       if (item && item.id) { updateRow(table, item.id, normalizeBody(item)); ids.push(item.id); }
       else { ids.push(createRow(table, normalizeBody(item || {})).id); }
@@ -5003,5 +5004,3 @@ export function getSeedFileText(path) {
 
 /* 给前端读的「当前是不是静态版」标记 */
 export const STATIC_MODE = true;
-
-
