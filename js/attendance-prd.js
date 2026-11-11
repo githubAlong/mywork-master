@@ -6,7 +6,7 @@ import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import {
-  DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS, parseLeaveDuration, formatLeaveDuration,
+  DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS, buildAttendanceExportGrid, parseLeaveDuration, formatLeaveDuration,
   nextTriState, activeLeavesFor, deriveRosterState, calculateDailySummary,
   matchesAttendancePeriod, deriveTableGridState, updateTeacherGrid, mergeTeacherGridRows,
 } from './attendance-prd-domain.mjs';
@@ -330,19 +330,17 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const saveDraftButton = (type,label) => '<button '+(details[type]?'':'disabled')+' data-save-'+type+'>'+(details[type]?label:'生成后可保存修改')+'</button>';
   const rosterKey = (row) => String(row.name || '').trim().replace(/\s+/g,'').toLowerCase() + '\u0000' + String(row.subject || '').trim().replace(/\s+/g,'').toLowerCase();
-  const rosterGrid = (list) => [
-    [(TABS.find(([id])=>id===tab)?.[1]||'花名册')+' · '+grade+' · '+date+' '+(period===0?'全天':'第'+period+'节')],
-    ATTENDANCE_COLUMNS.roster.slice(0,-1),
-    ...list.map((teacher,index)=>{
-      const state = TYPE[tab] ? deriveTableGridState(teacher,tab,getDraftRows(tab),{leaveRecords,date,period})
-        : deriveRosterState(teacher,{seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],researchRows:details.research?.rows||[],leaveRecords,date,period});
-      const listen = TYPE[tab] ? state.listen : state.listenStatus || (state.listen?'y':'u');
-      const research = TYPE[tab] ? state.research : state.researchStatus || (state.research?'y':'u');
-      return [index+1,deptOf(teacher),teacher.grade||grade,teacher.name,teacher.subject||'',
-        CHECK_LABEL(state.class),CHECK_LABEL(state.sit),CHECK_LABEL(listen),CHECK_LABEL(research),state.leave||'无',
-        TYPE[tab]?state.remark||'':noteOf(teacher)];
-    }),
-  ];
+  const rosterGrid = (list) => buildAttendanceExportGrid({
+    type: TYPE[tab] ? tab : tab === 'leave' ? 'leave' : 'roster',
+    grade, date, period, teachers: list,
+    seatRows: details.seat?.rows || [],
+    classRows: details.class?.rows || [],
+    researchRows: details.research?.rows || [],
+    leaveRecords: activeLeavesFor(leaveRecords, date, grade),
+    teacherMeta: prefs.teacherMeta || {},
+    resolvePeriodRange,
+    includeUnlisted: true,
+  });
   const downloadRosterTemplate = () => {
     const grid=[['教师花名册导入模板'],['序号','归属部门','归属年级','姓名','学科'],['1','高中部',grade,'','']];
     saveBlob(makeXlsx({title:'花名册导入模板',grid}),'教师花名册导入模板.xlsx');
@@ -350,34 +348,51 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const exportRoster = (format) => {
     const scope=root.querySelector('#aprd-export-scope')?.value || 'all';
     const list=scope==='filtered'?visibleTeachers():teachers.slice();
-    if(!list.length){toast('当前没有可导出的教师','warn');return;}
-    const grid=rosterGrid(list);
-    const fileBase=(grade||'教师')+(TABS.find(([id])=>id===tab)?.[1]||'花名册')+'-'+date+'-'+(period===0?'全天':'第'+period+'节');
+    const exportType = TYPE[tab] ? tab : tab === 'leave' ? 'leave' : 'roster';
+    const scopedLeaveRecords = activeLeavesFor(leaveRecords, date, grade)
+      .filter(record => scope !== 'filtered' || list.some(teacher => teacher.name === (record.name || record.teacher)));
+    const grid=buildAttendanceExportGrid({
+      type: exportType, grade, date, period, teachers: list,
+      seatRows: details.seat?.rows || [],
+      classRows: details.class?.rows || [],
+      researchRows: details.research?.rows || [],
+      leaveRecords: scopedLeaveRecords,
+      teacherMeta: prefs.teacherMeta || {},
+      resolvePeriodRange,
+      includeUnlisted: scope !== 'filtered',
+    });
+    const rowCount = Math.max(0, grid.length - 2);
+    if(!rowCount){toast('当前表格没有符合条件的记录','warn');return;}
+    const typeLabel = ({roster:'花名册',seat:'坐班表',class:'上课表',research:'教研表',leave:'请假总表'})[exportType];
+    const fileBase=(grade||'教师')+typeLabel+'-'+date+'-'+(period===0?'全天':'第'+period+'节');
     if(format==='xlsx'){
       saveBlob(makeXlsx({title:fileBase,grid}),fileBase+'.xlsx');
     }else if(format==='csv'){
-      const csv='\uFEFF'+grid.map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+      const csv='\\uFEFF'+grid.map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');
       saveBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}),fileBase+'.csv');
     }else if(format==='pdf'){
       const win=window.open('','_blank');
       if(!win){toast('浏览器拦截了打印窗口，请允许本站弹出窗口后重试','warn');return;}
       const body=grid.slice(2).map(row=>'<tr>'+row.map(cell=>'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('');
-      win.document.write('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+esc(fileBase)+'</title><style>body{font-family:Arial,"Microsoft YaHei",sans-serif;padding:24px;color:#1d2939}h1{font-size:20px}p{color:#667085;font-size:12px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #d0d5dd;padding:8px;text-align:left}th{background:#f2f4f7}</style><h1>'+esc(fileBase)+'</h1><p>导出时间：'+esc(new Date().toLocaleString('zh-CN'))+'　共 '+list.length+' 人</p><table><thead><tr>'+grid[1].map(cell=>'<th>'+esc(cell)+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table><script>window.onload=function(){window.print()}<\/script></html>');
+      win.document.write('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+esc(fileBase)+'</title><style>body{font-family:Arial,"Microsoft YaHei",sans-serif;padding:24px;color:#1d2939}h1{font-size:20px}p{color:#667085;font-size:12px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #d0d5dd;padding:8px;text-align:left}th{background:#f2f4f7}</style><h1>'+esc(fileBase)+'</h1><p>导出时间：'+esc(new Date().toLocaleString('zh-CN'))+'　共 '+rowCount+' 条</p><table><thead><tr>'+grid[1].map(cell=>'<th>'+esc(cell)+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table><script>window.onload=function(){window.print()}<\\/script></html>');
       win.document.close();
     }else if(format==='png'){
+      const headers=grid[1], bodyRows=grid.slice(2);
+      const widths=headers.map((header,index)=>{
+        const max=Math.max(String(header).length,...bodyRows.map(row=>String(row[index]??'').length));
+        return Math.max(90,Math.min(260,70+max*13));
+      });
+      const rowH=42, titleH=76, width=widths.reduce((sum,value)=>sum+value,0);
       const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
-      const widths=[70,150,110,180,150,220], rowH=42, width=widths.reduce((a,b)=>a+b,0);
-      canvas.width=width;canvas.height=76+(list.length+1)*rowH;
+      canvas.width=width;canvas.height=titleH+(bodyRows.length+1)*rowH;
       ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
       ctx.fillStyle='#172744';ctx.font='bold 22px "Microsoft YaHei",sans-serif';ctx.fillText(fileBase,20,30);
-      ctx.fillStyle='#667085';ctx.font='12px "Microsoft YaHei",sans-serif';ctx.fillText('导出时间：'+new Date().toLocaleString('zh-CN')+'　共 '+list.length+' 人',20,53);
-      const headers=grid[1];let y=76;
-      let x=0;
-      headers.forEach((label,i)=>{ctx.fillStyle='#eef3fa';ctx.fillRect(x,y,widths[i],rowH);ctx.strokeStyle='#d8e1ed';ctx.strokeRect(x,y,widths[i],rowH);ctx.fillStyle='#34445d';ctx.font='bold 12px "Microsoft YaHei",sans-serif';ctx.fillText(String(label),x+8,y+26);x+=widths[i];});
-      list.forEach((teacher,index)=>{
+      ctx.fillStyle='#667085';ctx.font='12px "Microsoft YaHei",sans-serif';ctx.fillText('导出时间：'+new Date().toLocaleString('zh-CN')+'　共 '+rowCount+' 条',20,53);
+      let y=titleH,x=0;
+      headers.forEach((label,index)=>{ctx.fillStyle='#eef3fa';ctx.fillRect(x,y,widths[index],rowH);ctx.strokeStyle='#d8e1ed';ctx.strokeRect(x,y,widths[index],rowH);ctx.fillStyle='#34445d';ctx.font='bold 12px "Microsoft YaHei",sans-serif';ctx.fillText(String(label),x+8,y+26);x+=widths[index];});
+      bodyRows.forEach((row,rowIndex)=>{
         y+=rowH;x=0;
-        const values=[index+1,deptOf(teacher),teacher.grade||grade,teacher.name,teacher.subject||'',noteOf(teacher)];
-        values.forEach((value,i)=>{ctx.fillStyle=index%2?'#f9fbfe':'#fff';ctx.fillRect(x,y,widths[i],rowH);ctx.strokeStyle='#e3eaf3';ctx.strokeRect(x,y,widths[i],rowH);ctx.fillStyle='#34445d';ctx.font='12px "Microsoft YaHei",sans-serif';ctx.fillText(String(value??'').slice(0,24),x+8,y+26);x+=widths[i];});
+        row.forEach((value,index)=>{ctx.fillStyle=rowIndex%2?'#f9fbfe':'#fff';ctx.fillRect(x,y,widths[index],rowH);ctx.strokeStyle='#e3eaf3';ctx.strokeRect(x,y,widths[index],rowH);ctx.fillStyle='#34445d';ctx.font='12px "Microsoft YaHei",sans-serif';ctx.fillText(String(value??'').slice(0,32),x+8,y+26);x+=widths[index];});
       });
       canvas.toBlob(blob=>{if(blob)saveBlob(blob,fileBase+'.png');else toast('PNG 图片生成失败','err');},'image/png');
     }
