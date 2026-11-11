@@ -541,7 +541,7 @@ export function buildAttendanceExportGrid({
   }
 
   if (type === 'leave') {
-    const entries = (Array.isArray(leaveRecords) ? leaveRecords : []).filter(record => {
+    const entries = activeLeavesFor(leaveRecords, date, grade).filter(record => {
       const name = exportName(record);
       if (!name) return false;
       const teacher = teacherByName.get(name);
