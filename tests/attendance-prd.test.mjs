@@ -95,14 +95,14 @@ test('四类导出按状态筛选人员，坐班表保留全员总表', () => {
   assert.equal(classes[2][3],'李老师');
   assert.equal(classes[2][5],'高一(1)班');
   assert.equal(classes[2][8],'已上课');
-  assert.doesNotMatch(JSON.stringify(classes),/王老师|赵老师/);
+  assert.deepEqual(classes.slice(2).map(row=>row[3]),['李老师']);
 
   const research = buildAttendanceExportGrid({...common,type:'research'});
   assert.equal(research.length,3);
   assert.equal(research[2][3],'李老师');
   assert.equal(research[2][5],'第1节');
   assert.equal(research[2][6],'会议室');
-  assert.doesNotMatch(JSON.stringify(research),/王老师|赵老师/);
+  assert.deepEqual(research.slice(2).map(row=>row[3]),['李老师']);
 
   const leave = buildAttendanceExportGrid({...common,type:'leave'});
   assert.equal(leave.length,3);
