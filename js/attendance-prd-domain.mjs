@@ -342,3 +342,227 @@ export function formatLeaveDuration(record) {
   if(Number(record.hours)>0)parts.push(Number(Number(record.hours).toFixed(2))+'小时');
   return parts.join(' / ') || '0天';
 }
+
+const EXPORT_HEADERS = Object.freeze({
+  roster: ['序号','归属部门','归属年级','姓名','学科','上课','坐班','听课','教研','请假','备注'],
+  seat: ['序号','归属部门','归属年级','姓名','学科','上课','坐班','听课','教研','请假','备注'],
+  class: ['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注'],
+  research: ['序号','归属部门','归属年级','姓名','学科','教研时间','地点','主持人','签到状态','备注'],
+  leave: ['序号','归属部门','归属年级','姓名','学科','请假类型','开始日期','结束日期','时段','请假时长','状态','备注'],
+});
+
+const exportRowData = row => row?.data && typeof row.data === 'object' ? row.data : {};
+const exportStatusLabel = value => value === 'y' ? '✓' : value === 'n' ? '✗' : '—';
+const exportName = row => String(row?.name || row?.teacher || '').trim();
+const exportLeavePeriod = record => String(record?.period || record?.time_period || record?.part_of_day || record?.period_label || '').trim();
+const exportLeaveDuration = record => {
+  const raw = Number(record?.duration) || 0;
+  const days = Number(record?.days ?? (record?.duration_unit === 'hour' ? 0 : raw)) || 0;
+  const hours = Number(record?.hours ?? (record?.duration_unit === 'hour' ? raw : 0)) || 0;
+  if (days > 0 || hours > 0) return formatLeaveDuration({ days, hours });
+  if (['上午', '下午'].includes(exportLeavePeriod(record))) return '0.5天';
+  return '未填写';
+};
+
+/**
+ * Build export grids from the saved attendance records, not from the full
+ * teacher roster indiscriminately. The seat sheet is the cross-sheet summary;
+ * class, research and leave exports contain only their corresponding records.
+ */
+export function buildAttendanceExportGrid({
+  type = 'seat', grade = '', date = '', period = 1, teachers = [],
+  seatRows = [], classRows = [], researchRows = [], leaveRecords = [],
+  teacherMeta = {}, resolvePeriodRange = () => [], includeUnlisted = true,
+} = {}) {
+  const people = (Array.isArray(teachers) ? teachers : [])
+    .filter(teacher => teacher && Number(teacher.active ?? 1) !== 0);
+  const teacherByName = new Map(people.map(teacher => [String(teacher.name || '').trim(), teacher]));
+  const departmentOf = teacher => {
+    const meta = teacher ? (teacherMeta?.[String(teacher.id)] || {}) : {};
+    return meta.department || meta.dept || teacher?.department || '高中部';
+  };
+  const gradeOf = (teacher, row) => teacher?.grade || row?.grade || grade;
+  const periodLabel = value => Number(value) === 0 ? '全天' : '第' + Number(value) + '节';
+  const rangeText = value => {
+    const range = typeof resolvePeriodRange === 'function' ? resolvePeriodRange(Number(value)) : [];
+    return Array.isArray(range) && range.filter(Boolean).length ? range.filter(Boolean).join('—') : '—';
+  };
+  const periodNumbers = Number(period) === 0
+    ? Array.from({ length: 9 }, (_, index) => index + 1)
+    : [Number(period)];
+  const baseTitle = type === 'roster' ? '花名册' : ({
+    seat: '坐班表', class: '上课表', research: '教研表', leave: '请假总表',
+  }[type] || '考勤表');
+  const fileTitle = baseTitle + ' · ' + (grade || '全部年级') + ' · ' + date + ' · ' + periodLabel(period);
+
+  if (type === 'seat' || type === 'roster') {
+    const activeLeaves = activeLeavesFor(leaveRecords, date);
+    const rows = people.map((teacher, index) => {
+      const states = periodNumbers.map(currentPeriod => deriveRosterState(teacher, {
+        seatRows, classRows, researchRows, leaveRecords, date, period: currentPeriod,
+      }));
+      const aggregate = key => {
+        const values = states.map(state => key === 'listen'
+          ? (state.listenStatus || (state.listen ? 'y' : 'u'))
+          : key === 'research'
+            ? (state.researchStatus || (state.research ? 'y' : 'u'))
+            : (state[key] || 'u'));
+        return values.includes('y') ? 'y' : values.includes('n') ? 'n' : 'u';
+      };
+      const name = String(teacher.name || '').trim();
+      const leaves = activeLeaves.filter(item => {
+        if (exportName(item) !== name) return false;
+        const recordGrade = String(item.grade || teacher.grade || grade);
+        return !grade || recordGrade === String(grade);
+      });
+      const leaveText = leaves.map(item => [
+        item.type || '请假', exportLeavePeriod(item), exportLeaveDuration(item),
+      ].filter(Boolean).join(' ')).join('；') || '无';
+      const meta = teacherMeta?.[String(teacher.id)] || {};
+      return [
+        index + 1, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
+        exportStatusLabel(aggregate('class')), exportStatusLabel(aggregate('sit')),
+        exportStatusLabel(aggregate('listen')), exportStatusLabel(aggregate('research')),
+        leaveText, meta.remark || teacher.remark || teacher.note || '',
+      ];
+    });
+    const count = key => rows.filter(row => row[{ class: 5, sit: 6, listen: 7, research: 8 }[key]] === '✓').length;
+    const leaveCount = rows.filter(row => row[9] !== '无').length;
+    const title = fileTitle + ' · 共' + people.length + '人 · 上课' + count('class')
+      + ' · 坐班' + count('sit') + ' · 听课' + count('listen')
+      + ' · 教研' + count('research') + ' · 请假' + leaveCount;
+    return [[title], EXPORT_HEADERS[type], ...rows];
+  }
+
+  if (type === 'class') {
+    const entries = [];
+    const seenTeacherPeriods = new Set();
+    for (const row of Array.isArray(classRows) ? classRows : []) {
+      const data = exportRowData(row);
+      if (data.__deleted) continue;
+      const record = data.__classRecord || {};
+      const currentPeriod = Number(record.period || period);
+      if (Number(period) !== 0 && currentPeriod !== Number(period)) continue;
+      const saved = data.__teacherGrid?.[String(currentPeriod)] || data.__teacherGrid?.[String(period)] || {};
+      const status = record.status === 'y' || record.status === 'n' ? record.status : (saved.class || record.status || 'u');
+      const className = String(record.class_name || '').trim();
+      const name = String(row.teacher || '').trim();
+      if (!name || (!className && status !== 'y' && saved.class !== 'y')) continue;
+      const teacher = teacherByName.get(name);
+      if (!teacher && !includeUnlisted) continue;
+      seenTeacherPeriods.add(name + '|' + currentPeriod);
+      entries.push({
+        period: currentPeriod, name, className,
+        row: [
+          0, departmentOf(teacher) || row.department || '高中部', gradeOf(teacher, row),
+          name, teacher?.subject || row.subject || record.subject || '',
+          className || '班级待补充', periodLabel(currentPeriod), rangeText(currentPeriod),
+          status === 'y' ? '已上课' : status === 'n' ? '未上课' : '待登记',
+          Array.isArray(record.listeners) ? record.listeners.join('、') : String(record.listeners || ''),
+          record.remark || saved.remark || '',
+        ],
+      });
+    }
+    for (const teacher of people) {
+      for (const currentPeriod of periodNumbers) {
+        const key = String(teacher.name || '').trim() + '|' + currentPeriod;
+        if (seenTeacherPeriods.has(key)) continue;
+        const state = deriveRosterState(teacher, {
+          seatRows, classRows, researchRows, leaveRecords, date, period: currentPeriod,
+        });
+        if (state.class !== 'y') continue;
+        const name = String(teacher.name || '').trim();
+        entries.push({
+          period: currentPeriod, name, className: '',
+          row: [
+            0, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
+            '班级待补充', periodLabel(currentPeriod), rangeText(currentPeriod),
+            '已上课', '', '',
+          ],
+        });
+        seenTeacherPeriods.add(key);
+      }
+    }
+    entries.sort((a, b) => a.period - b.period || a.name.localeCompare(b.name, 'zh-CN') || a.className.localeCompare(b.className, 'zh-CN'));
+    const rows = entries.map((entry, index) => [index + 1, ...entry.row.slice(1)]);
+    const peopleCount = new Set(entries.map(entry => entry.name)).size;
+    return [[fileTitle + ' · 共' + peopleCount + '人 · ' + rows.length + '条上课记录'], EXPORT_HEADERS.class, ...rows];
+  }
+
+  if (type === 'research') {
+    const rows = [];
+    const seen = new Set();
+    const seenTeacherPeriods = new Set();
+    for (const row of Array.isArray(researchRows) ? researchRows : []) {
+      const data = exportRowData(row);
+      if (data.__deleted) continue;
+      const record = data.__research;
+      if (!record || typeof record !== 'object') continue;
+      const time = String(record.period_time || (Number(period) === 0 ? '全天' : periodLabel(period))).trim();
+      if (Number(period) !== 0 && !matchesAttendancePeriod(time, period)) continue;
+      const attendees = Array.isArray(record.attendees) ? record.attendees : [];
+      for (const rawName of attendees) {
+        const name = String(rawName || '').trim();
+        if (!name) continue;
+        const teacher = teacherByName.get(name);
+        if (!teacher && !includeUnlisted) continue;
+        const subjectName = teacher?.subject || record.subject || row.subject || '';
+        const key = [name, subjectName, time, record.location || '', record.host || ''].join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        seenTeacherPeriods.add(name + '|' + (Number(period) === 0 ? 'all' : Number(period)));
+        rows.push([
+          0, departmentOf(teacher), gradeOf(teacher, row), name, subjectName, time,
+          record.location || '', record.host || '', '已签到', record.remark || '',
+        ]);
+      }
+    }
+    for (const teacher of people) {
+      for (const currentPeriod of periodNumbers) {
+        const name = String(teacher.name || '').trim();
+        const scopeKey = name + '|' + (Number(period) === 0 ? 'all' : Number(period));
+        if (seenTeacherPeriods.has(scopeKey)) continue;
+        const state = deriveRosterState(teacher, {
+          seatRows: [], classRows: [], researchRows, leaveRecords: [], date, period: currentPeriod,
+        });
+        const status = state.researchStatus || (state.research ? 'y' : 'u');
+        if (status !== 'y') continue;
+        rows.push([
+          0, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
+          periodLabel(currentPeriod), '', '', '已登记', '',
+        ]);
+        seenTeacherPeriods.add(scopeKey);
+      }
+    }
+    rows.sort((a, b) => String(a[5]).localeCompare(String(b[5]), 'zh-CN') || String(a[3]).localeCompare(String(b[3]), 'zh-CN'));
+    const numbered = rows.map((row, index) => [index + 1, ...row.slice(1)]);
+    const peopleCount = new Set(numbered.map(row => row[3])).size;
+    return [[fileTitle + ' · 共' + peopleCount + '人 · ' + numbered.length + '条教研签到'], EXPORT_HEADERS.research, ...numbered];
+  }
+
+  if (type === 'leave') {
+    const entries = (Array.isArray(leaveRecords) ? leaveRecords : []).filter(record => {
+      const name = exportName(record);
+      if (!name) return false;
+      const teacher = teacherByName.get(name);
+      const recordGrade = String(record.grade || teacher?.grade || (teacher ? grade : ''));
+      return !grade || recordGrade === String(grade);
+    }).slice().sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || ''))
+      || exportName(a).localeCompare(exportName(b), 'zh-CN'));
+    const rows = entries.map((record, index) => {
+      const name = exportName(record);
+      const teacher = teacherByName.get(name);
+      return [
+        index + 1, departmentOf(teacher) || record.department || '高中部',
+        gradeOf(teacher, record), name, teacher?.subject || record.subject || '',
+        record.type || '未填写', record.start_date || '', record.end_date || record.start_date || '',
+        exportLeavePeriod(record) || '—', exportLeaveDuration(record),
+        record.status || '未注明', record.remark || '',
+      ];
+    });
+    const peopleCount = new Set(entries.map(exportName)).size;
+    return [[fileTitle + ' · 共' + peopleCount + '人 · ' + entries.length + '条请假记录'], EXPORT_HEADERS.leave, ...rows];
+  }
+
+  throw new Error('不支持的考勤导出类型：' + type);
+}
