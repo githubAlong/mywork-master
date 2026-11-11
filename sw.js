@@ -51,7 +51,7 @@ const ASSETS = [
   './css/trips-redesign.css',
   './css/study-records.css',
   './js/study-records.js',
-  
+  './js/study-records-domain.mjs',
   './js/sync-journal.mjs',
   './js/sync-status.js',
   './js/trips.js',
