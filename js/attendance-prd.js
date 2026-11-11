@@ -36,7 +36,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   let grade = grades.includes(initialGrade) ? initialGrade : (grades[0] || initialGrade || '');
   let date = TODAY(), period = 1, tab = 'roster', search = '', subject = '';
   let teachers = [], allTeachers = [], tables = [], details = {}, leaveRecords = [], prefs = {};
-  let showAddTeacher = true;
+  let showAddTeacher = false;
   const draftCache = new Map();
   let busy = false;
   const load = async () => {
@@ -657,7 +657,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     root.innerHTML='<div class="attendance-prd"><div class="aprd-head"><h2>考勤工作台</h2><div class="aprd-grade">'+grades.map(g=>'<button data-grade-tab="'+esc(g)+'" class="'+(g===grade?'on':'')+'">'+esc(g)+'</button>').join('')+'</div><span style="margin-left:auto;color:#168448;font-size:12px">数据已加载</span></div><div class="aprd-meta"><label>日期 <input type="date" id="aprd-date" value="'+date+'"></label><label>节次 <select id="aprd-period">'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label><label>时段 <input type="time" id="aprd-start" value="'+DEFAULT_PERIODS[period-1].start+'">—<input type="time" id="aprd-end" value="'+DEFAULT_PERIODS[period-1].end+'"></label><select id="aprd-generate"><option value="seat">生成坐班表</option><option value="class">生成上课表</option><option value="research">生成教研表</option></select><button class="primary" data-generate>确认生成</button></div><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav><section class="aprd-panel">'+content+'</section></div>';
     if(TYPE[tab]) root.querySelector('#aprd-generate').value=tab;
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;search='';subject='';paint();});
-    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{grade=b.dataset.gradeTab;await load();});
+    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{grade=b.dataset.gradeTab;showAddTeacher=false;await load();});
     root.querySelector('#aprd-date').onchange=e=>{date=e.target.value;load();};
     root.querySelector('#aprd-period').onchange=e=>{period=Number(e.target.value);paint();};
     root.querySelector('[data-generate]').onclick=async()=>{const type=root.querySelector('#aprd-generate').value;try{await generateTable(type);}catch(e){toast(e.message||'生成失败','err');}};
