@@ -240,7 +240,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const teacherFiltersHtml = () => {
     const subjects=teacherSubjects();
     const departments=[...new Set(['高中部','后勤',...teachers.map(deptOf).filter(Boolean)])];
-    return '<label>学科 <input id="aprd-subject-filter" type="text" list="aprd-subject-options" value="'+esc(subjectInput)+'" placeholder="全部" autocomplete="off"></label>'
+    return '<label>学科 <input id="aprd-subject-filter" type="text" list="aprd-subject-options" value="'+esc(subjectInput || '全部')+'" placeholder="全部" autocomplete="off"></label>'
       +'<datalist id="aprd-subject-options"><option value="全部"></option>'
       +subjects.map(item=>'<option value="'+esc(item)+'"></option>').join('')+'</datalist>'
       +'<datalist id="aprd-department-options">'+departments.map(item=>'<option value="'+esc(item)+'"></option>').join('')+'</datalist>';
