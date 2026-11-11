@@ -159,8 +159,8 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
   await control(root,'remark').input('上课表备注');
   await root.querySelector('[data-roster-export="xlsx"]').click();
   const grid=exportedGrids[0];
-  assert.deepEqual(grid[1],domain.ATTENDANCE_COLUMNS.class.slice(0,-1));
+  assert.deepEqual(grid[1],['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注']);
   assert.equal(grid[2][3],'李老师');
-  assert.equal(grid[2][5],'✓');
+  assert.equal(grid[2][8],'已上课');
   assert.equal(grid[2][10],'上课表备注');
 });
