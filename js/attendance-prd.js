@@ -62,7 +62,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const draftCache = new Map();
   const currentScheduleType = () => {
     try {
-      const saved = objectValue(window.localStorage.getItem('wb_timetable_view_v1'));
+      const saved = objectValue(typeof window !== 'undefined' ? window.localStorage?.getItem('wb_timetable_view_v1') : '');
       return saved.type === WINTER_SCHEDULE ? WINTER_SCHEDULE : SUMMER_SCHEDULE;
     } catch { return SUMMER_SCHEDULE; }
   };
