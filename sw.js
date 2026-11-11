@@ -30,7 +30,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v197-attendance-workspace';
+const CACHE = 'wb-v197-durable-sync-recovery';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -50,10 +50,7 @@ const ASSETS = [
   './css/sticky-notes.css',
   './css/trips-redesign.css',
   './css/study-records.css',
-  './js/study-records.js',
-  './js/study-records-domain.mjs',
-  './js/sync-journal.mjs',
-  './js/sync-status.js',
+  './css/sync-status.css',
   './js/trips.js',
   './js/trips-domain.mjs',
   './css/auth-redesign.css',
@@ -64,6 +61,8 @@ const ASSETS = [
   './js/ui.js',
   './js/core.js',
   './js/cloudsync.js',
+  './js/sync-journal.mjs',
+  './js/sync-status.js',
   './js/cloud.js',
   './js/environment-config.mjs',
   './js/auth-identifier.mjs',
@@ -96,6 +95,8 @@ const ASSETS = [
   './js/todo-item-sync.mjs',
   './js/task-messages.mjs',
   './js/study.js',
+  './js/study-records.js',
+  './js/study-records-domain.mjs',
   './js/me.js',
   './js/repairs.js',
   './js/repairs-domain.mjs',
@@ -283,3 +284,4 @@ self.addEventListener('fetch', (e) => {
     }
   })());
 });
+

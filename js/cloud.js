@@ -523,8 +523,10 @@ async function rest(path, opts = {}) {
   if (!c) throw new Error('还没配置 Supabase 地址');
   const at = await freshToken();
   if (!at) throw new Error('请先登录');
+  if(opts.expectedAccountUid && session()?.uid!==opts.expectedAccountUid)throw Object.assign(new Error('账号已切换，已停止旧账号请求'),{code:'ACCOUNT_CHANGED'});
+  const {expectedAccountUid: _expectedAccountUid,...requestOptions}=opts;
   const r = await fetch(c.url + '/rest/v1/' + path, {
-    ...opts,
+    ...requestOptions,
     headers: {
       apikey: c.anon,
       Authorization: 'Bearer ' + at,
@@ -535,7 +537,7 @@ async function rest(path, opts = {}) {
   if (r.status === 401) {
     setTok(null);
     notifySignedOut();
-    throw new Error('登录已过期，请重新登录');
+    throw Object.assign(new Error('登录已过期，请重新登录'),{status:401,code:'AUTH_EXPIRED'});
   }
   const text = await r.text();
   let data = null;
@@ -560,7 +562,7 @@ async function rest(path, opts = {}) {
     if (r.status === 413 || /Payload Too Large|request entity too large/i.test(msg)) {
       throw new Error('这个文件太大，服务器没收下。压缩后再传一次（图片可以先在相册里裁一下）');
     }
-    throw new Error(msg);
+    throw Object.assign(new Error(msg),{status:r.status,code:data?.code||'',details:data?.details||''});
   }
   return data;
 }
@@ -569,13 +571,14 @@ async function rest(path, opts = {}) {
 export async function getWorkbenchSnapshot() {
   const uid = session()?.uid;
   if (!uid) throw new Error('请先登录后再读取工作台数据');
-  const rows = await rest(`wb_user_data?select=payload,revision,updated_at&user_id=eq.${encodeURIComponent(uid)}`);
+  const rows = await rest(`wb_user_data?select=payload,revision,updated_at&user_id=eq.${encodeURIComponent(uid)}`,{expectedAccountUid:uid});
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
-export async function saveWorkbenchSnapshot(payload, expectedRevision = 0) {
-  if (!session()?.uid) throw new Error('登录状态已失效，无法保存工作台数据');
+export async function saveWorkbenchSnapshot(payload, expectedRevision = 0, expectedUid=session()?.uid) {
+  if (!expectedUid || session()?.uid!==expectedUid) throw new Error('登录状态已变化，无法保存此账号的工作台数据');
   const rows = await rest('rpc/wb_save_user_data', {
     method: 'POST',
+    expectedAccountUid:expectedUid,
     body: JSON.stringify({ p_payload: payload, p_expected_revision: Number(expectedRevision) || 0 }),
   });
   const row = Array.isArray(rows) ? rows[0] : rows;
@@ -1031,4 +1034,5 @@ export async function listAttendance(query = {}) {
     rows: rows.filter((r) => ids.has(String(r.table_id))),
   };
 }
+
 

@@ -26,6 +26,8 @@ import './me.js';
 import './recycle.js';
 import './alarm.js';
 import { hookSave, tryImportFromHash, initializeAccountSync } from './cloudsync.js';
+import { startSyncStatus } from './sync-status.js';
+startSyncStatus();
 
 /* 云同步：本地一改就排队上传（内部有防抖）；启动时看一眼云端有没有新数据。
    没绑定云存储时 hookSave 是空操作，autoSync 直接返回，零开销。 */
@@ -160,7 +162,7 @@ try {
          否则「我的」首页仍拿旧 state.user 渲染，顶部资料卡片会显示旧信息。 */
       await loadMe();
       /* profileDraft 会保留当前正在编辑的未保存输入；重绘可让资料表单与顶部卡片一起读取最新 state.user。 */
-      await render();
+      live.requestLiveRefresh();
     } catch (e) {
       console.warn('[sync] 远端资料刷新失败', e);
     }
@@ -343,4 +345,5 @@ import('./ttimage.js').then((m) => {
   window.__wbShear = m._shear;
   window.__wbCols = m._cols;
 }).catch(() => {});
+
 
