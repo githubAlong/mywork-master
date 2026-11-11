@@ -744,7 +744,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const leaveHtml = () => {
     const shown=leaveRecords.filter(x=>(!search||(x.name+' '+x.subject).includes(search))&&(!subject||x.subject===subject));
-    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button></div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td><td><span class="aprd-status '+(x.status==='已批'?'approved':'pending')+'">'+esc(x.status)+'</span></td><td>'+esc(x.remark||'')+'</td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('')+'</tbody></table></div>';
+    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button><button data-leave-export="xlsx">导出 Excel</button><button data-leave-export="csv">导出 CSV</button><button data-leave-export="pdf">打印 / PDF</button></div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td><td><span class="aprd-status '+(x.status==='已批'?'approved':'pending')+'">'+esc(x.status)+'</span></td><td>'+esc(x.remark||'')+'</td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('')+'</tbody></table></div>';
   };
   const summaryHtml = () => {
     const filteredTeachers=visibleTeachers();
@@ -879,6 +879,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     });
     root.querySelectorAll('[data-disable]').forEach(b=>b.onclick=async()=>{if(await confirmDialog('删除该教师？历史考勤记录将保留，教师可从回收站恢复。')){try{await api.del('/teachers/'+b.dataset.disable);await load();}catch(error){toast(error.message||'删除失败','err');}}});
     root.querySelector('[data-add-leave]')?.addEventListener('click',()=>editLeaveRecord(null,teachers[0]));
+    root.querySelectorAll('[data-leave-export]').forEach(button=>button.addEventListener('click',()=>exportRoster(button.dataset.leaveExport)));
     root.querySelectorAll('[data-delete-leave]').forEach(b=>b.onclick=async()=>{if(await confirmDialog('删除这条请假记录？')){leaveRecords=leaveRecords.filter(x=>String(x.id)!==b.dataset.deleteLeave);await savePrefs({leaves:leaveRecords});await load();}});
     root.querySelectorAll('[data-edit-leave]').forEach(b=>b.onclick=()=>{
       const record=leaveRecords.find(x=>String(x.id)===b.dataset.editLeave);
