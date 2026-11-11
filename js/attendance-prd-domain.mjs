@@ -18,8 +18,8 @@ export const ATTENDANCE_COLUMNS = {
   seat: TEACHER_COLUMNS,
   class: TEACHER_COLUMNS,
   research: TEACHER_COLUMNS,
-  leave: ['姓名', '学科', '类型', '开始', '结束', '天数', '状态', '备注'],
-  summary: ['序号', '姓名', '学科', '坐班（在/应到）', '上课节次', '听课次数', '教研（已到/—）', '请假天数', '综合状态'],
+  leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '状态', '备注'],
+  summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长', '综合状态'],
 };
 
 export function nextTriState(value) {
@@ -51,6 +51,8 @@ function periodRecord(row, period) {
 }
 
 export function matchesAttendancePeriod(value, period) {
+  if (Number(period) === 0) return String(value || '').includes('全天');
+  if (String(value || '').includes('全天')) return false;
   const match = String(value || '').match(/(?:第\s*)?(\d+)(?:\s*[-~至]\s*(\d+))?\s*节/);
   if (!match) return true;
   const current = Number(period);
@@ -73,7 +75,7 @@ function deriveLegacyRosterState(teacher, {
     const record = data.__classRecord || {};
     return !data.__deleted
       && String(row.teacher || '').trim() === name
-      && Number(record.period || period) === Number(period);
+      && Number(record.period ?? period) === Number(period);
   });
   const researchRecords = researchRows.filter((row) => {
     const d = rowData(row).__research || {};
@@ -81,7 +83,7 @@ function deriveLegacyRosterState(teacher, {
       && d.attendees.includes(name)
       && matchesAttendancePeriod(d.period_time, period);
   });
-  const leaves = (Array.isArray(leaveRecords) ? leaveRecords : []).filter((item) =>
+  const leaves = activeLeavesFor(leaveRecords,date).filter((item) =>
     String(item.name || item.teacher || '').trim() === name && leaveCoversDate(item, date)
   );
   const classStatus = classRecords.some((row) => (rowData(row).__classRecord || {}).status === 'y') ? 'y'
@@ -92,7 +94,7 @@ function deriveLegacyRosterState(teacher, {
     const data = rowData(row);
     const record = data.__classRecord || {};
     return !data.__deleted
-      && Number(record.period || period) === Number(period)
+      && Number(record.period ?? period) === Number(period)
       && Array.isArray(record.listeners)
       && record.listeners.includes(name);
   });
@@ -194,7 +196,7 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
   // Class listening records name the listener rather than the class teacher.
   if (type === 'class') legacy.listen = deriveLegacyRosterState(teacher, { ...context, classRows: rows }).listen;
   const row = rows.find(item => !rowData(item).__deleted && matchesGridTeacher(item, teacher));
-  const saved = gridRecord(row, context.period || 1) || {};
+  const saved = gridRecord(row, context.period ?? 1) || {};
   const result = {
     class: legacy.class, sit: legacy.sit, listen: legacy.listen ? 'y' : 'u',
     research: legacy.research ? 'y' : 'u', leave: legacy.leave,
@@ -257,7 +259,7 @@ export function mergeTeacherGridRows(savedRows, draftRows, period) {
 
 export function deriveRosterState(teacher, context = {}) {
   const legacy = deriveLegacyRosterState(teacher, context);
-  const period = context.period || 1;
+  const period = context.period ?? 1;
   const hasGrid = GRID_TYPES.some(type => (context[type + 'Rows'] || []).some(row =>
     !rowData(row).__deleted && matchesGridTeacher(row, teacher) && gridRecord(row, period)));
   if (!hasGrid) return legacy;
@@ -283,31 +285,40 @@ export function calculateDailySummary(context = {}) {
       if (rowData(row).__deleted || !matchesGridTeacher(row, teacher)) continue;
       for (const value of Object.keys(rowData(row).__teacherGrid || {})) periods.add(Number(value));
     }
-    if (!periods.size) return;
     const output = summary.rows[index];
+    output.leaveHours = activeLeavesFor(context.leaveRecords, context.date).filter(item => String(item.name || item.teacher || '').trim() === teacher.name).reduce((sum,item)=>sum+(Number(item.hours)||0),0);
+    if (!periods.size) {
+      output.research = (context.researchRows || []).filter(row => !rowData(row).__deleted && rowData(row).__research?.attendees?.includes(teacher.name)).length;
+      output.overall = output.overall !== '未登记' || output.classes || output.listens || output.research ? '已登记' : '未登记';
+      return;
+    }
     const states = [...periods].map(period => ({ period, state: deriveRosterState(teacher, { ...context, period }) }));
-    const seats = Array.from({ length: 9 }, (_, i) => deriveRosterState(teacher, { ...context, period: i + 1 }).sit);
+    const seats = [0,1,2,3,4,5,6,7,8,9].map(period => deriveRosterState(teacher, { ...context, period }).sit);
     output.seatPresent = seats.filter(value => value === 'y').length;
     output.seatExpected = seats.filter(value => value === 'y' || value === 'n').length;
     // Retain legacy records outside the edited periods, including multiple classes.
     const classes = (context.classRows || []).filter(row => !rowData(row).__deleted
       && matchesGridTeacher(row, teacher) && rowData(row).__classRecord?.status === 'y'
-      && !periods.has(Number(rowData(row).__classRecord.period || 1))).length;
+      && !periods.has(Number(rowData(row).__classRecord.period ?? 1))).length;
     output.classes = classes + states.filter(item => item.state.class === 'y').length;
     const seatListens = (context.seatRows || []).filter(row => matchesGridTeacher(row, teacher))
       .flatMap(row => Object.entries(rowData(row).__periods || {}))
       .filter(([period, record]) => !periods.has(Number(period)) && !!record.listen_class).length;
     const classListens = (context.classRows || []).filter(row => !rowData(row).__deleted
-      && !periods.has(Number(rowData(row).__classRecord?.period || 1))
+      && !periods.has(Number(rowData(row).__classRecord?.period ?? 1))
       && rowData(row).__classRecord?.listeners?.includes(teacher.name)).length;
     output.listens = seatListens + classListens + states.filter(item => item.state.listen).length;
-    const legacyResearch = (context.researchRows || []).some(row => rowData(row).__research?.attendees?.includes(teacher.name)
-      && ![...periods].some(period => matchesAttendancePeriod(rowData(row).__research.period_time, period)));
-    output.research = legacyResearch || states.some(item => item.state.research) ? '已到' : '—';
+    const explicitResearch = [...periods].filter(period => GRID_TYPES.some(type => (context[type+'Rows']||[]).some(row => !rowData(row).__deleted && matchesGridTeacher(row,teacher) && gridRecord(row,period)?.research==='y')));
+    const researchOverrides = [...periods].filter(period => (context.researchRows||[]).some(row => !rowData(row).__deleted && matchesGridTeacher(row,teacher) && gridRecord(row,period)));
+    const legacyResearch = (context.researchRows || []).filter(row => !rowData(row).__deleted && rowData(row).__research?.attendees?.includes(teacher.name)
+      && ![...new Set([...researchOverrides,...explicitResearch])].some(period => matchesAttendancePeriod(rowData(row).__research.period_time, period))).length;
+    output.research = legacyResearch + explicitResearch.length;
     const onLeave = states.some(item => item.state.leave) || output.leaveDays > 0;
     if (onLeave) leavePeople.add(teacher.name);
-    output.overall = onLeave ? '请假' : states.some(item => item.state.class === 'n') ? '空堂待核实'
-      : seats.includes('n') ? '未坐班' : output.seatExpected ? '正常' : '未登记';
+    const registered = states.some(({state})=>state.class !== 'u' || state.sit !== 'u' || state.listenStatus === 'y' || state.listenStatus === 'n' || state.researchStatus === 'y' || state.researchStatus === 'n');
+    const legacyAbsent = (context.seatRows||[]).some(row=>matchesGridTeacher(row,teacher) && Object.entries(rowData(row).__periods||{}).some(([p,value])=>!periods.has(Number(p)) && value.status==='n'))
+      || (context.classRows||[]).some(row=>matchesGridTeacher(row,teacher) && !rowData(row).__deleted && rowData(row).__classRecord?.status==='n' && !periods.has(Number(rowData(row).__classRecord.period??1)));
+    output.overall = onLeave || registered || legacyAbsent || output.classes || output.seatPresent || output.listens || output.research ? '已登记' : '未登记';
   });
   summary.seatPresent = summary.rows.reduce((sum, row) => sum + row.seatPresent, 0);
   summary.seatExpected = summary.rows.reduce((sum, row) => sum + row.seatExpected, 0);
@@ -316,4 +327,18 @@ export function calculateDailySummary(context = {}) {
   summary.listens = summary.rows.reduce((sum, row) => sum + row.listens, 0);
   summary.leavePeople = leavePeople.size;
   return summary;
+}
+
+export function parseLeaveDuration(amount, unit='day') {
+  const value=Number(amount);
+  if (String(amount).trim()==='' || !Number.isFinite(value) || value<=0) throw new Error('请假时长必须大于0，不能为负数');
+  if (!['day','hour'].includes(unit)) throw new Error('请选择请假时长单位');
+  if(unit==='day' && !Number.isInteger(value*2)) throw new Error('按天请假以0.5天为单位');
+  return {duration:value,duration_unit:unit,days:unit==='day'?value:0,hours:unit==='hour'?value:0};
+}
+export function formatLeaveDuration(record) {
+  const parts=[];
+  if(Number(record.days)>0)parts.push(Number(Number(record.days).toFixed(2))+'天');
+  if(Number(record.hours)>0)parts.push(Number(Number(record.hours).toFixed(2))+'小时');
+  return parts.join(' / ') || '0天';
 }

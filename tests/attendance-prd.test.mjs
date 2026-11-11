@@ -10,8 +10,8 @@ test('PRD 固定六页签字段顺序', () => {
   for (const type of ['seat','class','research']) {
     assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
   }
-  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','天数','状态','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班（在/应到）','上课节次','听课次数','教研（已到/—）','请假天数','综合状态']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','状态','备注']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长','综合状态']);
 });
 
 test('三态循环保持未登记、在岗、未在岗语义', () => {
@@ -55,5 +55,5 @@ test('汇总 KPI 跨节次累计，未登记与缺勤不混为一类', () => {
   assert.equal(s.classes,1);
   assert.equal(s.listens,1);
   assert.equal(s.leavePeople,1);
-  assert.equal(s.rows[0].overall,'未坐班');
+  assert.equal(s.rows[0].overall,'已登记');
 });

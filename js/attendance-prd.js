@@ -2,9 +2,10 @@ import { api, esc, toast, confirmDialog, saveBlob } from './core.js';
 import { icon } from './ui.js';
 import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
+import { voiceSheet } from './attvoice.js';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import {
-  DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS,
+  DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS, parseLeaveDuration, formatLeaveDuration,
   nextTriState, activeLeavesFor, deriveRosterState, calculateDailySummary,
   matchesAttendancePeriod, deriveTableGridState, updateTeacherGrid, mergeTeacherGridRows,
 } from './attendance-prd-domain.mjs';
@@ -36,7 +37,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   let grade = grades.includes(initialGrade) ? initialGrade : (grades[0] || initialGrade || '');
   let date = TODAY(), period = 1, tab = 'roster', search = '', subject = '';
   let teachers = [], allTeachers = [], tables = [], details = {}, leaveRecords = [], prefs = {};
-  let showAddTeacher = false;
+  let showAddTeacher = true;
   const draftCache = new Map();
   let busy = false;
   const load = async () => {
@@ -81,7 +82,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const hasPeriodRow = rows.some(row => {
           const data = rowData(row), record = data.__classRecord || {};
           return !data.__deleted && row.teacher === teacher.name
-            && Number(record.period || period) === Number(period);
+            && Number(record.period ?? period) === Number(period);
         });
         if (hasPeriodRow) continue;
         let row = rows.find(item => item.teacher === teacher.name
@@ -138,7 +139,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       let rows=[];
       if(type==='seat')rows=source;
       else if(type==='class')rows=source.filter(row=>(!!rowData(row).__classRecord
-        && Number(rowData(row).__classRecord.period||period)===Number(period)) || rowData(row).__teacherGrid?.[String(period)]);
+        && Number(rowData(row).__classRecord.period??period)===Number(period)) || rowData(row).__teacherGrid?.[String(period)]);
       else if(type==='research')rows=source.filter(row=>(!!rowData(row).__research
         && matchesAttendancePeriod(rowData(row).__research.period_time,period)) || rowData(row).__teacherGrid?.[String(period)]);
       draftCache.set(key,rows);
@@ -150,7 +151,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     }else if(type==='class'){
       for(const teacher of teachers){
         const exists=rows.some(row=>!rowData(row).__deleted&&row.teacher===teacher.name
-          && Number(rowData(row).__classRecord?.period||period)===Number(period));
+          && Number(rowData(row).__classRecord?.period??period)===Number(period));
         if(!exists)rows.push({teacher:teacher.name,subject:teacher.subject||'',data:{__classRecord:{
           class_name:'',period:Number(period),status:'u',listeners:[],remark:'',
         }}});
@@ -164,7 +165,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         if(!exists){
           const members=teachers.filter(item=>String(item.subject||'').trim()===subjectName).map(item=>item.name);
           rows.push({teacher:subjectName,subject:subjectName,data:{__research:{
-            subject:subjectName,period_time:'第'+period+'节',location:'',host:'',
+            subject:subjectName,period_time:(period===0?'全天':'第'+period+'节'),location:'',host:'',
             expected:members.length,attendees:[],absent:members,status:'待登记',remark:'',
           }}});
         }
@@ -189,7 +190,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         if(!record)continue;
         let target=draft.id?rows.find(row=>String(row.id)===String(draft.id)):null;
         if(!target&&!draft.__draftNew)target=rows.find(row=>row.teacher===draft.teacher
-          && Number(rowData(row).__classRecord?.period||period)===Number(period)
+          && Number(rowData(row).__classRecord?.period??period)===Number(period)
           && String(rowData(row).__classRecord?.class_name||'')===String(record.class_name||''));
         if(draftData.__deleted){
           if(target)target.data={...rowData(target),__deleted:true};
@@ -250,6 +251,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<label>姓名 <em>*</em><input name="name" type="text" placeholder="请输入教师姓名" autocomplete="off" required></label>'
       +'<label>学科 <em>*</em><input name="subject" type="text" list="aprd-add-subjects" placeholder="请输入或选择学科" autocomplete="off" required>'
       +'<datalist id="aprd-add-subjects">'+subjects.map(item=>'<option value="'+esc(item)+'"></option>').join('')+'</datalist></label>'
+      +'<label>归属年级 <em>*</em><input name="grade" type="text" list="aprd-add-grades" value="'+esc(grade)+'" placeholder="请输入或选择归属年级" maxlength="12" required><datalist id="aprd-add-grades">'+grades.map(item=>'<option value="'+esc(item)+'"></option>').join('')+'</datalist></label>'
       +'<label>归属部门<input name="department" type="text" value="高中部" placeholder="请输入归属部门"></label>'
       +'<div class="aprd-roster-add-actions"><button type="button" data-roster-add-cancel>取消</button><button type="submit" class="primary">保存教师</button></div>'
       +'</form></section>';
@@ -257,7 +259,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const saveDraftButton = (type,label) => '<button '+(details[type]?'':'disabled')+' data-save-'+type+'>'+(details[type]?label:'生成后可保存修改')+'</button>';
   const rosterKey = (row) => String(row.name || '').trim().replace(/\s+/g,'').toLowerCase() + '\u0000' + String(row.subject || '').trim().replace(/\s+/g,'').toLowerCase();
   const rosterGrid = (list) => [
-    [(TABS.find(([id])=>id===tab)?.[1]||'花名册')+' · '+grade+' · '+date+' 第'+period+'节'],
+    [(TABS.find(([id])=>id===tab)?.[1]||'花名册')+' · '+grade+' · '+date+' '+(period===0?'全天':'第'+period+'节')],
     ATTENDANCE_COLUMNS.roster.slice(0,-1),
     ...list.map((teacher,index)=>{
       const state = TYPE[tab] ? deriveTableGridState(teacher,tab,getDraftRows(tab),{leaveRecords,date,period})
@@ -278,7 +280,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const list=scope==='filtered'?visibleTeachers():teachers.slice();
     if(!list.length){toast('当前没有可导出的教师','warn');return;}
     const grid=rosterGrid(list);
-    const fileBase=(grade||'教师')+(TABS.find(([id])=>id===tab)?.[1]||'花名册')+'-'+date+'-第'+period+'节';
+    const fileBase=(grade||'教师')+(TABS.find(([id])=>id===tab)?.[1]||'花名册')+'-'+date+'-'+(period===0?'全天':'第'+period+'节');
     if(format==='xlsx'){
       saveBlob(makeXlsx({title:fileBase,grid}),fileBase+'.xlsx');
     }else if(format==='csv'){
@@ -443,7 +445,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const openEditor = (title, fields, initial, onSave) => {
     const dialog = document.createElement('div'); dialog.className='aprd-dialog';
     dialog.innerHTML = '<form class="aprd-editor"><h3>'+esc(title)+'</h3>'+
-      fields.map(f=>'<label>'+esc(f.label)+(f.type==='select'?'<select name="'+escAttr(f.key)+'">'+f.options.map(o=>'<option '+(String(initial[f.key]??'')===String(o.value)?'selected':'')+' value="'+escAttr(o.value)+'">'+esc(o.label)+'</option>').join('')+'</select>':f.type==='textarea'?'<textarea name="'+escAttr(f.key)+'">'+esc(initial[f.key]||'')+'</textarea>':'<input name="'+escAttr(f.key)+'" type="'+(f.type||'text')+'" value="'+escAttr(initial[f.key]||'')+'" '+(f.required?'required':'')+'>')+'</label>').join('')+
+      fields.map(f=>{
+        const value=initial[f.key]??'';
+        const required=f.required?' required':'';
+        const input=f.type==='select'?'<select name="'+escAttr(f.key)+'"'+required+'>'+f.options.map(o=>'<option '+(String(value)===String(o.value)?'selected':'')+' value="'+escAttr(o.value)+'">'+esc(o.label)+'</option>').join('')+'</select>'
+          :f.type==='textarea'?'<textarea name="'+escAttr(f.key)+'">'+esc(value)+'</textarea>'
+          :'<input name="'+escAttr(f.key)+'" type="'+(f.type==='combo'?'text':f.type||'text')+'" value="'+escAttr(value)+'"'+required+(f.min!==undefined?' min="'+f.min+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.type==='combo'?' list="aprd-editor-'+escAttr(f.key)+'-options"':'')+'>'+(f.type==='combo'?'<datalist id="aprd-editor-'+escAttr(f.key)+'-options">'+(f.options||[]).map(o=>'<option value="'+escAttr(o.value)+'"></option>').join('')+'</datalist>':'');
+        return '<label>'+esc(f.label)+input+'</label>';
+      }).join('')+
       '<div class="aprd-foot"><button type="button" data-cancel>取消</button><button class="primary" type="submit">保存</button></div></form>';
     (root.querySelector('.attendance-prd') || root).append(dialog); const form=dialog.querySelector('form');
     dialog.querySelector('[data-cancel]').onclick=()=>dialog.remove();
@@ -458,15 +467,18 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       {key:'type',label:'类型',type:'select',options:[{value:'',label:'无（取消请假）'},...LEAVE_TYPES.map(x=>({value:x,label:x}))]},
       {key:'start_date',label:'开始日期',type:'date'},
       {key:'end_date',label:'结束日期',type:'date'},
-      {key:'days',label:'天数',type:'number'},
+      {key:'days',label:'请假时长（天支持0.5，小时支持小数）',type:'number',min:'0.01',step:'any',required:true},
+      {key:'duration_unit',label:'时长单位',type:'select',options:[{value:'day',label:'天'},{value:'hour',label:'小时'}]},
       {key:'status',label:'状态',type:'select',options:['待批','已批','已撤销'].map(x=>({value:x,label:x}))},
       {key:'remark',label:'备注',type:'textarea'},
     ],{
       teacher:recordName||defaultTeacher?.name||teachers[0]?.name||'',
       type:record?.type||'',start_date:record?.start_date||date,end_date:record?.end_date||date,
-      days:record?.days||1,status:record?.status||'待批',remark:record?.remark||'',
+      days:record?.duration??(record?.hours||record?.days||1),duration_unit:record?.duration_unit||(record?.hours?'hour':'day'),status:record?.status||'待批',remark:record?.remark||'',
     },async data=>{
       const who=teachers.find(x=>x.name===data.teacher);
+      const duration = data.type ? parseLeaveDuration(data.days,data.duration_unit) : null;
+      if(data.type && data.end_date < data.start_date)throw new Error('结束日期不能早于开始日期');
       const next=record
         ? leaveRecords.filter(x=>x!==record&&String(x.id)!==String(record.id))
         : leaveRecords.slice();
@@ -475,7 +487,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
           ...(record||{}),id:record?.id||Date.now(),grade:record?.grade||grade,
           name:who?.name||recordName||data.teacher,subject:who?.subject||record?.subject||'',type:data.type,
           start_date:data.start_date||date,end_date:data.end_date||data.start_date||date,
-          days:Number(data.days)||1,status:data.status||'待批',remark:data.remark||'',
+          ...duration,status:data.status||'待批',remark:data.remark||'',
         });
       }
       await savePrefs({leaves:next});
@@ -486,7 +498,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const table=await getTable('class');
     const records=(table.rows||[]).filter(row=>{
       const data=rowData(row), record=data.__classRecord||{};
-      return !data.__deleted && row.teacher===teacher.name && Number(record.period||period)===Number(period);
+      return !data.__deleted && row.teacher===teacher.name && Number(record.period??period)===Number(period);
     });
     const current=deriveRosterState(teacher,{seatRows:details.seat?.rows||[],classRows:table.rows||[],researchRows:details.research?.rows||[],leaveRecords,date,period}).class;
     const existing=records.find(row=>String(rowData(row).__classRecord?.class_name||'').trim())||records[0];
@@ -509,7 +521,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       {key:'listeners',label:'听课教师'},
       {key:'remark',label:'备注',type:'textarea'},
     ],{
-      class_name:existingData.class_name||'',period:String(existingData.period||period),
+      class_name:existingData.class_name||'',period:String(existingData.period??period),
       status:existingData.status==='n'?'n':'y',
       listeners:Array.isArray(existingData.listeners)?existingData.listeners.join('、'):'',
       remark:existingData.remark||'',
@@ -520,7 +532,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         if(!row){row={teacher:teacher.name,subject:teacher.subject||'',data:{}};table.rows.push(row);}
       }
       const record={
-        ...existingData,class_name:String(data.class_name||'').trim(),period:Number(data.period||period),
+        ...existingData,class_name:String(data.class_name||'').trim(),period:Number(data.period??period),
         status:data.status||'u',
         listeners:String(data.listeners||'').split(/[、,，]/).map(x=>x.trim()).filter(Boolean),
         remark:data.remark||'',
@@ -560,7 +572,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
           {key:'period_time',label:'节次/时间',required:true},
           {key:'location',label:'地点'},
           {key:'host',label:'主持人',required:true},
-        ],{period_time:record.period_time||'第'+period+'节',location:record.location||'',host:record.host||teacher.name},
+        ],{period_time:record.period_time||(period===0?'全天':'第'+period+'节'),location:record.location||'',host:record.host||teacher.name},
         async data=>updateAttendance(existing,record,data));
         return;
       }
@@ -579,7 +591,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       {key:'period_time',label:'节次/时间',required:true},
       {key:'location',label:'地点'},
       {key:'host',label:'主持人',required:true},
-    ],{period_time:'第'+period+'节',location:'',host:teacher.name},async data=>{
+    ],{period_time:(period===0?'全天':'第'+period+'节'),location:'',host:teacher.name},async data=>{
       const attendees=[teacher.name];
       table.rows.push({
         teacher:subjectName||teacher.name,subject:subjectName,
@@ -628,7 +640,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         +'<td>'+mark('class',state.class)+'</td><td>'+mark('sit',state.sit)+'</td>'
         +'<td>'+mark('listen',listen)+'</td><td>'+mark('research',research)+'</td><td>'+leave+'</td><td>'+remark+'</td>'
         +'<td><div class="aprd-actions"><button type="button" data-edit="'+esc(teacher.id)+'">编辑教师</button>'
-        +(!editable?'<button type="button" data-disable="'+esc(teacher.id)+'">停用</button>':'')+'</div></td></tr>';
+        +(!editable?'<button type="button" data-disable="'+esc(teacher.id)+'">删除</button>':'')+'</div></td></tr>';
     }).join('');
     const tools = '<button class="primary" data-add>'+(showAddTeacher?'收起表单':'＋ 新增教师')+'</button>'
       +'<button type="button" data-roster-import>批量导入</button><div class="aprd-export-wrap"><button data-roster-export-toggle>批量导出 ▾</button>'
@@ -643,24 +655,41 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const leaveHtml = () => {
     const shown=leaveRecords.filter(x=>(!search||(x.name+' '+x.subject).includes(search))&&(!subject||x.subject===subject));
-    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button></div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(x.days)+'</td><td><span class="aprd-status '+(x.status==='已批'?'approved':'pending')+'">'+esc(x.status)+'</span></td><td>'+esc(x.remark||'')+'</td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('')+'</tbody></table></div>';
+    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button></div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td><td><span class="aprd-status '+(x.status==='已批'?'approved':'pending')+'">'+esc(x.status)+'</span></td><td>'+esc(x.remark||'')+'</td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('')+'</tbody></table></div>';
   };
   const summaryHtml = () => {
     const filteredTeachers=visibleTeachers();
     const filteredLeaves=leaveRecords.filter(item=>(!subject||item.subject===subject)&&(!search||((item.name||item.teacher||'')+' '+(item.subject||'')).toLowerCase().includes(search.toLowerCase())));
     const s=calculateDailySummary({teachers:filteredTeachers,seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],researchRows:details.research?.rows||[],leaveRecords:filteredLeaves,date});
-    const kpis=[['应到教师',s.expectedTeachers+'人'],['坐班在岗率',s.seatRate+'%'],['上课节次',s.classes],['听课人次',s.listens],['请假人数',s.leavePeople+'人']];
-    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'</div><div class="aprd-kpis">'+kpis.map(([a,b],i)=>'<div class="aprd-kpi"><span>'+a+'</span><b style="'+(i===1&&s.seatRate<80?'color:#e5484d':'')+'">'+b+'</b></div>').join('')+'</div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.summary.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+s.rows.map(r=>'<tr><td>'+r.serial+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.subject)+'</td><td>'+r.seatPresent+'/'+r.seatExpected+'</td><td>'+r.classes+'</td><td>'+r.listens+'</td><td>'+r.research+'</td><td>'+r.leaveDays+'</td><td>'+esc(r.overall)+'</td></tr>').join('')+'</tbody></table></div>';
+    const kpis=[['应到教师',s.expectedTeachers+'人'],['坐班次数',s.seatPresent],['上课次数',s.classes],['听课人次',s.listens],['请假人数',s.leavePeople+'人']];
+    return '<div class="aprd-toolbar">'+teacherFiltersHtml()+'</div><div class="aprd-kpis">'+kpis.map(([a,b],i)=>'<div class="aprd-kpi"><span>'+a+'</span><b style="'+''+'">'+b+'</b></div>').join('')+'</div><div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.summary.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+s.rows.map(r=>'<tr><td>'+r.serial+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.subject)+'</td><td>'+r.seatPresent+'</td><td>'+r.classes+'</td><td>'+r.listens+'</td><td>'+r.research+'</td><td>'+esc(formatLeaveDuration({days:r.leaveDays,hours:r.leaveHours}))+'</td><td>'+esc(r.overall)+'</td></tr>').join('')+'</tbody></table></div>';
   };
   const paint = () => {
     const content = ['roster','seat','class','research'].includes(tab)?rosterHtml(tab):tab==='leave'?leaveHtml():summaryHtml();
-    root.innerHTML='<div class="attendance-prd"><div class="aprd-head"><h2>考勤工作台</h2><div class="aprd-grade">'+grades.map(g=>'<button data-grade-tab="'+esc(g)+'" class="'+(g===grade?'on':'')+'">'+esc(g)+'</button>').join('')+'</div><span style="margin-left:auto;color:#168448;font-size:12px">数据已加载</span></div><div class="aprd-meta"><label>日期 <input type="date" id="aprd-date" value="'+date+'"></label><label>节次 <select id="aprd-period">'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label><label>时段 <input type="time" id="aprd-start" value="'+DEFAULT_PERIODS[period-1].start+'">—<input type="time" id="aprd-end" value="'+DEFAULT_PERIODS[period-1].end+'"></label><select id="aprd-generate"><option value="seat">生成坐班表</option><option value="class">生成上课表</option><option value="research">生成教研表</option></select><button class="primary" data-generate>确认生成</button></div><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav><section class="aprd-panel">'+content+'</section></div>';
+    root.innerHTML='<div class="attendance-prd"><div class="aprd-head"><h2>考勤工作台</h2><div class="aprd-grade">'+grades.map(g=>'<button data-grade-tab="'+esc(g)+'" class="'+(g===grade?'on':'')+'">'+esc(g)+'</button>').join('')+'</div><span style="margin-left:auto;color:#168448;font-size:12px">数据已加载</span></div><div class="aprd-meta"><label>日期 <input type="date" id="aprd-date" value="'+date+'"></label><label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label><label>时段 <input type="time" id="aprd-start" value="'+(period===0?'00:00':DEFAULT_PERIODS.find(item=>item.no===period)?.start||'08:00')+'">—<input type="time" id="aprd-end" value="'+(period===0?'23:59':DEFAULT_PERIODS.find(item=>item.no===period)?.end||'08:45')+'"></label><select id="aprd-generate"><option value="seat">生成坐班表</option><option value="class">生成上课表</option><option value="research">生成教研表</option></select><button class="primary" data-generate>确认生成</button><button data-workspace-voice>语音登记</button></div><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav><section class="aprd-panel">'+content+'</section></div>';
     if(TYPE[tab]) root.querySelector('#aprd-generate').value=tab;
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;search='';subject='';paint();});
-    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{grade=b.dataset.gradeTab;showAddTeacher=false;await load();});
+    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{grade=b.dataset.gradeTab;await load();});
     root.querySelector('#aprd-date').onchange=e=>{date=e.target.value;load();};
     root.querySelector('#aprd-period').onchange=e=>{period=Number(e.target.value);paint();};
     root.querySelector('[data-generate]').onclick=async()=>{const type=root.querySelector('#aprd-generate').value;try{await generateTable(type);}catch(e){toast(e.message||'生成失败','err');}};
+    root.querySelector('[data-workspace-voice]').onclick=()=>{
+      const type=TYPE[tab]?tab:root.querySelector('#aprd-generate').value;
+      const selectedPeriod=period,selectedDate=date,selectedGrade=grade;
+      const cols=[{key:'class',label:'上课',type:'check'},{key:'sit',label:'坐班',type:'check'},{key:'listen',label:'听课',type:'check'},{key:'research',label:'教研',type:'check'}];
+      voiceSheet({rows:teachers.map(t=>({teacher:t.name,subject:t.subject})),cols,onApply:items=>{
+        if(period!==selectedPeriod||date!==selectedDate||grade!==selectedGrade){toast('日期、年级或节次已切换，请重新语音登记','warn');return;}
+        let count=0;
+        for(const item of items){
+          const matches=teachers.filter(t=>t.name===item.name&&(!item.subject||t.subject===item.subject));
+          if(matches.length!==1)continue;
+          const teacher=matches[0],key=item.leave?'leave':item.absent?({seat:'sit',class:'class',research:'research'}[type]):item.statusKey;
+          if(!['leave','class','sit','listen','research'].includes(key))continue;
+          updateTeacherGrid(getDraftRows(type),teacher,type,period,key,item.leave?(item.leaveType||'事假'):item.absent?'n':'y',{leaveRecords,date});count++;
+        }
+        tab=type;paint();toast('已应用 '+count+' 条语音记录'+(count<items.length?'，未匹配或同名记录请核对':'')+'，请保存本表','ok',5000);
+      }});
+    };
     root.querySelector('#aprd-search')?.addEventListener('input',e=>{search=e.target.value;const p=e.target.selectionStart;paint();const q=root.querySelector('#aprd-search');q?.focus();q?.setSelectionRange(p,p);});
     root.querySelector('#aprd-subject')?.addEventListener('change',e=>{subject=e.target.value;paint();});
     root.querySelectorAll('[data-grid-person]').forEach(control => {
@@ -708,12 +737,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const name=String(values.name||'').trim();
       const subjectName=String(values.subject||'').trim();
       const department=String(values.department||'').trim()||'高中部';
+      const teacherGrade=String(values.grade||'').trim();
+      if(!teacherGrade||teacherGrade.length>12){toast('请填写1至12字的归属年级','warn');return;}
       if(!name){toast('请填写教师姓名','warn');form.querySelector('[name="name"]')?.focus();return;}
       if(!subjectName){toast('请填写教师学科','warn');form.querySelector('[name="subject"]')?.focus();return;}
       submit.disabled=true;
       submit.textContent='保存中…';
       try{
-        await api.post('/teachers',{grade,name,subject:subjectName});
+        if(!grades.includes(teacherGrade))await api.post('/grades',{name:teacherGrade});
+        await api.post('/teachers',{grade:teacherGrade,name,subject:subjectName});
+        grade=teacherGrade;
         const updated=await api.get('/teachers',{grade,active:'all'});
         const created=(updated.list||[]).find(item=>item.name===name&&item.subject===subjectName);
         if(created)await setTeacherMeta(created,{department});
@@ -737,8 +770,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     root.querySelectorAll('[data-roster-export]').forEach(button=>button.addEventListener('click',()=>exportRoster(button.dataset.rosterExport)));
 
     root.querySelector('[data-copy]')?.addEventListener('click',()=>{const names=visibleTeachers().map(t=>t.name).join('\n');navigator.clipboard?.writeText(names);toast('已复制当前名单','ok');});
-    root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const t=teachers.find(x=>String(x.id)===b.dataset.edit);openEditor('编辑教师',[{key:'name',label:'姓名',required:true},{key:'subject',label:'学科',required:true},{key:'department',label:'归属部门'},{key:'remark',label:'备注'}],{name:t.name,subject:t.subject,department:deptOf(t),remark:noteOf(t)},async d=>{await api.patch('/teachers/'+t.id,{name:d.name,subject:d.subject});await setTeacherMeta(t,{department:d.department,remark:d.remark});await load();});});
-    root.querySelectorAll('[data-disable]').forEach(b=>b.onclick=async()=>{if(await confirmDialog('停用该教师？')){await api.patch('/teachers/'+b.dataset.disable,{active:0});await load();}});
+    root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
+      const t=teachers.find(x=>String(x.id)===b.dataset.edit);
+      openEditor('编辑教师',[{key:'name',label:'姓名',required:true},{key:'subject',label:'学科',required:true},{key:'grade',label:'归属年级',type:'combo',required:true,options:grades.map(value=>({value,label:value}))},{key:'department',label:'归属部门'},{key:'remark',label:'备注'}],{name:t.name,subject:t.subject,grade:t.grade||grade,department:deptOf(t),remark:noteOf(t)},async d=>{
+        const target=String(d.grade||'').trim();if(!target||target.length>12)throw new Error('归属年级必须为1至12字');
+        await api.patch('/teachers/'+t.id,{name:d.name,subject:d.subject,grade:target});
+        if(!grades.includes(target))await api.post('/grades',{name:target});
+        await setTeacherMeta(t,{department:d.department,remark:d.remark});grade=target;await load();
+      });
+    });
+    root.querySelectorAll('[data-disable]').forEach(b=>b.onclick=async()=>{if(await confirmDialog('删除该教师？历史考勤记录将保留，教师可从回收站恢复。')){try{await api.del('/teachers/'+b.dataset.disable);await load();}catch(error){toast(error.message||'删除失败','err');}}});
     root.querySelector('[data-add-leave]')?.addEventListener('click',()=>editLeaveRecord(null,teachers[0]));
     root.querySelectorAll('[data-delete-leave]').forEach(b=>b.onclick=async()=>{if(await confirmDialog('删除这条请假记录？')){leaveRecords=leaveRecords.filter(x=>String(x.id)!==b.dataset.deleteLeave);await savePrefs({leaves:leaveRecords});await load();}});
     root.querySelectorAll('[data-edit-leave]').forEach(b=>b.onclick=()=>{
@@ -756,7 +797,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const teacher=teachers.find(item=>item.name===data.teacher);
       if(!teacher)throw new Error('请先选择任课教师');
       getDraftRows('class').push({teacher:teacher.name,subject:teacher.subject||'',__draftNew:true,data:{__classRecord:{
-        class_name:String(data.class_name||'').trim(),period:Number(data.period||period),status:data.status||'u',
+        class_name:String(data.class_name||'').trim(),period:Number(data.period??period),status:data.status||'u',
         listeners:String(data.listeners||'').split(/[、,，]/).map(item=>item.trim()).filter(Boolean),remark:data.remark||'',
       }}});
       paint();
@@ -788,7 +829,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const teacher=teachers.find(item=>item.name===data.teacher);
       if(!teacher)throw new Error('请先选择任课教师');
       getDraftRows('class').push({teacher:teacher.name,subject:teacher.subject||'',__draftNew:true,data:{__classRecord:{
-        class_name:String(data.class_name||'').trim(),period:Number(data.period||period),status:data.status||'u',
+        class_name:String(data.class_name||'').trim(),period:Number(data.period??period),status:data.status||'u',
         listeners:String(data.listeners||'').split(/[、,，]/).map(item=>item.trim()).filter(Boolean),remark:data.remark||'',
       }}});
       paint();
@@ -829,7 +870,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         {key:'location',label:'地点'},
         {key:'host',label:'主持人',type:'select',options:teachers.map(item=>({value:item.name,label:item.name}))},
         {key:'remark',label:'备注',type:'textarea'},
-      ],{subject:subjects[0]||'',period_time:'第'+period+'节',location:'',host:teachers[0]?.name||'',remark:''},async data=>{
+      ],{subject:subjects[0]||'',period_time:(period===0?'全天':'第'+period+'节'),location:'',host:teachers[0]?.name||'',remark:''},async data=>{
         const subjectName=String(data.subject||'').trim();
         const members=teachers.filter(item=>String(item.subject||'').trim()===subjectName).map(item=>item.name);
         const draftRows=getDraftRows('research');
@@ -871,7 +912,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         {key:'location',label:'地点'},
         {key:'host',label:'主持人',type:'select',options:teachers.map(item=>({value:item.name,label:item.name}))},
         {key:'remark',label:'备注',type:'textarea'},
-      ],{period_time:old.period_time||'第'+period+'节',location:old.location||'',host:old.host||teacher.name,remark:old.remark||''},async data=>{
+      ],{period_time:old.period_time||(period===0?'全天':'第'+period+'节'),location:old.location||'',host:old.host||teacher.name,remark:old.remark||''},async data=>{
         const picked=await chooseResearchAttendees(members,Array.isArray(old.attendees)?old.attendees:[]);
         if(picked===null)return;
         row.data={...rowData(row),__research:{...old,...data,subject:subjectName,expected:members.length,
