@@ -441,13 +441,13 @@ export function buildAttendanceExportGrid({
       const data = exportRowData(row);
       if (data.__deleted) continue;
       const record = data.__classRecord || {};
-      const currentPeriod = Number(record.period || period);
+      const currentPeriod = Number(record.period ?? period);
       if (Number(period) !== 0 && currentPeriod !== Number(period)) continue;
       const saved = data.__teacherGrid?.[String(currentPeriod)] || data.__teacherGrid?.[String(period)] || {};
       const status = record.status === 'y' || record.status === 'n' ? record.status : (saved.class || record.status || 'u');
       const className = String(record.class_name || '').trim();
       const name = String(row.teacher || '').trim();
-      if (!name || (!className && status !== 'y' && saved.class !== 'y')) continue;
+      if (!name || status === 'n' || (!className && status !== 'y' && saved.class !== 'y')) continue;
       const teacher = teacherByName.get(name);
       if (!teacher && !includeUnlisted) continue;
       seenTeacherPeriods.add(name + '|' + currentPeriod);
