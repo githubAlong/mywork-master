@@ -26,7 +26,8 @@ class Element {
     await (this.onchange||this.handlers.change)?.({currentTarget:this,target:this});
     await new Promise(setImmediate);
   }
-  async input(value) { this.value=value; return this.handlers.input?.({currentTarget:this,target:this}); }
+  async input(value,options={}) { this.value=value; return this.handlers.input?.({currentTarget:this,target:this,...options}); }
+  async composition(type) { return this.handlers[type]?.({currentTarget:this,target:this}); }
 }
 class Root {
   set innerHTML(html) {
@@ -149,6 +150,21 @@ test('切换节次和日期不串草稿；搜索后四页签共用同一花名�
   assert.equal(root.querySelectorAll('[data-grid-person]').length,6);
   assert.equal(control(root,'research','1'),undefined);
   assert.ok(control(root,'research','2'));
+});
+
+test('教师搜索支持中文输入法组合输入，组合期间不重绘，选字完成后再筛选',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-tab="seat"]').click();
+  const input=root.querySelector('#aprd-search');
+  const htmlBefore=root.innerHTML;
+  await input.composition('compositionstart');
+  await input.input('li', {isComposing:true});
+  assert.equal(root.innerHTML,htmlBefore,'拼音组合期间不应重绘并销毁输入框');
+  await input.input('李老师', {isComposing:true});
+  assert.equal(root.innerHTML,htmlBefore,'候选字尚未确认时不应触发筛选');
+  await input.composition('compositionend');
+  assert.equal(root.querySelector('#aprd-search').value,'李老师');
+  assert.equal(root.querySelectorAll('[data-grid-person]').length,6,'中文选字完成后应按教师姓名筛选');
 });
 
 test('工作表导出和生成操作针对当前页签，导出的列及勾选与页面一致',async()=>{
