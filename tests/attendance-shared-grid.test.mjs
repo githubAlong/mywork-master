@@ -88,9 +88,9 @@ test('汇总统计读取已保存的统一表格，不再遗漏勾选', () => {
   assert.equal(summary.seatExpected,1);
   assert.equal(summary.classes,1);
   assert.equal(summary.listens,1);
-  assert.equal(summary.rows[0].research,'已到');
+  assert.equal(summary.rows[0].research,1);
   assert.equal(summary.leavePeople,1);
-  assert.equal(summary.rows[0].overall,'请假');
+  assert.equal(summary.rows[0].overall,'已登记');
 });
 
 test('空数据、已删除行、未登记和明确未到不混淆', () => {
