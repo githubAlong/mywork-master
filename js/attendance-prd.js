@@ -368,7 +368,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     if(format==='xlsx'){
       saveBlob(makeXlsx({title:fileBase,grid}),fileBase+'.xlsx');
     }else if(format==='csv'){
-      const csv='\\uFEFF'+grid.map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');
+      const csv='\uFEFF'+grid.map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
       saveBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}),fileBase+'.csv');
     }else if(format==='pdf'){
       const win=window.open('','_blank');
