@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as domain from '../js/attendance-prd-domain.mjs';
+import * as timetablePeriods from '../js/timetable-periods.mjs';
 
 // Exercise the actual renderer and its event handlers with a small DOM/API fixture.
 // No database, account, browser storage or network is used.
@@ -87,7 +88,7 @@ async function setup() {
       return structuredClone(table);
     },
   };
-  const dependencies={...domain,api,esc,toast(){},confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
+  const dependencies={...domain,...timetablePeriods,api,esc,toast(){},confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
   await render(root,{grade:'高一'});
