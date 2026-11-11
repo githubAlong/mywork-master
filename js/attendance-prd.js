@@ -56,6 +56,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   let grades = (await api.get('/grades').catch(() => ({grades:[]}))).grades || [];
   let grade = grades.includes(initialGrade) ? initialGrade : (grades[0] || initialGrade || '');
   let date = TODAY(), period = 1, tab = 'roster', search = '', subject = '';
+  let isComposingSearch = false;
   let teachers = [], allTeachers = [], tables = [], details = {}, leaveRecords = [], prefs = {};
   let timetableSettings = {}, timetableCourses = [], timetablePeriods = [], periodTimeEdits = {};
   let showAddTeacher = false;
@@ -821,7 +822,25 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         tab=type;paint();toast('已应用 '+count+' 条语音记录'+(count<items.length?'，未匹配或同名记录请核对':'')+'，请保存本表','ok',5000);
       }});
     };
-    root.querySelector('#aprd-search')?.addEventListener('input',e=>{search=e.target.value;const p=e.target.selectionStart;paint();const q=root.querySelector('#aprd-search');q?.focus();q?.setSelectionRange(p,p);});
+    const searchInput = root.querySelector('#aprd-search');
+    const restoreSearchFocus = target => {
+      const position = target.selectionStart ?? target.value.length;
+      paint();
+      const next = root.querySelector('#aprd-search');
+      next?.focus();
+      next?.setSelectionRange(position,position);
+    };
+    searchInput?.addEventListener('compositionstart',()=>{isComposingSearch=true;});
+    searchInput?.addEventListener('compositionend',event=>{
+      isComposingSearch=false;
+      search=event.target.value;
+      restoreSearchFocus(event.target);
+    });
+    searchInput?.addEventListener('input',event=>{
+      if(isComposingSearch || event.isComposing) return;
+      search=event.target.value;
+      restoreSearchFocus(event.target);
+    });
     root.querySelector('#aprd-subject')?.addEventListener('change',e=>{subject=e.target.value;paint();});
     root.querySelectorAll('[data-grid-person]').forEach(control => {
       const teacher = teachers.find(item => String(item.id) === control.dataset.gridPerson);
