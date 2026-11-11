@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
-  deriveRosterState, calculateDailySummary,
+  deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -56,4 +56,14 @@ test('汇总 KPI 跨节次累计，未登记与缺勤不混为一类', () => {
   assert.equal(s.listens,1);
   assert.equal(s.leavePeople,1);
   assert.equal(s.rows[0].overall,'已登记');
+});
+
+test('请假时长支持半天、上午、下午和小时小数', () => {
+  assert.deepEqual(parseLeaveDuration('0.5','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0});
+  assert.deepEqual(parseLeaveDuration('0.5','morning'), {duration:0.5,duration_unit:'morning',days:0.5,hours:0});
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','morning')),'上午（0.5天）');
+  assert.deepEqual(parseLeaveDuration('0.5','afternoon'), {duration:0.5,duration_unit:'afternoon',days:0.5,hours:0});
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'下午（0.5天）');
+  assert.deepEqual(parseLeaveDuration('1.5','hour'), {duration:1.5,duration_unit:'hour',days:0,hours:1.5});
+  assert.throws(() => parseLeaveDuration('0.25','day'), /0.5天/);
 });

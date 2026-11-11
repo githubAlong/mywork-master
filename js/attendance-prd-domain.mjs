@@ -1,13 +1,13 @@
 export const DEFAULT_PERIODS = [
-  { no: 1, label: '第1节', start: '08:00', end: '08:45' },
-  { no: 2, label: '第2节', start: '08:55', end: '09:40' },
-  { no: 3, label: '第3节', start: '10:00', end: '10:45' },
-  { no: 4, label: '第4节', start: '10:55', end: '11:40' },
-  { no: 5, label: '第5节', start: '14:20', end: '15:05' },
-  { no: 6, label: '第6节', start: '15:15', end: '16:00' },
-  { no: 7, label: '第7节', start: '16:10', end: '16:55' },
-  { no: 8, label: '第8节', start: '17:05', end: '17:50' },
-  { no: 9, label: '第9节', start: '18:30', end: '19:15' },
+  { no: 1, label: '第1节', start: '08:00', end: '08:40' },
+  { no: 2, label: '第2节', start: '08:50', end: '09:30' },
+  { no: 3, label: '第3节', start: '10:00', end: '10:40' },
+  { no: 4, label: '第4节', start: '10:50', end: '11:30' },
+  { no: 5, label: '第5节', start: '11:40', end: '12:20' },
+  { no: 6, label: '第6节', start: '14:10', end: '14:50' },
+  { no: 7, label: '第7节', start: '15:20', end: '16:00' },
+  { no: 8, label: '第8节', start: '16:15', end: '16:55' },
+  { no: 9, label: '第9节', start: '17:05', end: '17:45' },
 ];
 
 export const LEAVE_TYPES = ['事假', '病假', '婚假', '丧假', '产假', '公假', '调休', '公出'];
@@ -330,13 +330,16 @@ export function calculateDailySummary(context = {}) {
 }
 
 export function parseLeaveDuration(amount, unit='day') {
+  if (!['day','hour','morning','afternoon'].includes(unit)) throw new Error('请选择请假时长单位');
+  if (unit === 'morning' || unit === 'afternoon') return {duration:0.5,duration_unit:unit,days:0.5,hours:0};
   const value=Number(amount);
   if (String(amount).trim()==='' || !Number.isFinite(value) || value<=0) throw new Error('请假时长必须大于0，不能为负数');
-  if (!['day','hour'].includes(unit)) throw new Error('请选择请假时长单位');
   if(unit==='day' && !Number.isInteger(value*2)) throw new Error('按天请假以0.5天为单位');
   return {duration:value,duration_unit:unit,days:unit==='day'?value:0,hours:unit==='hour'?value:0};
 }
 export function formatLeaveDuration(record) {
+  if (record?.duration_unit === 'morning') return '上午（0.5天）';
+  if (record?.duration_unit === 'afternoon') return '下午（0.5天）';
   const parts=[];
   if(Number(record.days)>0)parts.push(Number(Number(record.days).toFixed(2))+'天');
   if(Number(record.hours)>0)parts.push(Number(Number(record.hours).toFixed(2))+'小时');
