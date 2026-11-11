@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
-  deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration,
+  deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration, buildAttendanceExportGrid,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -66,4 +66,56 @@ test('请假时长支持半天、上午、下午和小时小数', () => {
   assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'下午（0.5天）');
   assert.deepEqual(parseLeaveDuration('1.5','hour'), {duration:1.5,duration_unit:'hour',days:0,hours:1.5});
   assert.throws(() => parseLeaveDuration('0.25','day'), /0.5天/);
+});
+
+test('四类导出按状态筛选人员，坐班表保留全员总表', () => {
+  const teachers = [
+    {id:1,name:'李老师',subject:'语文',grade:'高一',active:1},
+    {id:2,name:'王老师',subject:'数学',grade:'高一',active:1},
+    {id:3,name:'赵老师',subject:'英语',grade:'高一',active:1},
+  ];
+  const seatRows = [
+    {teacher:'李老师',subject:'语文',data:{__periods:{'1':{status:'y',listen_class:''}}}},
+    {teacher:'王老师',subject:'数学',data:{__periods:{'1':{status:'y',listen_class:'高一(1)班'}}}},
+  ];
+  const classRows = [
+    {teacher:'李老师',subject:'语文',data:{__classRecord:{class_name:'高一(1)班',period:1,status:'y',listeners:['王老师'],remark:'正常上课'}}},
+    {teacher:'王老师',subject:'数学',data:{__classRecord:{class_name:'高一(2)班',period:1,status:'n',listeners:[],remark:'未上课'}}},
+    {teacher:'赵老师',subject:'英语',data:{__classRecord:{class_name:'',period:1,status:'u',listeners:[]}}},
+  ];
+  const researchRows = [
+    {teacher:'语文组',subject:'语文',data:{__research:{subject:'语文',period_time:'第1节',location:'会议室',host:'李老师',attendees:['李老师'],remark:'集体备课'}}},
+  ];
+  const leaveRecords = [
+    {name:'王老师',grade:'高一',subject:'数学',type:'事假',start_date:'2026-11-11',end_date:'2026-11-11',days:0.5,duration:0.5,duration_unit:'day',status:'已批',remark:'上午请假'},
+    {name:'赵老师',grade:'高一',subject:'英语',type:'病假',start_date:'2026-11-10',end_date:'2026-11-10',days:1,duration:1,duration_unit:'day',status:'已批'},
+  ];
+  const common = {grade:'高一',date:'2026-11-11',period:1,teachers,seatRows,classRows,researchRows,leaveRecords,resolvePeriodRange:()=>['08:00','08:45']};
+  const seat = buildAttendanceExportGrid({...common,type:'seat'});
+  assert.equal(seat.length,5);
+  assert.deepEqual(seat[1],['序号','归属部门','归属年级','姓名','学科','上课','坐班','听课','教研','请假','备注']);
+  assert.equal(seat[2][3],'李老师');
+  assert.equal(seat[3][3],'王老师');
+  assert.match(seat[3][9],/0.5天/);
+  assert.match(seat[0][0],/共3人/);
+
+  const classes = buildAttendanceExportGrid({...common,type:'class'});
+  assert.equal(classes.length,3);
+  assert.equal(classes[2][3],'李老师');
+  assert.equal(classes[2][5],'高一(1)班');
+  assert.equal(classes[2][8],'已上课');
+  assert.deepEqual(classes.slice(2).map(row=>row[3]),['李老师']);
+
+  const research = buildAttendanceExportGrid({...common,type:'research'});
+  assert.equal(research.length,3);
+  assert.equal(research[2][3],'李老师');
+  assert.equal(research[2][5],'第1节');
+  assert.equal(research[2][6],'会议室');
+  assert.deepEqual(research.slice(2).map(row=>row[3]),['李老师']);
+
+  const leave = buildAttendanceExportGrid({...common,type:'leave'});
+  assert.equal(leave.length,3);
+  assert.equal(leave[2][3],'王老师');
+  assert.match(leave[2][9],/0.5天/);
+  assert.doesNotMatch(JSON.stringify(leave),/赵老师/);
 });
