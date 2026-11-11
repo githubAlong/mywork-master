@@ -333,9 +333,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const rosterGrid = (list) => buildAttendanceExportGrid({
     type: TYPE[tab] ? tab : tab === 'leave' ? 'leave' : 'roster',
     grade, date, period, teachers: list,
-    seatRows: details.seat?.rows || [],
-    classRows: details.class?.rows || [],
-    researchRows: details.research?.rows || [],
+    seatRows: tab === 'seat' ? getDraftRows('seat') : details.seat?.rows || [],
+    classRows: tab === 'class' ? getDraftRows('class') : details.class?.rows || [],
+    researchRows: tab === 'research' ? getDraftRows('research') : details.research?.rows || [],
     leaveRecords: activeLeavesFor(leaveRecords, date),
     teacherMeta: prefs.teacherMeta || {},
     resolvePeriodRange,
@@ -353,9 +353,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       .filter(record => scope !== 'filtered' || list.some(teacher => teacher.name === (record.name || record.teacher)));
     const grid=buildAttendanceExportGrid({
       type: exportType, grade, date, period, teachers: list,
-      seatRows: details.seat?.rows || [],
-      classRows: details.class?.rows || [],
-      researchRows: details.research?.rows || [],
+      seatRows: tab === 'seat' ? getDraftRows('seat') : details.seat?.rows || [],
+      classRows: tab === 'class' ? getDraftRows('class') : details.class?.rows || [],
+      researchRows: tab === 'research' ? getDraftRows('research') : details.research?.rows || [],
       leaveRecords: scopedLeaveRecords,
       teacherMeta: prefs.teacherMeta || {},
       resolvePeriodRange,
