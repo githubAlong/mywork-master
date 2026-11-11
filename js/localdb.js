@@ -13,6 +13,7 @@
    否则导出的数据再导回服务端会错位。
    ========================================================================== */
 
+import {mergeSnapshots,LOCAL_DRAFT_PREFIX} from './sync-journal.mjs';
 const LEGACY_DB_KEY = 'wb_static_db_v1';
 export let DB_KEY = LEGACY_DB_KEY;
 let ACTIVE_UID = '';
@@ -25,6 +26,7 @@ export function setActiveAccount(uid = '') {
   if (next === DB_KEY) return;
   DB_KEY = next;
   _db = null;
+  _diskSnapshot=null;_diskRaw=null;
 }
 export function activeAccountId() { return ACTIVE_UID; }
 
@@ -67,21 +69,40 @@ const SEQ_SCOPE = { invigilations: 'invig', trips: 'trip', materials: 'material'
 
 /* ---------------- 存取 ---------------- */
 let _db = null;
+let _diskSnapshot=null,_diskRaw=null;
 export function load() {
   if (_db) return _db;
   try {
     const raw = localStorage.getItem(DB_KEY);
     _db = raw ? JSON.parse(raw) : null;
+    _diskRaw=raw;
   } catch { _db = null; }
   if (!_db || typeof _db !== 'object') _db = blank();
   // 补齐缺失的表（版本升级时新增表不至于报错）
-  return ensureTables(_db);
+  ensureTables(_db);_diskSnapshot=JSON.parse(JSON.stringify(_db));
+  return _db;
 }
 export function save() {
+  const disk=localStorage.getItem(DB_KEY);
+  if(_diskSnapshot && disk && disk!==_diskRaw){
+    const merged=mergeSnapshots(_diskSnapshot,_db,JSON.parse(disk));
+    if(merged.conflicts.length){
+      let writer=sessionStorage.getItem('wb_sync_writer_id');
+      if(!writer){writer=globalThis.crypto?.randomUUID?.()||String(Math.random());sessionStorage.setItem('wb_sync_writer_id',writer);}
+      const key=LOCAL_DRAFT_PREFIX+ACTIVE_UID+':'+writer;
+      const record={uid:ACTIVE_UID,base:_diskSnapshot,draft:_db,remote:JSON.parse(disk),conflicts:merged.conflicts,at:new Date().toISOString()};
+      try{localStorage.setItem(key,JSON.stringify(record));}
+      catch(error){window.dispatchEvent(new CustomEvent('wb:storagefull',{detail:{error:String(error)}}));throw Error('本机空间不足，当前修改尚未持久保存，请保留页面并导出内容');}
+      window.dispatchEvent(new CustomEvent('wb:localconflict',{detail:{key}}));
+      throw Object.assign(Error('另一个标签页修改了同一内容。本页修改已保留，请先处理页面上方的冲突提示。'),{code:'WB_LOCAL_DATA_CONFLICT'});
+    }
+    _db=merged.payload;
+  }
   try {
     const serialized = JSON.stringify(_db);
-    if (localStorage.getItem(DB_KEY) === serialized) return true;
+    if (localStorage.getItem(DB_KEY) === serialized) {_diskRaw=serialized;_diskSnapshot=JSON.parse(serialized);return true;}
     localStorage.setItem(DB_KEY, serialized);
+    _diskRaw=serialized;_diskSnapshot=JSON.parse(serialized);
   } catch (e) {
     /* 【不能再静默吞掉】
        早先这里只 console.warn 就过去了：内存已经改了、界面提示「已保存」，

@@ -118,6 +118,7 @@ function schedule() {
   clearTimeout(st.timer);
   st.timer = setTimeout(flush, COALESCE_MS);
 }
+export function requestLiveRefresh() { schedule(); }
 
 function emitStatus(text) {
   try {
