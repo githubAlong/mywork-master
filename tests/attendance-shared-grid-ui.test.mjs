@@ -175,8 +175,12 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
   await control(root,'remark').input('上课表备注');
   await root.querySelector('[data-roster-export="xlsx"]').click();
   const grid=exportedGrids[0];
-  assert.deepEqual(grid[1],['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注']);
+  // PRD v1.6：导出统一使用花名册列（上课/坐班/听课/教研/请假），
+  // 当前页签体现在标题行与勾选数据上，不再切换成分类专用列。
+  assert.match(grid[0][0],/上课表/,'导出标题应标注当前页签');
+  assert.deepEqual(grid[1],['序号','归属部门','归属年级','姓名','学科','上课','坐班','听课','教研','请假','备注']);
   assert.equal(grid[2][3],'李老师');
-  assert.equal(grid[2][8],'已上课');
+  assert.equal(grid[2][5],'✓','当前页签的勾选应写入上课列');
   assert.equal(grid[2][10],'上课表备注');
+  assert.equal(grid[3][5],'—','未勾选的教师不应误标为已上课');
 });
