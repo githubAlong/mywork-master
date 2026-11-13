@@ -35,7 +35,7 @@ export function resolveEnvironmentProfile(input = globalThis.location) {
     if (profile.hostSuffixes.some((suffix) => hostname.endsWith(suffix))) return profile;
   }
   if (isPrivateIpv4(hostname)) return ENVIRONMENT_PROFILES.test;
-  throw new Error(`鏈厤缃綋鍓嶈闂幆澧冿細${hostname || 'unknown host'}`);
+  throw new Error(`未配置当前访问环境：${hostname || 'unknown host'}`);
 }
 
 export function assertTrustedSupabaseConfig(profile, url, publishableKey) {
