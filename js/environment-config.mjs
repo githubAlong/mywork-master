@@ -3,9 +3,9 @@
 export const ENVIRONMENT_PROFILES = Object.freeze({
   production: Object.freeze({
     name: 'production',
-    supabaseUrl: 'https://ezyztadiielpwdhuzzvm.supabase.co',
-    publishableKey: 'sb_publishable_7WvgA8kgch7AQkQcwUK-Aw_UUbou58N',
-    backendUrl: 'https://distinction-lawyers-bytes-kenneth.trycloudflare.com',
+    supabaseUrl: 'https://trustee-cases-benjamin-keyword.trycloudflare.com',
+    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMDAwMDAwLCJleHAiOjIwNzAwMDAwMDB9.QYMaK-40p1luJ3Dc83JchGAH3h02dLSAIxk_ppGEJHA',
+    backendUrl: '',
     hosts: Object.freeze(['githubalong.github.io', 'my-workbench-dev.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-dev.pages.dev']),
   }),
