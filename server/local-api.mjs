@@ -67,6 +67,9 @@ async function init() {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+    insert into auth.users(id)
+      select id from public.local_users
+      on conflict (id) do nothing;
   `);
 }
 
@@ -116,6 +119,7 @@ async function authSignup(req, res) {
   if (exists.rowCount) return json(res, 422, { code: 'user_already_exists', message: 'User already registered' });
   const user = { id: id(), email, phone };
   await pool.query('insert into public.local_users(id,email,phone,password_hash) values($1,$2,$3,$4)', [user.id, email, phone, hashPassword(password)]);
+  await pool.query('insert into auth.users(id) values($1) on conflict (id) do nothing', [user.id]);
   return json(res, 200, await issueSession(user));
 }
 
@@ -133,6 +137,70 @@ async function authToken(req, res, url) {
   return json(res, 200, await issueSession(result.rows[0]));
 }
 
+const LOCAL_TABLES = new Set(['lessons', 'class_records', 'invigilations', 'attendance_tables', 'attendance_rows', 'attachments']);
+const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+
+async function tableColumns(table) {
+  const result = await pool.query(`select column_name from information_schema.columns where table_schema='public' and table_name=$1`, [table]);
+  return new Set(result.rows.map((row) => row.column_name));
+}
+
+function parseFilter(value) {
+  const raw = String(value || '');
+  const match = raw.match(/^(eq|lt|lte|gt|gte|is)\.(.*)$/s);
+  return match ? { operator: match[1], value: match[2] } : { operator: 'eq', value: raw };
+}
+
+async function localTableRequest(req, res, url, user, table) {
+  if (!LOCAL_TABLES.has(table)) return false;
+  const columns = await tableColumns(table);
+  const params = [];
+  const where = ['user_id = $1'];
+  params.push(user.id);
+  for (const [key, raw] of url.searchParams.entries()) {
+    if (['select', 'order', 'limit', 'offset'].includes(key) || !IDENTIFIER.test(key) || !columns.has(key) || key === 'user_id') continue;
+    const filter = parseFilter(raw);
+    if (filter.operator === 'is' && filter.value === 'null') { where.push(`${key} is null`); continue; }
+    if (!['eq', 'lt', 'lte', 'gt', 'gte'].includes(filter.operator)) continue;
+    params.push(filter.value);
+    const op = { eq: '=', lt: '<', lte: '<=', gt: '>', gte: '>=' }[filter.operator];
+    where.push(`${key} ${op} $${params.length}`);
+  }
+  const select = String(url.searchParams.get('select') || '*').split(',').map((item) => item.trim()).filter((item) => item === '*' || (IDENTIFIER.test(item) && columns.has(item))).join(',') || '*';
+  const order = String(url.searchParams.get('order') || 'id.asc').split(',').map((item) => {
+    const [field, direction] = item.split('.');
+    return IDENTIFIER.test(field) && columns.has(field) ? `${field} ${direction === 'desc' ? 'desc' : 'asc'}` : null;
+  }).filter(Boolean).join(', ') || 'id asc';
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 1000), 1), 5000);
+  const offset = Math.max(Number(url.searchParams.get('offset') || 0), 0);
+  if (req.method === 'GET') {
+    const result = await pool.query(`select ${select} from public.${table} where ${where.join(' and ')} order by ${order} limit ${limit} offset ${offset}`, params);
+    json(res, 200, result.rows);
+    return true;
+  }
+  const input = await body(req);
+  const writable = Object.entries(input).filter(([key, value]) => IDENTIFIER.test(key) && columns.has(key) && !['id', 'user_id', 'created_at', 'updated_at', 'deleted_at'].includes(key) && value !== undefined);
+  if (req.method === 'POST') {
+    const keys = ['user_id', ...writable.map(([key]) => key)];
+    const values = [user.id, ...writable.map(([, value]) => value)];
+    const result = await pool.query(`insert into public.${table} (${keys.join(',')}) values (${keys.map((_, index) => `$${index + 1}`).join(',')}) returning *`, values);
+    json(res, 201, result.rows);
+    return true;
+  }
+  if (req.method === 'PATCH') {
+    if (!writable.length) { json(res, 200, []); return true; }
+    const idValue = url.searchParams.get('id')?.replace(/^eq\./, '');
+    if (!idValue) { json(res, 400, { message: 'id is required' }); return true; }
+    const values = writable.map(([, value]) => value);
+    const sets = writable.map(([key], index) => `${key}=$${index + 1}`);
+    values.push(user.id, idValue);
+    const result = await pool.query(`update public.${table} set ${sets.join(',')}, updated_at=now() where user_id=$${values.length - 1} and id=$${values.length} returning *`, values);
+    json(res, 200, result.rows);
+    return true;
+  }
+  return json(res, 405, { message: 'Method not allowed' });
+}
+
 async function handle(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -148,6 +216,8 @@ async function handle(req, res) {
     return json(res, 204, {});
   }
   if (!user) return json(res, 401, { message: 'Authentication required', code: 'AUTH_REQUIRED' });
+  const tableMatch = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/);
+  if (tableMatch && await localTableRequest(req, res, url, user, tableMatch[1])) return;
   if (req.method === 'GET' && url.pathname === '/rest/v1/wb_user_data') {
     const result = await pool.query('select payload,revision,updated_at from public.wb_user_data where user_id=$1', [user.id]);
     return json(res, 200, result.rows);
@@ -185,3 +255,4 @@ init().then(() => {
     json(res, 500, { message: 'Local API error' });
   })).listen(port, '127.0.0.1', () => console.log(`workbench ${mode} API listening on http://127.0.0.1:${port} -> ${database}`));
 }).catch((error) => { console.error('Unable to initialize local API', error); process.exitCode = 1; });
+
