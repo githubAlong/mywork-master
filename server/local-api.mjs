@@ -6,15 +6,21 @@ const { Pool } = pg;
 
 const mode = process.env.WB_ENV === 'master' ? 'master' : 'test';
 const port = Number(process.env.PORT || (mode === 'master' ? 8787 : 8788));
-const database = process.env.PGDATABASE || (mode === 'master' ? 'workbench_master' : 'workbench_test');
-const pool = new Pool({
-  host: process.env.PGHOST || '127.0.0.1',
-  port: Number(process.env.PGPORT || 5432),
-  user: process.env.PGUSER || 'postgres',
-  password: process.env.PGPASSWORD,
-  database,
-  max: 5,
-});
+const host = process.env.HOST || '127.0.0.1';
+const connectionString = process.env.DATABASE_URL || '';
+const database = process.env.PGDATABASE
+  || (connectionString ? new URL(connectionString).pathname.replace(/^\//, '') : (mode === 'master' ? 'workbench_master' : 'workbench_test'));
+const pool = connectionString
+  ? new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 5 })
+  : new Pool({
+      host: process.env.PGHOST || '127.0.0.1',
+      port: Number(process.env.PGPORT || 5432),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD,
+      database,
+      ssl: process.env.PGSSLMODE === 'require' ? { rejectUnauthorized: false } : undefined,
+      max: 5,
+    });
 
 const json = (res, status, body) => {
   res.writeHead(status, {
@@ -253,6 +259,6 @@ init().then(() => {
   http.createServer((req, res) => handle(req, res).catch((error) => {
     console.error(error);
     json(res, 500, { message: 'Local API error' });
-  })).listen(port, '127.0.0.1', () => console.log(`workbench ${mode} API listening on http://127.0.0.1:${port} -> ${database}`));
+  })).listen(port, host, () => console.log(`workbench ${mode} API listening on http://${host}:${port} -> ${database}`));
 }).catch((error) => { console.error('Unable to initialize local API', error); process.exitCode = 1; });
 
