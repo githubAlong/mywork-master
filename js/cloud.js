@@ -47,6 +47,7 @@ export const SESSION_STORAGE_KEY = TOK_KEY;
 --------------------------------------------------------------------------- */
 export const BUILTIN_URL = ENV_PROFILE.supabaseUrl;
 export const BUILTIN_ANON = ENV_PROFILE.publishableKey;
+export const BUILTIN_API_URL = ENV_PROFILE.backendUrl || BUILTIN_URL;
 const TRUSTED_ORIGIN = new URL(BUILTIN_URL).origin;
 
 /* 云端地址只能来自这份受信任配置。URL 参数、历史 localStorage 和旧手动同步
@@ -66,6 +67,13 @@ export function cfg() {
   const fallback = { url: TRUSTED_ORIGIN, anon: BUILTIN_ANON };
   try { localStorage.setItem(CFG_KEY, JSON.stringify(fallback)); } catch { }
   return fallback;
+}
+
+/* Hosted pages use the local API through a Tunnel, while environment
+   validation and realtime keep using the fixed Supabase profile. */
+export function apiCfg() {
+  if (ENV_PROFILE.backendUrl) return { url: ENV_PROFILE.backendUrl.replace(/\/$/, ''), anon: 'local-api', environment: ENV_PROFILE.name };
+  return cfg();
 }
 
 export function saveCfg(url, anon) {
@@ -152,7 +160,7 @@ const SIGNUP_PROBE_KEY = 'wb_supa_signup_state';
 const SIGNUP_PROBE_TTL = 10 * 60 * 1000;
 
 export async function canSignUp(force = false) {
-  const c = cfg();
+  const c = apiCfg();
   if (!c) return { ok: false, reason: '云端还没配置' };
 
   if (!force) {
@@ -192,7 +200,7 @@ export function clearSignUpCache() {
 
 /* 云端注册。成功后 token 直接落盘 —— 注册即登录，不用再让用户输一遍。 */
 export async function signUp(email, password) {
-  const c = cfg();
+  const c = apiCfg();
   if (!c) throw new Error('还没配置 Supabase 地址');
   const r = await fetch(c.url + '/auth/v1/signup', {
     method: 'POST',
@@ -282,7 +290,7 @@ export function registrationError(error) {
 }
 
 export async function signUpPhone(phone, password) {
-  const c = cfg();
+  const c = apiCfg();
   if (!c) throw new Error('还没配置 Supabase 地址');
   const normalized = normalizePhone(phone);
   let r;
@@ -305,7 +313,7 @@ export async function signUpPhone(phone, password) {
 }
 
 export async function loginPhone(phone, password) {
-  const c = cfg();
+  const c = apiCfg();
   if (!c) throw new Error('还没配置 Supabase 地址');
   const normalized = normalizePhone(phone);
   const r = await fetch(c.url + '/auth/v1/token?grant_type=password', {
@@ -477,7 +485,7 @@ export async function adminResetPassword(phone) {
 }
 
 export async function logout() {
-  const c = cfg(); const t = tok();
+  const c = apiCfg(); const t = tok();
   if (c && t?.access_token) {
     // 尽力通知服务端作废，失败也无所谓，本地清了就行
     fetch(c.url + '/auth/v1/logout', {
@@ -490,7 +498,7 @@ export async function logout() {
 
 /* token 一小时过期。快过期就先续一次，避免用户用到一半突然报 401 */
 async function freshToken() {
-  const c = cfg(); const t = tok();
+  const c = apiCfg(); const t = tok();
   if (!c || !t) return null;
   if (t.expires_at && Date.now() < t.expires_at - 60000) return t.access_token;
   if (!t.refresh_token) { setTok(null); notifySignedOut(); return null; }
@@ -519,7 +527,7 @@ async function freshToken() {
 /* ---------------- 通用请求 ---------------- */
 
 async function rest(path, opts = {}) {
-  const c = cfg();
+  const c = apiCfg();
   if (!c) throw new Error('还没配置 Supabase 地址');
   const at = await freshToken();
   if (!at) throw new Error('请先登录');
@@ -587,7 +595,7 @@ export async function saveWorkbenchSnapshot(payload, expectedRevision = 0, expec
 }
 
 export async function uploadMaterialFiles(files, ownerId) {
-  const config = cfg(), token = await freshToken();
+  const config = apiCfg(), token = await freshToken();
   if (!token) throw new Error('请先登录教师账号后上传教材');
   const form = new FormData();
   form.append('owner_id', String(ownerId));
