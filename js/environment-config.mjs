@@ -3,8 +3,8 @@
 export const ENVIRONMENT_PROFILES = Object.freeze({
   production: Object.freeze({
     name: 'production',
-    supabaseUrl: 'https://gfgxvpvexzcfbujkwsqw.supabase.co',
-    publishableKey: 'sb_publishable_-cCYwAxVzEIioR4rdsmGpw_HThEm8gi',
+    supabaseUrl: 'https://ezyztadiielpwdhuzzvm.supabase.co',
+    publishableKey: 'sb_publishable_7WvgA8kgch7AQkQcwUK-Aw_UUbou58N',
     hosts: Object.freeze(['githubalong.github.io', 'my-workbench-dev.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-dev.pages.dev']),
   }),
@@ -56,3 +56,4 @@ export function assertTrustedSupabaseConfig(profile, url, publishableKey) {
   }
   return { url: expected.origin, anon: profile.publishableKey, environment: profile.name };
 }
+

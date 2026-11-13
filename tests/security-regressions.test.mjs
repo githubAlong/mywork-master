@@ -15,12 +15,12 @@ test('fixed environment and startup safety regressions', async (t) => {
     assert.equal(resolveEnvironmentProfile('http://192.168.1.20:8080/').name, 'test');
     assert.throws(() => resolveEnvironmentProfile('https://unknown.example/'), /未配置/);
     assert.match(ENVIRONMENT_PROFILES.test.supabaseUrl, /xgvmwbzvvjnhzadfvdmj/);
-    assert.match(ENVIRONMENT_PROFILES.production.supabaseUrl, /gfgxvpvexzcfbujkwsqw/);
+    assert.match(ENVIRONMENT_PROFILES.production.supabaseUrl, /ezyztadiielpwdhuzzvm/);
   });
 
   await t.test('URL and localStorage cannot redirect test auth requests', async () => {
     const storage = installBrowser({
-      href: 'https://preview.my-workbench-test.pages.dev/?supa=https://gfgxvpvexzcfbujkwsqw.supabase.co',
+      href: 'https://preview.my-workbench-test.pages.dev/?supa=https://ezyztadiielpwdhuzzvm.supabase.co',
       cfg: { url: 'https://attacker.example', anon: ENVIRONMENT_PROFILES.production.publishableKey },
     });
     const cloud = await import('../js/cloud.js?security=test-profile');
@@ -72,3 +72,4 @@ test('fixed environment and startup safety regressions', async (t) => {
     assert.doesNotMatch(source, /pushNow\s*\(/);
   });
 });
+
