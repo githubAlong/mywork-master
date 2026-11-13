@@ -334,9 +334,9 @@ export async function initializeAccountSync() {
     _conflicts=journal.conflicts||[];_localConflict=localDrafts(localStorage,uid)[0]||null;
     _conflictPaused=!!_conflicts.length||!!_localConflict;
     _pending=_observedContent!==_savedContent||!!_sentPayload||_conflictPaused;
-    pendingJournal();_syncReady=true;bindRemoteSnapshotEvents();bindSyncLifecycle();
+     pendingJournal();_syncReady=true;bindRemoteSnapshotEvents();bindSyncLifecycle();
     emitSyncStatus(_conflictPaused?'conflict':globalThis.navigator?.onLine===false?'offline':'pending','已保留本机缓存，联网后继续同步');
-    if(_pending&&!_conflictPaused)queueSave(1500);return true;
+     return true;
   }
   if(uid!==activeAccountId()||uid!==_uid)return false;
   let local=safeSnapshot(JSON.parse(localStorage.getItem(DB_KEY)||'{}'));
@@ -376,7 +376,6 @@ export async function initializeAccountSync() {
   bindRemoteSnapshotEvents();
   bindSyncLifecycle();
   emitSyncStatus(_conflictPaused?'conflict':_pending?'pending':'saved');
-  if(_pending&&!_conflictPaused)queueSave();
   return true;
 }
 export async function refreshAccountSync() {
@@ -425,8 +424,7 @@ export function hookSave() {
     return;
   }
   if(_conflictPaused){emitSyncStatus('conflict');return;}
-  emitSyncStatus('pending');
-  queueSave();
+  emitSyncStatus('pending','已保存到本机，请点击“保存更改”同步到云端');
 }
 function handleSyncError(error) {
   _pending=true;
@@ -439,9 +437,7 @@ function handleSyncError(error) {
   if(_attempts>=MAX_AUTO_ATTEMPTS){emitSyncStatus('error','已保存到本机，自动重试未成功。可点击“重试同步”继续');return;}
   const message=isWriteBusy(error)?'云端正在处理其他请求，修改已保留并排队重试':'已保存到本机，云端暂时不可达，稍后重试';
   emitSyncStatus('pending',message);
-  const delay=_retryDelay+(_attempts>1?Math.floor(Math.random()*_retryDelay*.25):0);
-  _retryDelay=Math.min(30000,_retryDelay*2);
-  queueSave(delay);
+  emitSyncStatus('error','修改已保留在本机，请点击“保存更改”重试同步');
 }
 function queueSave(delay = 800) {
   clearTimeout(_debounce);
