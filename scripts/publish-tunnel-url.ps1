@@ -14,7 +14,9 @@
 
 $ErrorActionPreference = 'Continue'
 
-$repo      = 'j:\chatgpt\jsgzt\my-workbench-master\.publish-repo.git'
+$base      = Join-Path $env:USERPROFILE '.local\share\mywork-master'
+if (-not (Test-Path $base)) { New-Item -ItemType Directory -Force -Path $base | Out-Null }
+$repo      = Join-Path $base 'repo.git'
 $runtime   = 'F:\sql\workbench-runtime'
 $logFile   = Join-Path $runtime 'tunnel-master.err.log'
 $stateFile = Join-Path $env:TEMP 'wb-tunnel-url.state'
