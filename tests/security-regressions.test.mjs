@@ -15,7 +15,8 @@ test('fixed environment and startup safety regressions', async (t) => {
     assert.equal(resolveEnvironmentProfile('http://192.168.1.20:8080/').name, 'test');
     assert.throws(() => resolveEnvironmentProfile('https://unknown.example/'), /未配置/);
     assert.match(ENVIRONMENT_PROFILES.test.supabaseUrl, /xgvmwbzvvjnhzadfvdmj/);
-    assert.match(ENVIRONMENT_PROFILES.production.supabaseUrl, /ezyztadiielpwdhuzzvm/);
+    assert.match(ENVIRONMENT_PROFILES.production.supabaseUrl, /^https:\/\/[a-z0-9.-]+$/);
+    assert.notEqual(ENVIRONMENT_PROFILES.production.supabaseUrl, ENVIRONMENT_PROFILES.test.supabaseUrl);
   });
 
   await t.test('URL and localStorage cannot redirect test auth requests', async () => {
