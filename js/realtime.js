@@ -21,7 +21,7 @@
    只有真的在用（页面底部那个小圆点）才会显示「未连接」。
    ========================================================================== */
 
-import { cfg as cloudCfg, apiCfg, SESSION_STORAGE_KEY } from './cloud.js';
+import { cfg as cloudCfg, SESSION_STORAGE_KEY } from './cloud.js';
 
 /* 需要实时的表。加表只改这里一行 ——
    SQL 那边也要把同名表加进 supabase_realtime 发布，两处必须对得上。 */
@@ -325,15 +325,6 @@ function reconnect(reason) {
 }
 
 async function connect() {
-  /* 线上 REST 走自建本地 API（隧道），它只提供 HTTP，没有 Supabase Realtime
-     网关。此时仍按 supabaseUrl 去连 wss 只会无限重连、把控制台刷满失败日志。
-     所以隧道模式下直接停在 idle：同步照常，只是没有实时推送。 */
-  if (apiCfg().anon === 'local-api') {
-    _want = false;
-    hardClose();
-    setStatus('idle');
-    return;
-  }
   const c = cfg();
   const t = tok();
   if (!c || !t || !t.access_token) {

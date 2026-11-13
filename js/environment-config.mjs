@@ -5,15 +5,13 @@ export const ENVIRONMENT_PROFILES = Object.freeze({
     name: 'production',
     supabaseUrl: 'https://adapted-heavy-output-thriller.trycloudflare.com',
     publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMDAwMDAwLCJleHAiOjIwNzAwMDAwMDB9.QYMaK-40p1luJ3Dc83JchGAH3h02dLSAIxk_ppGEJHA',
-    backendUrl: '',
     hosts: Object.freeze(['githubalong.github.io', 'my-workbench-dev.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-dev.pages.dev']),
   }),
   test: Object.freeze({
     name: 'test',
-    supabaseUrl: 'https://xgvmwbzvvjnhzadfvdmj.supabase.co',
-    publishableKey: 'sb_publishable_9SpX4rho5F_tXG9CEGCXBA_XAKyUBjn',
-    backendUrl: 'https://tribes-peace-midnight-timber.trycloudflare.com',
+    supabaseUrl: 'https://adapted-heavy-output-thriller.trycloudflare.com',
+    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzYzMDAwMDAwLCJleHAiOjIwNzAwMDAwMDB9.QYMaK-40p1luJ3Dc83JchGAH3h02dLSAIxk_ppGEJHA',
     hosts: Object.freeze(['localhost', '127.0.0.1', 'my-workbench-test.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-test.pages.dev']),
   }),
@@ -58,4 +56,3 @@ export function assertTrustedSupabaseConfig(profile, url, publishableKey) {
   }
   return { url: expected.origin, anon: profile.publishableKey, environment: profile.name };
 }
-

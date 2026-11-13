@@ -4108,8 +4108,9 @@ for (const table of CRUD_TABLES) {
        别的入口调到的，只在界面拦等于没拦。
        挑的都是「空着这条记录就没意义」的字段，不做格式校验，不打扰正常录入。 */
     const REQUIRED = {
-      class_records: [['class_type', '请选择上课类型'], ['subject', '请填写学科']],
-      preps: [['topic', '请填写备课主题'], ['prep_type', '请选择备课类型']],
+      /* 上课记录：只有「上课日期 / 上课年级 / 上课班级」必填，其余都允许留空。 */
+      class_records: [['class_month', '请填写上课日期'], ['grade', '请填写上课年级'], ['class_name', '请填写上课班级']],
+      preps: [['topic', '请填写标题']],
       trips: [['to_place', '目的地不能为空']],
       invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
     }[table];
@@ -4123,9 +4124,7 @@ for (const table of CRUD_TABLES) {
         }
       }
     }
-    if (table === 'preps' && !isPrepType(b.prep_type)) {
-      fail(422, '请选择备课类型');
-    }
+    /* 备课记录已移除「备课类型」字段：新建不再强制 prep_type，旧记录的类型值原样保留。 */
     // 监考表旧列 type 是 NOT NULL，新逻辑用 duty_type，这里补一份映射
     if (table === 'invigilations' && !b.type) {
       const m = { school: '学校分配', '替他人': '我代他人', '他人替我': '他人代我' };
@@ -4163,8 +4162,7 @@ for (const table of CRUD_TABLES) {
     const ids = [];
     for (const item of rows) {
       if (table === 'preps' && !item?.id) {
-        if (!String(item?.topic || '').trim()) fail(422, '请填写备课主题');
-        if (!isPrepType(item?.prep_type)) fail(422, '请选择备课类型');
+        if (!String(item?.topic || '').trim()) fail(422, '请填写标题');
       }
       if (item && item.id) { updateRow(table, item.id, normalizeBody(item)); ids.push(item.id); }
       else { ids.push(createRow(table, normalizeBody(item || {})).id); }
