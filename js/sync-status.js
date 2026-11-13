@@ -1,6 +1,6 @@
 import {el,esc,toast,sheet,saveBlob} from './core.js';
 import {activeAccountId} from './localdb.js';
-import {getAccountSyncStatus,getSyncConflicts,retryAccountSync,pushNow,resolveAccountSyncConflicts,exportPendingSync} from './cloudsync.js';
+import {getAccountSyncStatus,getSyncConflicts,retryAccountSync,resolveAccountSyncConflicts,exportPendingSync} from './cloudsync.js';
 
 const LABELS={notes:'笔记',todos:'便签',items:'今日事项',studies:'学习记录',materials:'课件',teachers:'教师',courses:'课程',meta:'个人信息和设置',settings:'设置',title:'标题',content:'内容',status:'状态',remark:'备注',date:'日期',name:'姓名',subject:'学科',grade:'年级'};
 const preview=value=>value===undefined?'（已删除）':value===null?'（空）':typeof value==='string'?value:JSON.stringify(value,null,2);
@@ -39,10 +39,10 @@ export function startSyncStatus() {
     if(!host){host=document.createElement('aside');host.id='wb-sync-status';host.setAttribute('aria-live','polite');document.body.appendChild(host);}
     const messages={saved:'云端已保存',pending:'已保存到本机，等待同步',saving:'已保存到本机，正在同步',offline:'已保存到本机，联网后同步',conflict:'修改已保留，需要处理冲突',error:'同步未完成，请查看提示'};
     host.dataset.state=current.status;
-    host.innerHTML='<span class="sync-status-copy">'+esc(current.message||messages[current.status]||'同步状态待确认')+'</span>'+(current.pending&&current.status!=='saving'?'<button type="button" data-sync-save>保存更改</button>':'')+(current.status==='conflict'?'<button type="button" data-sync-conflicts>处理冲突</button>':'')+(current.pending||['error','conflict'].includes(current.status)?'<button type="button" data-sync-backup>导出本机备份</button>':'');
+    host.innerHTML='<span class="sync-status-copy">'+esc(current.message||messages[current.status]||'同步状态待确认')+'</span>'+(current.status==='conflict'?'<button type="button" data-sync-conflicts>处理冲突</button>':current.pending&&current.status!=='saving'?'<button type="button" data-sync-retry>重试同步</button>':'')+(current.pending||['error','conflict'].includes(current.status)?'<button type="button" data-sync-backup>导出本机备份</button>':'');
     host.querySelector('[data-sync-conflicts]')?.addEventListener('click',openConflicts);
     host.querySelector('[data-sync-backup]')?.addEventListener('click',downloadBackup);
-    host.querySelector('[data-sync-save]')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;try{await pushNow();toast('修改已保存到云端','ok');}catch(error){toast(error.message||'保存失败','err');}finally{button.disabled=false;}});
+    host.querySelector('[data-sync-retry]')?.addEventListener('click',()=>{void retryAccountSync().catch(error=>toast(error.message,'err'));});
   };
   window.addEventListener('wb:sync-status',event=>{current=event.detail;paint();});
   window.addEventListener('wb:signout',()=>{current=null;paint();});
