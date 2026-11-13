@@ -5,7 +5,7 @@ export const ENVIRONMENT_PROFILES = Object.freeze({
     name: 'production',
     supabaseUrl: 'https://ezyztadiielpwdhuzzvm.supabase.co',
     publishableKey: 'sb_publishable_7WvgA8kgch7AQkQcwUK-Aw_UUbou58N',
-    backendUrl: 'https://dressed-orange-img-vegetarian.trycloudflare.com',
+    backendUrl: 'https://distinction-lawyers-bytes-kenneth.trycloudflare.com',
     hosts: Object.freeze(['githubalong.github.io', 'my-workbench-dev.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-dev.pages.dev']),
   }),
@@ -13,7 +13,7 @@ export const ENVIRONMENT_PROFILES = Object.freeze({
     name: 'test',
     supabaseUrl: 'https://xgvmwbzvvjnhzadfvdmj.supabase.co',
     publishableKey: 'sb_publishable_9SpX4rho5F_tXG9CEGCXBA_XAKyUBjn',
-    backendUrl: 'https://weblogs-theory-rap-boating.trycloudflare.com',
+    backendUrl: 'https://tribes-peace-midnight-timber.trycloudflare.com',
     hosts: Object.freeze(['localhost', '127.0.0.1', 'my-workbench-test.pages.dev']),
     hostSuffixes: Object.freeze(['.my-workbench-test.pages.dev']),
   }),
@@ -35,7 +35,7 @@ export function resolveEnvironmentProfile(input = globalThis.location) {
     if (profile.hostSuffixes.some((suffix) => hostname.endsWith(suffix))) return profile;
   }
   if (isPrivateIpv4(hostname)) return ENVIRONMENT_PROFILES.test;
-  throw new Error(`未配置当前访问环境：${hostname || 'unknown host'}`);
+  throw new Error(`鏈厤缃綋鍓嶈闂幆澧冿細${hostname || 'unknown host'}`);
 }
 
 export function assertTrustedSupabaseConfig(profile, url, publishableKey) {
@@ -58,3 +58,4 @@ export function assertTrustedSupabaseConfig(profile, url, publishableKey) {
   }
   return { url: expected.origin, anon: profile.publishableKey, environment: profile.name };
 }
+
