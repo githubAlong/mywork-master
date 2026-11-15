@@ -1,4 +1,4 @@
-/* 我的工作台 Service Worker
+﻿﻿/* 我的工作台 Service Worker
    作用只有两个：可添加到主屏幕、断网时能打开。
 
    === 为什么策略是「网络优先」 ===
@@ -30,7 +30,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v197-local-supabase';
+const CACHE = 'wb-v262-unified';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -50,10 +50,7 @@ const ASSETS = [
   './css/sticky-notes.css',
   './css/trips-redesign.css',
   './css/study-records.css',
-  './js/study-records.js',
-  './js/study-records-domain.mjs',
-  './js/sync-journal.mjs',
-  './js/sync-status.js',
+  './css/sync-status.css',
   './js/trips.js',
   './js/trips-domain.mjs',
   './css/auth-redesign.css',
@@ -64,6 +61,8 @@ const ASSETS = [
   './js/ui.js',
   './js/core.js',
   './js/cloudsync.js',
+  './js/sync-journal.mjs',
+  './js/sync-status.js',
   './js/cloud.js',
   './js/environment-config.mjs',
   './js/auth-identifier.mjs',
@@ -78,12 +77,15 @@ const ASSETS = [
   './js/localapi.js',
   './js/localdb.js',
   './js/prep-domain.mjs',
+  './js/prep-csv.mjs',
   './js/timetable-periods.mjs',
+  './js/timetable-schedule.mjs',
   './js/invigilation.js',
   './js/invigilation-domain.mjs',
   /* 各业务页面 */
   './js/home.js',
   './js/weather-location.mjs',
+  './js/weather-view.mjs',
   './js/work.js',
   './js/material-sharing.mjs',
   './student.html',
@@ -96,7 +98,11 @@ const ASSETS = [
   './js/todo-item-sync.mjs',
   './js/task-messages.mjs',
   './js/study.js',
+  './js/study-records.js',
+  './js/study-records-domain.mjs',
   './js/me.js',
+  './js/demo-data-scan.mjs',
+  './js/clean-demo-data.js',
   './js/repairs.js',
   './js/repairs-domain.mjs',
   './js/recycle.js',
@@ -283,3 +289,4 @@ self.addEventListener('fetch', (e) => {
     }
   })());
 });
+

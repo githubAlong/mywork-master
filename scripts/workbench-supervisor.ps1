@@ -29,5 +29,7 @@ while ($true) {
   Start-Managed "api-master" "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $project "scripts\start-local-api.ps1"), "-Environment", "master") | Out-Null
   Start-Managed "tunnel-test" (Join-Path $root "cloudflared.exe") @("tunnel", "--url", "http://127.0.0.1:8788", "--no-autoupdate") | Out-Null
   Start-Managed "tunnel-master" (Join-Path $root "cloudflared.exe") @("tunnel", "--url", "http://127.0.0.1:8787", "--no-autoupdate") | Out-Null
+  # Quick Tunnel 重启会换域名：把新地址同步到线上配置并触发重新发布
+  try { & (Join-Path $project "scripts\publish-tunnel-url.ps1") | Out-Null } catch { }
   Start-Sleep -Seconds 10
 }
