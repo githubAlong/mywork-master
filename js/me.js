@@ -184,7 +184,7 @@ async function renderMe(main) {
         </summary>
         <div class="me-accordion-panel">
           <div class="me-inline-setting">
-            <div><strong>清理示例数据</strong><p>只删除系统自动灌入、且从未修改过的演示课表与示例记录；你自己录入的数据全部保留。执行前会先下载一份完整备份。</p></div>
+            <div><strong>清理示例数据</strong><p>只删除系统自动灌入、且未改过标题/正文的演示课表与示例记录，连同消息中心里由它们生成的提醒；你自己录入的数据全部保留。执行前会先下载一份完整备份。</p></div>
             <button type="button" class="btn ghost" id="me-clean-demo">查看并清理…</button>
           </div>
         </div>
@@ -1451,6 +1451,10 @@ async function renderMessages(main, { inline = false } = {}) {
     main.querySelectorAll('[data-del]').forEach((b) => {
       b.onclick = async (e) => {
         e.stopPropagation();
+        /* 任务提醒和首页事项 / 便签是同一条数据，删提醒会一起删掉，
+           先讲清楚，免得用户以为只是清一条通知。 */
+        const message = rows.find((row) => String(row.id) === String(b.dataset.del));
+        if (message?.type === 'task' && !(await confirmDialog('这条提醒对应的任务会一起从首页和便签中删除，删除后可在回收站找回。确定删除？', { title: '删除任务提醒', danger: true, okText: '删除' }))) return;
         await api.del('/messages/' + b.dataset.del);
         await refreshUnread(); paintUnread();
         load();

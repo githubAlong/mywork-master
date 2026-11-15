@@ -86,11 +86,13 @@
   display:grid;gap:6px;min-width:0;color:#53627a;font-size:12px;font-weight:650;
 }
 .attendance-prd .aprd-roster-add-form>label em{color:#e5484d;font-style:normal}
-.attendance-prd .aprd-roster-add-form input{
+.attendance-prd .aprd-roster-add-form input,.attendance-prd .aprd-roster-add-form select{
   width:100%;height:38px;min-width:0;padding:0 11px;border:1px solid #d7e1ef;border-radius:8px;
   outline:none;background:#fff;color:#263650;font:13px inherit;transition:border-color .15s,box-shadow .15s;
 }
-.attendance-prd .aprd-roster-add-form input:focus{
+.attendance-prd .aprd-roster-add-form select{cursor:pointer}
+.attendance-prd .aprd-roster-add-form input[readonly]{background:#f4f7fc;color:#53627a;cursor:default}
+.attendance-prd .aprd-roster-add-form input:focus,.attendance-prd .aprd-roster-add-form select:focus{
   border-color:#6b9cff;box-shadow:0 0 0 3px rgba(22,93,255,.09);
 }
 .attendance-prd .aprd-roster-add-actions{
@@ -220,6 +222,10 @@
 
 /* 备注列：超长省略，hover 由 title 显示全文 */
 .attendance-prd span.aprd-remark{display:inline-block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;color:#5c6b83}
+/* 备注列行内输入（用户 11-15 要求）：默认空白，格子里直接写，回车或失焦保存 */
+.attendance-prd .aprd-note-input{width:100%;min-width:96px;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:transparent;font:inherit;color:inherit}
+.attendance-prd .aprd-note-input:hover{border-color:rgba(148,163,184,.35);background:#fff}
+.attendance-prd .aprd-note-input:focus{outline:none;border-color:#165dff;background:#fff;box-shadow:0 0 0 3px rgba(22,93,255,.12)}
 
 /* 考勤状态标签：绿=正常、黄=待确认、红=异常/请假 */
 .attendance-prd .aprd-mark{display:inline-flex;align-items:center;justify-content:center;min-width:64px;height:24px;padding:0 9px;border:1px solid transparent;border-radius:6px;background:#f2f5fa;color:#7a899e;font-size:12.5px;line-height:1;cursor:pointer;transition:box-shadow .15s}
@@ -302,7 +308,7 @@
 @media(max-width:760px){
  .attendance-prd .aprd-kpis.aprd-grid-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
  .attendance-prd .aprd-grid-summary .aprd-kpi{border-bottom:1px solid #eef2f8}
- .attendance-prd .aprd-grid-summary .aprd-kpi:nth-child(2n){border-right:0}
+ .attendance-prd .aprd-grid-summary .aprd-kpi:last-child{border-right:0}
  .attendance-prd .aprd-grid-summary .aprd-kpi:nth-last-child(-n+2){border-bottom:0}
 }
 
