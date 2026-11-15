@@ -1,8 +1,6 @@
 /* Best-effort place names; weather always uses the browser's actual coordinates.
-   Photon (OpenStreetMap) runs first: it needs no key and has no per-IP quota,
-   so it does not randomly answer 400 the way BigDataCloud's free client
-   endpoint does. BigDataCloud stays as the fallback. Cache successes for one
-   day, failures for one minute, and share concurrent lookups. */
+   Photon is a low-volume fallback using OpenStreetMap data. Cache successes for
+   one day, failures for one minute, and share concurrent lookups. */
 const clean = value => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
 const keyFor = (lat, lon) => `${Number(lat).toFixed(5)},${Number(lon).toFixed(5)}`;
 const pending = new Map();
@@ -21,12 +19,8 @@ export function parsePlace(data, provider) {
   if (provider === 'photon') {
     const p = data?.features?.[0]?.properties;
     if (!p) return null;
-    // Photon 的 city 可能是乡镇/街道/村（咸丰县实测返回「高乐山镇」「垭口田」），
-    // 只有真正的地级区划（市/州/盟/地区）才当地级市用，其余丢弃。
-    const district = clean(p.district || p.locality || p.county);
-    const city = clean(p.city || p.county);
-    const validPrefecture = /(市|州|盟|地区)$/.test(city) && !/(镇|乡|街道|村|社区)$/.test(city) ? city : '';
-    return place(p.state, validPrefecture, district, provider);
+    // A nearby POI/street name is not an administrative district.
+    return place(p.state, p.city || p.county, p.district || p.locality, provider);
   }
   const admin = Array.isArray(data?.localityInfo?.administrative) ? data.localityInfo.administrative : [];
   const level = n => admin.find(item => Number(item?.adminLevel) === n)?.name;
@@ -61,8 +55,8 @@ export async function resolvePlace(lat, lon, { previous, fetcher = globalThis.fe
   const work = (async () => {
     const errors = [];
     const providers = [
-      ['photon', `https://photon.komoot.io/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&limit=1&radius=1`],
       ['bigdatacloud', `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=zh`],
+      ['photon', `https://photon.komoot.io/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&limit=1&radius=1`],
     ];
     for (const [provider, url] of providers) {
       const result = await query(url, provider, fetcher);

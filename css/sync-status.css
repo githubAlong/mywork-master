@@ -10,4 +10,3 @@
 .sync-conflicts select{display:block;min-height:38px;width:100%;max-width:320px;margin-top:6px;border:1px solid var(--line);border-radius:6px;padding:6px;background:var(--card);color:var(--text)}
 .sync-conflict-warning{color:#92400e;background:#fffbeb;padding:12px;border-radius:6px}.sync-whole-confirm{display:flex;gap:8px;align-items:flex-start}.sync-dialog-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
 @media(max-width:720px){#wb-sync-status{right:12px;left:12px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:none;font-size:12px}.sync-compare{grid-template-columns:1fr}.sync-dialog-actions .btn{padding:8px 10px}.sheet.sync-conflict-sheet{width:100%;border-radius:10px}}
-

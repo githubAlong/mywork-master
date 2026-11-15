@@ -12,8 +12,7 @@ export const DEFAULT_PERIODS = [
 
 export const LEAVE_TYPES = ['事假', '病假', '婚假', '丧假', '产假', '公假', '调休', '公出'];
 
-/* 2026-11-14：列顺序按用户要求改为 坐班 / 上课 / 听课 / 教研 / 请假。 */
-const TEACHER_COLUMNS = Object.freeze(['序号', '归属部门', '归属年级', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假', '备注', '操作']);
+const TEACHER_COLUMNS = Object.freeze(['序号', '归属部门', '归属年级', '姓名', '学科', '上课', '坐班', '听课', '教研', '请假', '备注', '操作']);
 export const ATTENDANCE_COLUMNS = {
   roster: TEACHER_COLUMNS,
   seat: TEACHER_COLUMNS,
@@ -206,9 +205,9 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
     ...saved,
   };
   // Historical multi-category entries display one category without rewriting history.
-  /* 单张表内也按全局优先级裁决（上课 > 坐班 > 听课 > 教研），
-     历史数据里一格同时留了多个状态时，保留的必须是优先级最高的那个。 */
-  const selected = ['class','sit','listen','research'].find(key => result[key] === 'y' || result[key] === 'n');
+  const preferred = {seat:'sit',class:'class',research:'research'}[type];
+  const selected = [preferred, ...GRID_KEYS.filter(key => key !== preferred)]
+    .find(key => result[key] === 'y' || result[key] === 'n');
   for (const key of GRID_KEYS) if (key !== selected) result[key] = 'u';
   return result;
 }
@@ -258,57 +257,21 @@ export function mergeTeacherGridRows(savedRows, draftRows, period) {
   return rows;
 }
 
-/* 五种状态互斥（用户 11-12 裁决）：请假 > 上课 > 坐班 > 听课 > 教研。
-   坐班表和上课表是两张独立的表，同一个人很容易两边都有记录，合并显示
-   时必须只留一个状态，否则会出现「上课✓ 坐班✓」两个勾同时亮。 */
-const STATE_PRIORITY = ['leave', 'class', 'sit', 'listen', 'research'];
-function exclusiveRosterState(state) {
-  const statusOf = key => {
-    if (key === 'listen' || key === 'research') {
-      const explicit = key === 'listen' ? state.listenStatus : state.researchStatus;
-      if (explicit === 'y' || explicit === 'n' || explicit === 'u') return explicit;
-      const value = key === 'listen' ? state.listen : state.research;
-      return value === true || value === 'y' ? 'y' : value === 'n' ? 'n' : 'u';
-    }
-    return state[key] === 'y' || state[key] === 'n' ? state[key] : 'u';
-  };
-  const next = {
-    ...state,
-    listenStatus: statusOf('listen'),
-    researchStatus: statusOf('research'),
-  };
-  /* raw 保留互斥前的原始状态：显示只留一个，但「坐班次数/上课次数」这类
-     次数统计必须两边都算，否则同一个人既上课又坐班会少算一次。 */
-  next.raw = {
-    class: statusOf('class'), sit: statusOf('sit'),
-    listenStatus: statusOf('listen'), researchStatus: statusOf('research'),
-  };
-  next.listen = next.listenStatus === 'y';
-  next.research = next.researchStatus === 'y';
-  const winner = STATE_PRIORITY.find(key => key === 'leave' ? !!state.leave : statusOf(key) === 'y');
-  if (!winner) return next;
-  if (winner !== 'class') next.class = 'u';
-  if (winner !== 'sit') next.sit = 'u';
-  if (winner !== 'listen') { next.listen = false; next.listenStatus = 'u'; }
-  if (winner !== 'research') { next.research = false; next.researchStatus = 'u'; }
-  return next;
-}
-
 export function deriveRosterState(teacher, context = {}) {
   const legacy = deriveLegacyRosterState(teacher, context);
   const period = context.period ?? 1;
   const hasGrid = GRID_TYPES.some(type => (context[type + 'Rows'] || []).some(row =>
     !rowData(row).__deleted && matchesGridTeacher(row, teacher) && gridRecord(row, period)));
-  if (!hasGrid) return exclusiveRosterState(legacy);
+  if (!hasGrid) return legacy;
   const states = GRID_TYPES.map(type => deriveTableGridState(teacher, type, context[type + 'Rows'] || [], context));
   const aggregate = key => states.some(state => state[key] === 'y') ? 'y'
     : states.some(state => state[key] === 'n') ? 'n' : 'u';
-  return exclusiveRosterState({
+  return {
     ...legacy, class: aggregate('class'), sit: aggregate('sit'),
     listen: aggregate('listen') === 'y', research: aggregate('research') === 'y',
     listenStatus: aggregate('listen'), researchStatus: aggregate('research'),
     leave: states.find(state => state.leave)?.leave || legacy.leave,
-  });
+  };
 }
 
 export function calculateDailySummary(context = {}) {
@@ -330,27 +293,21 @@ export function calculateDailySummary(context = {}) {
       return;
     }
     const states = [...periods].map(period => ({ period, state: deriveRosterState(teacher, { ...context, period }) }));
-    const rawOf = item => item.state.raw || {
-      class: item.state.class, sit: item.state.sit,
-      listenStatus: item.state.listenStatus || (item.state.listen ? 'y' : 'u'),
-      researchStatus: item.state.researchStatus || (item.state.research ? 'y' : 'u'),
-    };
-    const seats = [0,1,2,3,4,5,6,7,8,9].map(period => deriveRosterState(teacher, { ...context, period }))
-      .map(state => (state.raw?.sit) || state.sit);
+    const seats = [0,1,2,3,4,5,6,7,8,9].map(period => deriveRosterState(teacher, { ...context, period }).sit);
     output.seatPresent = seats.filter(value => value === 'y').length;
     output.seatExpected = seats.filter(value => value === 'y' || value === 'n').length;
     // Retain legacy records outside the edited periods, including multiple classes.
     const classes = (context.classRows || []).filter(row => !rowData(row).__deleted
       && matchesGridTeacher(row, teacher) && rowData(row).__classRecord?.status === 'y'
       && !periods.has(Number(rowData(row).__classRecord.period ?? 1))).length;
-    output.classes = classes + states.filter(item => rawOf(item).class === 'y').length;
+    output.classes = classes + states.filter(item => item.state.class === 'y').length;
     const seatListens = (context.seatRows || []).filter(row => matchesGridTeacher(row, teacher))
       .flatMap(row => Object.entries(rowData(row).__periods || {}))
       .filter(([period, record]) => !periods.has(Number(period)) && !!record.listen_class).length;
     const classListens = (context.classRows || []).filter(row => !rowData(row).__deleted
       && !periods.has(Number(rowData(row).__classRecord?.period ?? 1))
       && rowData(row).__classRecord?.listeners?.includes(teacher.name)).length;
-    output.listens = seatListens + classListens + states.filter(item => rawOf(item).listenStatus === 'y').length;
+    output.listens = seatListens + classListens + states.filter(item => item.state.listen).length;
     const explicitResearch = [...periods].filter(period => GRID_TYPES.some(type => (context[type+'Rows']||[]).some(row => !rowData(row).__deleted && matchesGridTeacher(row,teacher) && gridRecord(row,period)?.research==='y')));
     const researchOverrides = [...periods].filter(period => (context.researchRows||[]).some(row => !rowData(row).__deleted && matchesGridTeacher(row,teacher) && gridRecord(row,period)));
     const legacyResearch = (context.researchRows || []).filter(row => !rowData(row).__deleted && rowData(row).__research?.attendees?.includes(teacher.name)
@@ -358,11 +315,7 @@ export function calculateDailySummary(context = {}) {
     output.research = legacyResearch + explicitResearch.length;
     const onLeave = states.some(item => item.state.leave) || output.leaveDays > 0;
     if (onLeave) leavePeople.add(teacher.name);
-    const registered = states.some(({state})=>{
-      const raw = rawOf({state});
-      return raw.class !== 'u' || raw.sit !== 'u' || raw.listenStatus === 'y' || raw.listenStatus === 'n'
-        || raw.researchStatus === 'y' || raw.researchStatus === 'n';
-    });
+    const registered = states.some(({state})=>state.class !== 'u' || state.sit !== 'u' || state.listenStatus === 'y' || state.listenStatus === 'n' || state.researchStatus === 'y' || state.researchStatus === 'n');
     const legacyAbsent = (context.seatRows||[]).some(row=>matchesGridTeacher(row,teacher) && Object.entries(rowData(row).__periods||{}).some(([p,value])=>!periods.has(Number(p)) && value.status==='n'))
       || (context.classRows||[]).some(row=>matchesGridTeacher(row,teacher) && !rowData(row).__deleted && rowData(row).__classRecord?.status==='n' && !periods.has(Number(rowData(row).__classRecord.period??1)));
     output.overall = onLeave || registered || legacyAbsent || output.classes || output.seatPresent || output.listens || output.research ? '已登记' : '未登记';
@@ -377,341 +330,15 @@ export function calculateDailySummary(context = {}) {
 }
 
 export function parseLeaveDuration(amount, unit='day') {
-  if (!['day','hour','month','morning','afternoon'].includes(unit)) throw new Error('请选择请假时长单位');
-  if (unit === 'morning' || unit === 'afternoon') return {duration:0.5,duration_unit:unit,days:0.5,hours:0};
-  /* 天单位支持「上午/下午/整天」三个时段（用户 11-15 要求） */
-  if (unit === 'day' && ['上午','下午','整天'].includes(String(amount))) {
-    const days = String(amount) === '整天' ? 1 : 0.5;
-    return {duration:days,duration_unit:'day',days,hours:0,day_part:String(amount)};
-  }
   const value=Number(amount);
   if (String(amount).trim()==='' || !Number.isFinite(value) || value<=0) throw new Error('请假时长必须大于0，不能为负数');
+  if (!['day','hour'].includes(unit)) throw new Error('请选择请假时长单位');
   if(unit==='day' && !Number.isInteger(value*2)) throw new Error('按天请假以0.5天为单位');
-  /* 月单位按 30 天折算进汇总，展示仍用「x个月」 */
-  if(unit==='month') return {duration:value,duration_unit:'month',days:value*30,hours:0,months:value};
   return {duration:value,duration_unit:unit,days:unit==='day'?value:0,hours:unit==='hour'?value:0};
 }
 export function formatLeaveDuration(record) {
-  if (record?.day_part) return record.day_part;
-  if (record?.duration_unit === 'morning') return '上午（0.5天）';
-  if (record?.duration_unit === 'afternoon') return '下午（0.5天）';
-  if (record?.duration_unit === 'month') {
-    const months=Number(record.months ?? record.duration ?? 0);
-    return Number(Number(months).toFixed(2))+'个月';
-  }
   const parts=[];
   if(Number(record.days)>0)parts.push(Number(Number(record.days).toFixed(2))+'天');
   if(Number(record.hours)>0)parts.push(Number(Number(record.hours).toFixed(2))+'小时');
   return parts.join(' / ') || '0天';
-}
-
-/**
- * 导出网格由「三级标题 + 表头 + 数据」组成（用户 11-15 要求）：
- * 第一行一级标题（谁的哪张表），第二行日期星期 · 节次（起—止时段），
- * 第三行应到/坐班/上课/听课/教研/请假/未登记人数，之后才是表头与数据。
- * 表头是第一条多列的行，标题行都只有一格，据此定位，避免把标题当数据切走。
- */
-export function splitAttendanceExportGrid(grid = []) {
-  const rows = Array.isArray(grid) ? grid.filter(row => Array.isArray(row)) : [];
-  const headerIndex = rows.findIndex(row => row.length > 1);
-  const safeIndex = headerIndex < 0 ? Math.max(0, rows.length - 1) : headerIndex;
-  return {
-    headings: rows.slice(0, safeIndex).map(row => String(row[0] ?? '')),
-    headers: rows[safeIndex] || [],
-    rows: rows.slice(safeIndex + 1),
-  };
-}
-
-/**
- * 导出网格分页：PNG 一张长图在手机/预览器里没法上下滑动，按固定行数切页，
- * 每页都带同一份表头，导出后逐页查看或打印。
- */
-export function paginateExportGrid(grid, rowsPerPage = 18) {
-  const { headers, rows: body } = splitAttendanceExportGrid(grid);
-  const size = Math.max(1, Number(rowsPerPage) || 18);
-  const pageCount = Math.max(1, Math.ceil(body.length / size));
-  return Array.from({ length: pageCount }, (_, index) => ({
-    index,
-    pageCount,
-    headers,
-    rows: body.slice(index * size, (index + 1) * size),
-  }));
-}
-
-const EXPORT_HEADERS = Object.freeze({
-  roster: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注'],
-  seat: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注'],
-  class: ['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注'],
-  research: ['序号','归属部门','归属年级','姓名','学科','教研时间','地点','主持人','签到状态','备注'],
-  leave: ['序号','归属部门','归属年级','姓名','学科','请假类型','开始日期','结束日期','时段','请假时长','状态','备注'],
-});
-
-const exportRowData = row => row?.data && typeof row.data === 'object' ? row.data : {};
-/* 「—」看不出是没登记还是导出丢了，统一写成「未登记」。
-   用户 11-12 裁决：导出要让每位教师的状态都能看到，空白表格没有意义。 */
-const exportStatusLabel = value => value === 'y' ? '✓' : value === 'n' ? '✗' : '未登记';
-const exportName = row => String(row?.name || row?.teacher || '').trim();
-const exportLeavePeriod = record => String(record?.period || record?.time_period || record?.part_of_day || record?.period_label || '').trim();
-const exportLeaveDuration = record => {
-  const raw = Number(record?.duration) || 0;
-  const days = Number(record?.days ?? (record?.duration_unit === 'hour' ? 0 : raw)) || 0;
-  const hours = Number(record?.hours ?? (record?.duration_unit === 'hour' ? raw : 0)) || 0;
-  if (days > 0 || hours > 0) return formatLeaveDuration({ days, hours });
-  if (['上午', '下午'].includes(exportLeavePeriod(record))) return '0.5天';
-  return '未填写';
-};
-
-/**
- * 四个页签的导出都以「当前导出范围内的全量教师名单」为准（用户 11-12 裁决，
- * 推翻了此前「只导出对应记录」的旧规则）：有记录的教师显示记录内容与状态，
- * 没有记录的教师也要出现，状态明确写「未登记 / 未请假」，不再留白。
- * 列头仍按页签分类，不做成统一的花名册式列。
- */
-export function buildAttendanceExportGrid({
-  type = 'seat', grade = '', date = '', period = 1, teachers = [],
-  seatRows = [], classRows = [], researchRows = [], leaveRecords = [],
-  teacherMeta = {}, resolvePeriodRange = () => [], includeUnlisted = true,
-} = {}) {
-  const people = (Array.isArray(teachers) ? teachers : [])
-    .filter(teacher => teacher && Number(teacher.active ?? 1) !== 0);
-  const teacherByName = new Map(people.map(teacher => [String(teacher.name || '').trim(), teacher]));
-  const departmentOf = teacher => {
-    const meta = teacher ? (teacherMeta?.[String(teacher.id)] || {}) : {};
-    return meta.department || meta.dept || teacher?.department || '高中部';
-  };
-  const gradeOf = (teacher, row) => teacher?.grade || row?.grade || grade;
-  const periodLabel = value => Number(value) === 0 ? '全天' : '第' + Number(value) + '节';
-  const rangeText = value => {
-    const range = typeof resolvePeriodRange === 'function' ? resolvePeriodRange(Number(value)) : [];
-    return Array.isArray(range) && range.filter(Boolean).length ? range.filter(Boolean).join('—') : '—';
-  };
-  /* 全天导出要同时算「全天登记」（__teacherGrid['0']）和第 1~9 节的分节登记：
-     页面在全天模式下读的是 '0'，只遍历 1~9 会让导出全是「未登记」。 */
-  const periodNumbers = Number(period) === 0
-    ? [0, ...Array.from({ length: 9 }, (_, index) => index + 1)]
-    : [Number(period)];
-  /* 坐班表行内填写的请假/备注写进 __teacherGrid，导出优先取这些填写值；
-     touched 记录该字段是否被显式填写过，填过后又清空按「无」处理。 */
-  const gridCell = (teacher, key) => {
-    let touched = false;
-    for (const list of [seatRows, classRows, researchRows]) {
-      const row = (Array.isArray(list) ? list : []).find(item =>
-        !rowData(item).__deleted && matchesGridTeacher(item, teacher));
-      if (!row) continue;
-      const grid = rowData(row).__teacherGrid || {};
-      for (const no of periodNumbers) {
-        const record = grid[String(no)];
-        if (!record || !Object.prototype.hasOwnProperty.call(record, key)) continue;
-        touched = true;
-        const value = String(record[key] ?? '').trim();
-        if (value) return { touched: true, value };
-      }
-    }
-    return { touched, value: '' };
-  };
-  const baseTitle = type === 'roster' ? '花名册' : ({
-    seat: '坐班表', class: '上课表', research: '教研表', leave: '请假总表', summary: '汇总统计表',
-  }[type] || '考勤表');
-  /* 导出抬头要能独立看懂：谁的哪张表、哪一天星期几、哪一节、几点到几点（用户 11-15 要求）。 */
-  const weekdayText = (() => {
-    const matched = String(date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!matched) return '';
-    const day = new Date(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3])).getDay();
-    return ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][day] || '';
-  })();
-  /* 三级标题（用户 11-15 要求）：
-     一级 = 谁的哪张表；二级 = 日期星期 · 节次（起—止时段）；
-     三级 = 应到/坐班/上课/听课/教研/请假/未登记人数。
-     导出时间不写进标题，由各导出通道画在右下角。 */
-  const titleHead = type === 'seat' || type === 'roster'
-    ? (grade || '全部年级') + '教师' + baseTitle
-    : baseTitle + ' · ' + (grade || '全部年级');
-  const subtitle = date + (weekdayText ? ' ' + weekdayText : '')
-    + ' · ' + periodLabel(period) + '（' + rangeText(period) + '）';
-  const heading = statsLine => [[titleHead], [subtitle], [statsLine]];
-
-  if (type === 'seat' || type === 'roster') {
-    const activeLeaves = activeLeavesFor(leaveRecords, date);
-    /* 导出表里同一人一次只能有一个状态（用户 11-15 裁决）：
-       请假 > 上课 > 坐班 > 听课 > 教研，只给胜出的那一格打勾，其余留空。
-       四类都没登记时，只在「坐班」格写「未登记」，避免整行空白看不出是漏登。 */
-    const STATUS_PRIORITY = ['class', 'sit', 'listen', 'research'];
-    const entries = people.map((teacher, index) => {
-      const states = periodNumbers.map(currentPeriod => deriveRosterState(teacher, {
-        seatRows, classRows, researchRows, leaveRecords, date, period: currentPeriod,
-      }));
-      const aggregate = key => {
-        const values = states.map(state => key === 'listen'
-          ? (state.listenStatus || (state.listen ? 'y' : 'u'))
-          : key === 'research'
-            ? (state.researchStatus || (state.research ? 'y' : 'u'))
-            : (state[key] || 'u'));
-        return values.includes('y') ? 'y' : values.includes('n') ? 'n' : 'u';
-      };
-      const name = String(teacher.name || '').trim();
-      const leaves = activeLeaves.filter(item => {
-        if (exportName(item) !== name) return false;
-        const recordGrade = String(item.grade || teacher.grade || grade);
-        return !grade || recordGrade === String(grade);
-      });
-      const leaveText = leaves.map(item => [
-        item.type || '请假', exportLeavePeriod(item), exportLeaveDuration(item),
-      ].filter(Boolean).join(' ')).join('；');
-      const gridLeave = gridCell(teacher, 'leave');
-      const gridRemark = gridCell(teacher, 'remark');
-      const meta = teacherMeta?.[String(teacher.id)] || {};
-      /* 行内填写的请假类型优先；没填过才回退到请假页记录。
-         没填就留空，不再写「无」（用户 11-15 裁决：空白代表没有请假）。 */
-      const leaveValue = gridLeave.value || (gridLeave.touched ? '' : leaveText);
-      const remarkValue = gridRemark.value || meta.remark || teacher.remark || teacher.note || '';
-      const onLeave = !!leaveValue;
-      const statusOf = {
-        sit: aggregate('sit'), class: aggregate('class'),
-        listen: aggregate('listen'), research: aggregate('research'),
-      };
-      const winner = onLeave ? '' : STATUS_PRIORITY.find(key => statusOf[key] === 'y' || statusOf[key] === 'n') || '';
-      const cell = key => winner === key ? exportStatusLabel(statusOf[key]) : '';
-      return {
-        winner,
-        onLeave,
-        row: [
-          index + 1, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
-          winner || onLeave ? cell('sit') : '未登记',
-          cell('class'), cell('listen'), cell('research'),
-          leaveValue, remarkValue,
-        ],
-      };
-    });
-    const rows = entries.map(entry => entry.row);
-    const count = key => entries.filter(entry => entry.winner === key && entry.row[{ class: 6, sit: 5, listen: 7, research: 8 }[key]] === '✓').length;
-    const leaveCount = rows.filter(row => row[9] !== '').length;
-    const unregistered = entries.filter(entry => !entry.winner && !entry.onLeave).length;
-    const statsLine = '应到 ' + people.length + ' 人 · 坐班 ' + count('sit') + ' 人 · 上课 ' + count('class')
-      + ' 人 · 听课 ' + count('listen') + ' 人 · 教研 ' + count('research') + ' 人'
-      + ' · 请假 ' + leaveCount + ' 人 · 未登记 ' + unregistered + ' 人';
-    return [...heading(statsLine), EXPORT_HEADERS[type], ...rows];
-  }
-
-  if (type === 'class' || type === 'research') {
-    /* 上课表 / 教研表导出与页面同一套口径（用户 11-15 反馈）：
-       只导出本表显示的状态列，勾选取页面的跨表合并状态，以录入的为准。 */
-    const activeLeaves = activeLeavesFor(leaveRecords, date);
-    const ownRows = type === 'class' ? classRows : researchRows;
-    const STATUS_PRIORITY = ['class', 'sit', 'listen', 'research'];
-    const entries = people.map((teacher, index) => {
-      const states = periodNumbers.map(currentPeriod => deriveRosterState(teacher, {
-        seatRows, classRows, researchRows, leaveRecords, date, period: currentPeriod,
-      }));
-      const aggregate = key => {
-        const values = states.map(state => key === 'listen'
-          ? (state.listenStatus || (state.listen ? 'y' : 'u'))
-          : key === 'research'
-            ? (state.researchStatus || (state.research ? 'y' : 'u'))
-            : (state[key] || 'u'));
-        return values.includes('y') ? 'y' : values.includes('n') ? 'n' : 'u';
-      };
-      const name = String(teacher.name || '').trim();
-      const leaves = activeLeaves.filter(item => {
-        if (exportName(item) !== name) return false;
-        const recordGrade = String(item.grade || teacher.grade || grade);
-        return !grade || recordGrade === String(grade);
-      });
-      const gridLeave = gridCell(teacher, 'leave');
-      const leaveValue = gridLeave.value || (gridLeave.touched ? ''
-        : leaves.map(item => item.type || '请假').join('；'));
-      const onLeave = !!leaveValue;
-      const statusOf = {
-        sit: aggregate('sit'), class: aggregate('class'),
-        listen: aggregate('listen'), research: aggregate('research'),
-      };
-      const winner = onLeave ? '' : STATUS_PRIORITY.find(key => statusOf[key] === 'y' || statusOf[key] === 'n') || '';
-      const meta = teacherMeta?.[String(teacher.id)] || {};
-      const ownRemark = deriveTableGridState(teacher, type, ownRows, {
-        leaveRecords, date, period: periodNumbers[0],
-      }).remark;
-      const remarkValue = ownRemark || meta.remark || teacher.remark || teacher.note || '';
-      const cell = key => key === 'leave' ? leaveValue
-        : (winner === key ? exportStatusLabel(statusOf[key]) : '');
-      const stateKeys = type === 'class' ? ['class', 'listen'] : ['research', 'leave'];
-      return {
-        winner, onLeave, statusOf,
-        row: [
-          index + 1, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
-          ...stateKeys.map(cell), remarkValue,
-        ],
-      };
-    });
-    const rows = entries.map(entry => entry.row);
-    const count = key => entries.filter(entry => entry.winner === key && entry.statusOf[key] === 'y').length;
-    const leaveCount = entries.filter(entry => entry.onLeave).length;
-    const unregistered = entries.filter(entry => !entry.winner && !entry.onLeave).length;
-    /* 上课表统计不展示应到/未登记；听课有人才展示（用户 11-15 要求） */
-    const listenCount = count('listen');
-    const classStats = ['上课 ' + count('class') + ' 人'];
-    if (listenCount > 0) classStats.push('听课 ' + listenCount + ' 人');
-    classStats.push('请假 ' + leaveCount + ' 人');
-    const statsLine = type === 'class'
-      ? classStats.join(' · ')
-      : '应到 ' + people.length + ' 人 · 教研 ' + count('research') + ' 人 · 请假 ' + leaveCount
-        + ' 人 · 未登记 ' + unregistered + ' 人';
-    const headers = type === 'class'
-      ? ['序号', '归属部门', '归属年级', '姓名', '学科', '上课', '听课', '备注']
-      : ['序号', '归属部门', '归属年级', '姓名', '学科', '教研', '请假', '备注'];
-    return [...heading(statsLine), headers, ...rows];
-  }
-
-  if (type === 'leave') {
-    const entries = activeLeavesFor(leaveRecords, date).filter(record => {
-      const name = exportName(record);
-      if (!name) return false;
-      const teacher = teacherByName.get(name);
-      const recordGrade = String(record.grade || teacher?.grade || (teacher ? grade : ''));
-      return !grade || recordGrade === String(grade);
-    }).slice().sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || ''))
-      || exportName(a).localeCompare(exportName(b), 'zh-CN'));
-    const rows = entries.map((record, index) => {
-      const name = exportName(record);
-      const teacher = teacherByName.get(name);
-      return [
-        index + 1, departmentOf(teacher) || record.department || '高中部',
-        gradeOf(teacher, record), name, teacher?.subject || record.subject || '',
-        record.type || '未填写', record.start_date || '', record.end_date || record.start_date || '',
-        exportLeavePeriod(record) || '—', exportLeaveDuration(record),
-        record.status || '未注明', record.remark || '',
-      ];
-    });
-    /* 全名单兜底：没请假的教师也出一行，状态写「未请假」 */
-    const covered = new Set(entries.map(exportName));
-    let noLeavePeople = 0;
-    for (const teacher of people) {
-      const name = String(teacher.name || '').trim();
-      if (!name || covered.has(name)) continue;
-      rows.push([
-        0, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
-        '无', '—', '—', '—', '—', '未请假', '',
-      ]);
-      covered.add(name);
-      noLeavePeople += 1;
-    }
-    const numbered = rows.map((row, index) => [index + 1, ...row.slice(1)]);
-    const statsLine = '应到 ' + people.length + ' 人 · 请假 ' + entries.length
-      + ' 人 · 未请假 ' + noLeavePeople + ' 人';
-    return [...heading(statsLine), EXPORT_HEADERS.leave, ...numbered];
-  }
-
-  if (type === 'summary') {
-    /* 汇总统计表按「一天」的口径统计，与页面上的汇总页签一致；
-       三级标题写应到、坐班次数、上课次数、听课人次和请假人数。 */
-    const summary = calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
-    const rows = summary.rows.map((row, index) => [
-      index + 1, row.name, row.subject, row.seatPresent, row.classes, row.listens,
-      row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }), row.overall,
-    ]);
-    const statsLine = '应到 ' + summary.expectedTeachers + ' 人 · 坐班 ' + summary.seatPresent
-      + ' 次 · 上课 ' + summary.classes + ' 次 · 听课 ' + summary.listens
-      + ' 人次 · 请假 ' + summary.leavePeople + ' 人';
-    return [...heading(statsLine), ATTENDANCE_COLUMNS.summary, ...rows];
-  }
-
-  throw new Error('不支持的考勤导出类型：' + type);
 }

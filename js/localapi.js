@@ -23,7 +23,6 @@ import {
   randomCode, nowISO, pad2, ymd, hydrate,
 } from './localdb.js';
 import { accountIdentifierFromPhone } from './auth-identifier.mjs';
-import { resolveEnvironmentProfile } from './environment-config.mjs';
 import { reconcileTaskLinks } from './todo-item-sync.mjs';
 import { reconcileTaskMessages } from './task-messages.mjs';
 import { attRowState } from './att-parse.js';
@@ -502,30 +501,6 @@ function recyclePut(table, id, extraTitle = '') {
   }
   save();
   return rid;
-}
-
-/* 首页事项和便签是同一件事的两份投影，删除必须成对。
-   只删一边会出现「首页删了便签还在」「消息删了任务还在」的割裂状态。 */
-function linkedTaskRow(table, row) {
-  if (!row) return null;
-  if (table === 'items') {
-    return (T('todos') || []).find((note) => !note.deleted_at
-      && (String(note.ref_item_id) === String(row.id)
-        || (row.source === '便签' && String(row.ref_id) === String(note.id))));
-  }
-  if (table === 'todos') {
-    return (T('items') || []).find((item) => !item.deleted_at
-      && (String(item.ref_id) === String(row.id) || String(row.ref_item_id) === String(item.id)));
-  }
-  return null;
-}
-
-/* 把事项 / 便签成对放进回收站，两边都能单独还原 */
-function recycleTaskPair(table, row) {
-  if (!row || (table !== 'items' && table !== 'todos')) return;
-  const other = linkedTaskRow(table, row);
-  if (other) recyclePut(table === 'items' ? 'todos' : 'items', other.id);
-  recyclePut(table, row.id);
 }
 
 function purgeExpiredRecycle() {
@@ -1142,21 +1117,9 @@ const PUNISH = [
   ['英语自我介绍', '30 秒英文自我介绍', 'heavy'],
 ];
 
-/* 测试环境不灌示例数据：用户要自己导入真实数据或自己添加测试数据。
-   环境按 hostname 固定分流，URL 参数/localStorage 改不了。
-   识别失败（例如非浏览器环境）时保持原行为。 */
-function demoSeedAllowed() {
-  try {
-    return resolveEnvironmentProfile(globalThis.location)?.autoSeedDemo !== false;
-  } catch {
-    return true;
-  }
-}
-
 export function seedIfEmpty() {
   const db = load();
   if (db.meta.seeded) return false;
-  if (!demoSeedAllowed()) { db.meta.seeded = true; save(); return false; }
   /* 判断「是不是空库」要看得宽一点：
      早先只探 periods/courses/students/categories 四张表，
      于是从搬家链接导入一份只有笔记/事项的数据后，这四张表仍然为空，
@@ -2090,16 +2053,7 @@ on('POST', '/messages/read', ({ body }) => {
 on('DELETE', '/messages/:id', ({ params }) => {
   const db = load();
   const message = (db.messages || []).find(m => String(m.id) === String(params.id));
-  if (message && !message.deleted_at) {
-    /* 任务提醒本身就是任务的投影：删提醒等于删任务，
-       否则消息中心删掉了，首页和便签里同一条还留着。
-       事项提醒 / 系统通知只清消息，不动业务数据。 */
-    if (message.type === 'task' && ['items', 'todos'].includes(message.ref_type)) {
-      const source = (T(message.ref_type) || []).find(row => String(row.id) === String(message.ref_id) && !row.deleted_at);
-      if (source) recycleTaskPair(message.ref_type, source);
-    }
-    message.deleted_at = nowISO();
-  }
+  if (message && !message.deleted_at) message.deleted_at = nowISO();
   save();
   return { ok: true };
 });
@@ -4154,9 +4108,8 @@ for (const table of CRUD_TABLES) {
        别的入口调到的，只在界面拦等于没拦。
        挑的都是「空着这条记录就没意义」的字段，不做格式校验，不打扰正常录入。 */
     const REQUIRED = {
-      /* 上课记录：只有「上课日期 / 上课年级 / 上课班级」必填，其余都允许留空。 */
-      class_records: [['class_month', '请填写上课日期'], ['grade', '请填写上课年级'], ['class_name', '请填写上课班级']],
-      preps: [['topic', '请填写标题']],
+      class_records: [['class_type', '请选择上课类型'], ['subject', '请填写学科']],
+      preps: [['topic', '请填写备课主题'], ['prep_type', '请选择备课类型']],
       trips: [['to_place', '目的地不能为空']],
       invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
     }[table];
@@ -4170,7 +4123,9 @@ for (const table of CRUD_TABLES) {
         }
       }
     }
-    /* 备课记录已移除「备课类型」字段：新建不再强制 prep_type，旧记录的类型值原样保留。 */
+    if (table === 'preps' && !isPrepType(b.prep_type)) {
+      fail(422, '请选择备课类型');
+    }
     // 监考表旧列 type 是 NOT NULL，新逻辑用 duty_type，这里补一份映射
     if (table === 'invigilations' && !b.type) {
       const m = { school: '学校分配', '替他人': '我代他人', '他人替我': '他人代我' };
@@ -4208,7 +4163,8 @@ for (const table of CRUD_TABLES) {
     const ids = [];
     for (const item of rows) {
       if (table === 'preps' && !item?.id) {
-        if (!String(item?.topic || '').trim()) fail(422, '请填写标题');
+        if (!String(item?.topic || '').trim()) fail(422, '请填写备课主题');
+        if (!isPrepType(item?.prep_type)) fail(422, '请选择备课类型');
       }
       if (item && item.id) { updateRow(table, item.id, normalizeBody(item)); ids.push(item.id); }
       else { ids.push(createRow(table, normalizeBody(item || {})).id); }
@@ -4239,8 +4195,7 @@ on('DELETE', '/:table/:id', ({ params }) => {
     const refs = rowsOf(t).filter((x) => String(x.category_id) === String(row.id)).length;
     if (refs) fail(400, '该分类下还有内容，请先移动或删除内容');
   }
-  if (table === 'items' || table === 'todos') recycleTaskPair(table, row);
-  else recyclePut(table, params.id);
+  recyclePut(table, params.id);
   return { ok: true };
 });
 
@@ -4283,11 +4238,6 @@ export async function handle(method, path, query = {}, body = undefined) {
       if (!isCloudSchemaUnavailable(e)) {
         return { ok: false, error: '云端：' + (e.message || e), code: 502, cloud: true };
       }
-      /* 【诊断留痕】云端写入失败后静默退回本机会骗人：界面提示"已新增成功"，
-         刷新后列表读的是云端，仍然是空的（2026-11-14 class_records 缺
-         grade/teacher 列，POST 报 PGRST204 就是这么表现的）。
-         写操作退回本机一律留一条警告，下次排查不用再猜。 */
-      if (method !== 'GET') console.warn('[cloud] 云端写入失败，已退回本机数据：', method, clean, e);
       data = null;
     }
     /* null = 这个接口还没上云（统计 / 原件照片），继续往下走本地实现。

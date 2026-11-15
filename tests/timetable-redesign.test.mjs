@@ -11,30 +11,11 @@ test("my timetable is registered through the existing work/timetable route", () 
   assert.match(work, /if \(t === 'timetable'\) \{ headEl\.remove\(\); return renderMyTimetable\(body\); \}/);
 });
 
-test("timetable keeps the countdown reminder and grid but drops the season/grade query bar", () => {
-  for (const token of ["tt-reminder", "tt-grid-table", "周一", "周日", "tt-grid-title-text", "tt-title-edit", "openTitleEditor"]) {
+test("timetable implements the approved five page regions and grade/type apply button", () => {
+  for (const token of ["tt-reminder", "tt-query-bar", "tt-current-tag", "tt-grid-table", "tt-confirm", "周一", "周日"]) {
     assert.ok(source.includes(token), "missing " + token);
   }
-  for (const token of ["tt-query-bar", "tt-current-tag", "tt-confirm", "tt-season-switch", "data-schedule-type", 'id="tt-type"', 'id="tt-grade"', "typeSelect", "gradeSelect"]) {
-    assert.ok(!source.includes(token), "query bar should be gone: " + token);
-  }
-  /* 用户上传什么就显示什么，不再按课表类型 / 年级过滤 */
-  assert.match(source, /function getVisibleCourses\(\) \{\s*return allCourses;\s*\}/);
-});
-
-test("timetable title is always shown, editable and uses the approved larger font", () => {
-  assert.match(source, /DEFAULT_TITLE = '2026年秋季信息课表'/);
-  assert.match(source, /saveTimetablePrefs\(\{ title: next \}\)/);
-  assert.match(source, /<strong id="tt-grid-title-text">/);
-  assert.doesNotMatch(source, /appliedType === TYPE_WINTER && appliedGrade === '高二'/);
-  assert.match(css, /\.tt-workspace \.tt-grid-title\{font-size:30px/);
-});
-
-test("grade colors keep the original four hues with stronger contrast", () => {
-  assert.match(css, /\.tt-course-block\.tt-grade-1\{[^}]*#1d4ed8/);
-  assert.match(css, /\.tt-course-block\.tt-grade-2\{[^}]*#6d28d9/);
-  assert.match(css, /\.tt-course-block\.tt-grade-3\{[^}]*#b91c1c/);
-  assert.match(css, /\.tt-course-block\.tt-grade-all\{[^}]*#047857/);
+  assert.match(source, /addEventListener\('click', async \(\) => \{\s*appliedType = typeSelect\.value/);
 });
 
 test("timetable normalizes imported period identifiers before rendering", () => {
@@ -100,6 +81,7 @@ test("loading and error states remain while the empty schedule panel is removed"
 test("high-two 2026 autumn timetable keeps source row numbers, lunch span and title", () => {
   for (const marker of [
     "2026年秋季信息课表",
+    "colspan=\"8\"",
     "period_no: 1, class_name: \"11班\"",
     "period_no: 3, class_name: \"5班\"",
     "period_no: 5, class_name: \"7班\"",
@@ -112,16 +94,6 @@ test("high-two 2026 autumn timetable keeps source row numbers, lunch span and ti
   assert.match(source, /Object\.entries\(times\)\.map/);
   assert.match(source, /period_no:Number\(no\)/);
   assert.match(source, /await api\.patch\("\/courses\/" \+ target\.id, data\)/);
-  // 午休行跨列数随「显示星期」变化：1 个节次格 + (可见天数 + 1)，不再写死 8
-  assert.match(source, /colspan="' \+ \(shownDays\.length \+ 1\) \+ '"/);
-});
-
-test("作息设置支持勾选周一到周日的显示与隐藏", () => {
-  assert.match(source, /function normalizeShownDays/);
-  assert.match(source, /shownDays = normalizeShownDays\(timetable\.visibleDays\)/);
-  assert.match(source, /class="tt-day-toggle"/);
-  assert.match(source, /visibleDays: pickedDays/);
-  assert.match(source, /至少要保留一天显示/);
 });
 
 

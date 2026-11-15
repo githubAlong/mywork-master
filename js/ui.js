@@ -1,7 +1,6 @@
 import { api, el, esc, toast, ls, sheet } from './core.js';
 import { decodeQR as qrDecode } from './qrdecode.js';
 import { setActiveAccount, load as loadLocalDB } from './localdb.js';
-import { DEFAULT_PLACE } from './weather-view.mjs';
 
 /* ---------------- 图标 ---------------- */
 const I = {
@@ -88,7 +87,7 @@ export const state = {
   theme: (() => { try { return document.documentElement.dataset.theme || 'light'; } catch { return 'light'; } })(),
   unread: 0,
   weather: ls.get('weather', null),
-  city: ls.get('city', { ...DEFAULT_PLACE }),
+  city: ls.get('city', { name: '北京', lat: 39.9042, lon: 116.4074 }),
   /* auto = 进入首页时尝试更新当前位置；拒绝权限后自动切回 manual。 */
   geoMode: ls.get('geoMode', 'auto'),
 };
@@ -501,7 +500,7 @@ export async function render() {
       </div>
       <div class="side-nav">${NAV.filter((n) => n.id !== 'me').map((n) => navHTML(n, 'nav-item') + subNavHTML(n)).join('')}</div>
       <div class="sidebar-foot">
-        <button class="nav-item side-user-entry${isActive('me') ? ' active' : ''}" id="side-user" data-nav="me" title="打开个人中心" aria-label="我的，${esc(state.user?.nickname || '用户')}"><span class="ni side-user-avatar">${esc((state.user?.nickname || '师').slice(0, 1))}</span><span class="side-user-label"><strong>我的</strong></span></button>
+        <button class="nav-item side-user-entry${isActive('me') ? ' active' : ''}" id="side-user" data-nav="me" title="打开个人中心" aria-label="我的，${esc(state.user?.nickname || '用户')}"><span class="ni side-user-avatar">${esc((state.user?.nickname || '师').slice(0, 1))}</span><span class="side-user-label"><strong>我的</strong><small>${esc(state.user?.nickname || '个人中心')}</small></span></button>
       </div>
     </aside>
     <main class="main" id="main"></main>
