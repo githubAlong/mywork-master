@@ -59,13 +59,8 @@
   .pick-names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
   .pick-win.sm { font-size: 26px; display: inline-block; padding: 8px 16px; border-radius: 14px;
     background: var(--primary); color: #fff; letter-spacing: -.5px; animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
-  /* 点名（第 19 条）：班级/人数/点几个 三个输入并排 */
-  .pk-grid { display: grid; grid-template-columns: 1.4fr .8fr .8fr; gap: 10px; }
-  @media (max-width: 420px) { .pk-grid { grid-template-columns: 1fr 1fr; } .pk-grid > .field:first-child { grid-column: 1 / -1; } }
-  .pk-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 10px; }
-  .pk-chip { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--card);
-    font-size: 12.5px; color: var(--text-2); cursor: pointer; }
-  .pk-chip:active { background: var(--primary-weak); }
+  /* 点名（第 19 条）：人数/点几个 两个输入并排 */
+  .pk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .pk-mode { display: flex; width: 100%; }
   .pk-mode button { flex: 1; }
   .pk-mode button[disabled] { opacity: .42; cursor: not-allowed; }
@@ -232,14 +227,14 @@ function clsName(grade, cls) {
   return c.startsWith(g) ? c : g + ' ' + c;
 }
 let data = null;
-let tab = null;   // 有签到任务时默认进签到；否则有自习任务就先进自习
+let tab = null;   // 默认落到老师开放的第一个模块
+let availTabs = [];
 let cur = null;
 let searchOn = false;
 let searchQ = '';
 let panelOpen = false;
 
-/* 本机偏好：班级 + 终端类型。班班通和教师电脑无法可靠自动区分，
-   所以让学生（或老师）在右上角齿轮里选一次，记住本机即可。 */
+/* 本机偏好：班级。学生（或老师）在右上角齿轮里选一次，记住本机即可。 */
 const PREF_KEY = 'wb_stu_pref_' + code;
 const prefs = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch { return {}; } };
 const savePref = (k, v) => { try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...prefs(), [k]: v })); } catch {} };
@@ -251,7 +246,6 @@ function myClass() {
   const t = (data?.selfstudyTasks || [])[0];
   return t && t.class_scope !== 'all' ? (t.class_label || '') : '';
 }
-const myDevice = () => prefs().device || 'class';
 function classChoices() {
   const set = new Set();
   const label = (grade, cls) => {
@@ -276,27 +270,57 @@ const todayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+/* 老师在「教材 / 点名 / 盲盒」页里可以逐个关掉学生端模块；
+   自习没有单独的开关，发布了任务就相当于这个模块存在。
+   全部关掉且没有任务/签到时，整页只显示「正在来的路上」。 */
+function visibleTabs() {
+  const mods = data?.link?.modules || {};
+  const on = (k) => Number(mods[k]) !== 0;
+  const list = [];
+  if ((data?.selfstudyTasks || []).length) list.push('selfstudy');
+  if (data?.roll && data.roll.length) list.push('checkin');
+  if (on('material')) list.push('material');
+  if (on('roll')) list.push('roll');
+  if (on('punish')) list.push('punish');
+  return list;
+}
+
 async function init() {
   try { data = await api(`/public/link/${code}`); }
   catch (e) { $('#s-app').innerHTML = `<div class="card card-pad empty"><div class="em">${ICON.lock}</div>${esc(e.message)}</div>`; return; }
   document.title = '学生工作台';
-  const hasTask = (data.selfstudyTasks || []).length > 0;
-  /* 老师端各模块的链接会带 ?tab=，直接落到对应页签（教材/点名/盲盒/自习），
-     否则一律停在默认页签，看起来像「打开的学生页不一样」。非法值仍走原来的默认逻辑。 */
+  availTabs = visibleTabs();
+  /* 老师端各模块的链接会带 ?tab=，直接落到对应页签（教材/点名/盲盒/自习）；
+     该模块被关掉时退回第一个可见页签。 */
   const wanted = new URLSearchParams(location.search).get('tab');
-  const opened = ['selfstudy', 'material', 'roll', 'punish'].concat(data.roll && data.roll.length ? ['checkin'] : []);
-  tab = opened.includes(wanted) ? wanted : ((data.roll && data.roll.length) ? 'checkin' : (hasTask ? 'selfstudy' : 'material'));
+  tab = availTabs.includes(wanted) ? wanted : (availTabs[0] || null);
   paintPanel();
   paint();
 }
+const TAB_DEF = {
+  selfstudy: { icon: ICON.clock, label: '自习' },
+  checkin: { icon: ICON.check, label: '签到', dot: true },
+  material: { icon: ICON.mat, label: '教材' },
+  roll: { icon: ICON.dice, label: '点名' },
+  punish: { icon: ICON.target, label: '盲盒' },
+};
 function paint() {
+  if (!availTabs.length) {
+    $('#s-app').innerHTML = `<div class="card card-pad">
+      <div class="stu-empty" style="margin:40px auto 10px">
+        <b style="font-size:19px">正在来的路上</b>
+        <div class="tiny muted" style="margin-top:8px">老师还没开放内容，稍后再来看看</div>
+      </div>
+    </div>`;
+    return;
+  }
+  if (!availTabs.includes(tab)) tab = availTabs[0];
   $('#s-app').innerHTML = `
     <div class="s-tabs">
-      <button data-t="selfstudy" class="${tab === 'selfstudy' ? 'on' : ''}">${ICON.clock} 自习</button>
-      ${data.roll && data.roll.length ? `<button data-t="checkin" class="${tab === 'checkin' ? 'on' : ''}">${ICON.check} 签到 <span class="s-dot"></span></button>` : ''}
-      <button data-t="material" class="${tab === 'material' ? 'on' : ''}">${ICON.mat} 教材</button>
-      <button data-t="roll" class="${tab === 'roll' ? 'on' : ''}">${ICON.dice} 点名</button>
-      <button data-t="punish" class="${tab === 'punish' ? 'on' : ''}">${ICON.target} 盲盒</button>
+      ${availTabs.map((t) => {
+        const d = TAB_DEF[t];
+        return `<button data-t="${t}" class="${tab === t ? 'on' : ''}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
+      }).join('')}
     </div>
     <div id="s-body"></div>`;
   document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; cur = null; paint(); }; });
@@ -307,7 +331,7 @@ function paint() {
   if (tab === 'punish') paintPunish();
 }
 
-/* ---------- 本机设置：班级 / 终端 ---------- */
+/* ---------- 本机设置：班级 ---------- */
 function paintPanel() {
   const choices = classChoices();
   const curCls = myClass();
@@ -320,15 +344,8 @@ function paintPanel() {
       </select>
       <div class="tiny muted" style="margin-top:6px">${choices.length ? '班级从课表中获取' : '老师发布任务后，这里会出现班级'}</div>
     </div>
-    <div class="field"><label class="field-label">终端</label>
-      <select class="input" id="stu-dev">
-        <option value="class" ${myDevice() === 'class' ? 'selected' : ''}>教室班班通</option>
-        <option value="pc" ${myDevice() === 'pc' ? 'selected' : ''}>个人电脑</option>
-      </select>
-    </div>
     <div class="tiny muted">设置会记住在本机，下次打开不用重选。</div>`;
   $('#stu-cls').onchange = (e) => { savePref('cls', e.target.value); if (tab === 'selfstudy') paint(); };
-  $('#stu-dev').onchange = (e) => { savePref('device', e.target.value); if (tab === 'selfstudy') paint(); };
 }
 $('#stu-gear').onclick = (e) => {
   e.stopPropagation();
@@ -369,10 +386,9 @@ function studentCardHtml(t) {
     : `<div class="st-text">${esc(items[0] || '')}</div>`;
   const img = t.task_image || t.generated_image;
   const day = t.date === todayStr() ? '今日' : (t.date || '');
-  const deadline = [day, t.end_time || t.period].filter(Boolean).join(' ');
+  const deadline = [day, t.deadline_time || t.end_time || t.period].filter(Boolean).join(' ');
   return `<div class="card card-pad">
-    <div class="card-title">${esc(t.title || '今日自习任务')}</div>
-    <div class="tiny muted" style="margin-top:5px">${esc([t.class_label || '全部', t.date || '', t.period || ''].filter(Boolean).join(' · '))}</div>
+    <div class="card-title" style="text-align:center">${esc(t.title || '今日自习任务')}</div>
     <div class="st-card-body" style="padding:20px 0 12px;font-size:16px">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
     <div class="row wrap tiny muted" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
       <span>教师：${esc(t.creator || '老师')}</span>
@@ -401,18 +417,6 @@ function paintSelfstudy() {
     </div>`;
     return;
   }
-  if (myDevice() === 'pc' && Number(t.pc_visible) === 0) {
-    $('#s-body').innerHTML = `<div class="card card-pad">
-      <div class="card-title">${ICON.clock} 今日自习任务</div>
-      <div class="tiny muted" style="margin-top:4px">老师关闭了个人电脑显示</div>
-      <div class="stu-lock" style="margin:20px auto 6px;max-width:none">
-        ${ICON.lock}
-        <b>本节自习任务仅可在教室班班通查看</b>
-        <div class="tiny muted" style="margin-top:8px">如需在电脑上查看，请联系老师开启。</div>
-      </div>
-    </div>`;
-    return;
-  }
   $('#s-body').innerHTML = studentCardHtml(t);
   $('#st-view').onclick = () => openTaskModal(t);
   $('#st-save').onclick = () => {
@@ -436,14 +440,18 @@ function openTaskModal(t) {
   document.body.appendChild(wrap);
 }
 
-/* 学生端 60 秒轮询一次：任务有变化才重绘，避免大屏上闪白 */
+/* 学生端 60 秒轮询一次：任务或模块开关有变化才重绘，避免大屏上闪白 */
 setInterval(async () => {
   try {
     const d = await api(`/public/link/${code}`);
     const before = JSON.stringify(data?.selfstudyTasks || []);
     const after = JSON.stringify(d.selfstudyTasks || []);
-    if (data) data.selfstudyTasks = d.selfstudyTasks || [];
-    if (before !== after && tab === 'selfstudy') paint();
+    if (data) { data.selfstudyTasks = d.selfstudyTasks || []; if (d.link) data.link = d.link; }
+    const next = visibleTabs();
+    const tabsChanged = next.join(',') !== availTabs.join(',');
+    availTabs = next;
+    if (tabsChanged) paint();
+    else if (before !== after && tab === 'selfstudy') paint();
   } catch {}
 }, 60000);
 /* ---------- 签到：学生点一下，老师端实时看到 ---------- */
@@ -597,49 +605,41 @@ function paintRoll() {
   const first = (liveCls && rosters.find((r) => String(r.id) === String(liveCls.roster_id)))
     || rosters[0]
     || { id: 0, grade: '', class_name: '', names: [], count: 0 };
-  /* 【第 19 条：点名改成自填班级 + 人数 + 点几个，按号码点】
+  /* 【第 19 条：点名改成填人数 + 点几个，按号码点】
      原来只能从老师预置的名单里选班，名单没建就没得点；
      「同时点 N 人」藏在右上角一个不起眼的数字框里；点的永远是名字。
      老师实际用法通常是：随便报个班号，从 1 号点到 50 号，点 3 个。
-     所以这里三件事都摊开：班级自己填（可点常用班回填）、人数自己填、点几个自己填，
-     并且默认按号码点（学生名单里没名字时本来就只能按号）。
-     模式二选一：按号码 / 按名单名字。 */
+     现在只填人数和点几个，默认按号码点；班级和最近常用班已按反馈去掉，
+     姓名模式退化为使用老师当前名单（有名单时可选）。 */
   const names0 = (first.names || []).filter(Boolean);
   const hasNames = names0.length > 0;
   const cnt0 = Math.max(1, Math.min(200, Number(first.count) || first.roster_count || names0.length || 40));
-  const recentCls = (() => {
-    try { return JSON.parse(localStorage.getItem('wb_pick_cls') || '[]').slice(0, 6); } catch { return []; }
-  })();
 
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="pk-grid">
-      <div class="field"><label class="field-label">班级</label>
-        <input class="input" id="pk-cls" placeholder="如 高一(3)班" value="${esc(clsName(first.grade, first.class_name))}" autocomplete="off"></div>
       <div class="field"><label class="field-label">人数</label>
         <input class="input" id="pk-total" type="number" inputmode="numeric" min="1" max="200" value="${cnt0}"></div>
       <div class="field"><label class="field-label">点几个</label>
         <input class="input" id="pk-num" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
     </div>
-    ${recentCls.length ? `<div class="pk-recent"><span class="tiny muted">最近：</span>${recentCls.map((c) => `<button class="pk-chip" data-cls="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
     <div class="field" style="margin-top:4px">
       <label class="field-label">怎么点</label>
       <div class="seg pk-mode">
         <button class="on" data-mode="no">按号码</button>
-        <button data-mode="name" ${hasNames ? '' : 'disabled title="这个班还没有名单，去老师那里导入名单后才能按名字点"'}>按名单名字</button>
+        <button data-mode="name" ${hasNames ? '' : 'disabled title="还没有名单，导入名单后才能按名字点"'}>按名单名字</button>
       </div>
     </div>
     <label class="pk-nr"><input type="checkbox" id="pk-norepeat"><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
     <button class="btn primary block" id="go" style="height:56px;font-size:17px;margin-top:14px">${ICON.dice} 开始点名</button>
-    <div class="pick-stage"><div class="pick-roll" id="stage">填好上面三项，点「开始点名」</div></div>
+    <div class="pick-stage"><div class="pick-roll" id="stage">填好人数和点几个，点「开始点名」</div></div>
     <div id="history" class="tiny muted" style="text-align:center;min-height:18px"></div>
   </div>`;
 
   let mode = 'no';
   let norepeat = false;
   let pool = [];        // 不重复模式下「还没点到过」的
-  let poolKey = '';     // 班级|人数|模式，变了就重置池子
+  let poolKey = '';     // 人数|模式，变了就重置池子
 
-  const clsOf = () => ($('#pk-cls').value || '').trim() || '未命名班级';
   const totalOf = () => Math.max(1, Math.min(200, Number($('#pk-total').value) || 1));
   // 池子：号码是 1..人数；名字是名单（人数框跟着名单长度走）
   const allOf = () => {
@@ -647,23 +647,13 @@ function paintRoll() {
     const n = totalOf();
     return Array.from({ length: n }, (_, i) => String(i + 1));
   };
-  const keyOf = () => `${clsOf()}|${mode}|${mode === 'name' ? names0.length : totalOf()}`;
+  const keyOf = () => `${mode}|${mode === 'name' ? names0.length : totalOf()}`;
   const resetPool = (force = false) => {
     const k = keyOf();
     if (!force && k === poolKey) return;
     poolKey = k; pool = allOf();
   };
-  const saveCls = () => {
-    const c = clsOf();
-    const old = (() => { try { return JSON.parse(localStorage.getItem('wb_pick_cls') || '[]'); } catch { return []; } })()
-      .filter((x) => x !== c);
-    try { localStorage.setItem('wb_pick_cls', JSON.stringify([c, ...old].slice(0, 6))); } catch {}
-  };
 
-  // 常用班一键回填
-  $('#s-body').querySelectorAll('[data-cls]').forEach((b) => {
-    b.onclick = () => { $('#pk-cls').value = b.dataset.cls; resetPool(true); };
-  });
   // 模式切换
   $('#s-body').querySelectorAll('[data-mode]').forEach((b) => {
     b.onclick = () => {
@@ -680,11 +670,10 @@ function paintRoll() {
     resetPool(true);
     $('#history').textContent = norepeat ? `已点 0/${pool.length}，点完自动洗牌重新开始` : '';
   };
-  ['#pk-cls', '#pk-total'].forEach((s2) => { $(s2).oninput = () => { if (norepeat) resetPool(); }; });
+  $('#pk-total').oninput = () => { if (norepeat) resetPool(); };
   resetPool(true);
 
   $('#go').onclick = () => {
-    saveCls();
     resetPool();
     const k = Math.max(1, Math.min(20, Number($('#pk-num').value) || 1));
     const whole = allOf();
@@ -716,13 +705,12 @@ function paintRoll() {
           stage.innerHTML = `<div class="pick-names">${picks.map((p) => `<span class="pick-win sm">${esc(label(p))}</span>`).join('')}</div>`;
         }
         try { navigator.vibrate?.([40, 60, 90]); } catch {}
-        const cls = clsOf();
         if (norepeat) {
           $('#history').textContent = pool.length
-            ? `${cls} · 已点 ${whole.length - pool.length}/${whole.length} 人，还剩 ${pool.length} 人`
-            : `${cls} · 全班都点过了，下次点击自动洗牌重来`;
+            ? `已点 ${whole.length - pool.length}/${whole.length} 人，还剩 ${pool.length} 人`
+            : '全班都点过了，下次点击自动洗牌重来';
         } else {
-          $('#history').textContent = `${cls} · 从 ${whole.length} ${mode === 'name' ? '个名字' : '个号码'}里点了 ${picks.length} 个`;
+          $('#history').textContent = `从 ${whole.length} ${mode === 'name' ? '个名字' : '个号码'}里点了 ${picks.length} 个`;
         }
       }
     }, 62);

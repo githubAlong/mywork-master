@@ -1,4 +1,4 @@
-﻿﻿/* 我的工作台 Service Worker
+﻿﻿﻿﻿/* 我的工作台 Service Worker
    作用只有两个：可添加到主屏幕、断网时能打开。
 
    === 为什么首页网络优先、静态资源按缓存版本更新 ===
@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v293-material-video';
+const CACHE = 'wb-v298-student-roll-simplify';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -259,7 +259,9 @@ self.addEventListener('fetch', (e) => {
     const cached = await caches.match(e.request);
     if (cached) return cached;
     try {
-      const response = await fetch(e.request);
+      /* 缓存未命中时绕过浏览器 HTTP 缓存：否则套着旧 max-age 的 JS 会被
+         原样写进新版本的 CACHE，发布后还继续跑旧脚本。 */
+      const response = await fetch(e.request, { cache: 'reload' });
       if (response.ok) {
         const cache = await caches.open(CACHE);
         await cache.put(e.request, response.clone());
