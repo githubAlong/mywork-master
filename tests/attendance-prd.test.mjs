@@ -12,7 +12,7 @@ test('PRD 固定六页签字段顺序', () => {
   for (const type of ['seat','class','research']) {
     assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
   }
-  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','状态','备注']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','备注']);
   assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长','综合状态']);
 });
 
@@ -81,8 +81,9 @@ test('请假时长支持半天、上午、下午和小时小数', () => {
   assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'下午（0.5天）');
   assert.deepEqual(parseLeaveDuration('1.5','hour'), {duration:1.5,duration_unit:'hour',days:0,hours:1.5});
   assert.throws(() => parseLeaveDuration('0.25','day'), /0.5天/);
-  /* 用户 11-15 要求：天支持 上午/下午/整天，月按数字填写 */
-  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'整天'});
+  /* 用户 11-15 要求：天支持 上午/下午/1天（原「整天」改为「1天」），月按数字填写 */
+  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
+  assert.deepEqual(parseLeaveDuration('1天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
   assert.equal(formatLeaveDuration(parseLeaveDuration('上午','day')),'上午');
   assert.deepEqual(parseLeaveDuration('1','month'), {duration:1,duration_unit:'month',days:30,hours:0,months:1});
   assert.equal(formatLeaveDuration(parseLeaveDuration('2','month')),'2个月');
@@ -160,6 +161,8 @@ test('四类导出都保留全量名单并显示对应状态（11-12 新裁决�
     data:{'__teacherGrid':{'1':{'class':'u','sit':'u','listen':'u','research':'y'}}},
   }]});
   assert.equal(research.length,6);
+  /* 抬头统一「年级在前、表名在后」（用户 11-15 要求） */
+  assert.match(research[0][0],/高一教师教研表/);
   assert.deepEqual(research[3],['序号','归属部门','归属年级','姓名','学科','教研','请假','备注']);
   assert.deepEqual(new Set(namesOf(research)),new Set(['赵老师','王老师']));
   assert.equal(rowByName(research,'赵老师')[5],'✓');
@@ -172,7 +175,8 @@ test('四类导出都保留全量名单并显示对应状态（11-12 新裁决�
   /* 请假表只统计请假人员（用户 11-15 需求） */
   assert.deepEqual(namesOf(leave),['王老师']);
   assert.match(rowByName(leave,'王老师')[9],/0.5天/);
-  assert.equal(rowByName(leave,'王老师')[10],'已批');
+  /* 请假表不再导出「状态」列（用户 11-15 要求），第 11 列是备注 */
+  assert.equal(rowByName(leave,'王老师')[10],'上午请假');
   assert.match(leave[2][0],/请假 1 人/);
   assert.ok(!/应到|未请假/.test(leave[2][0]),'请假表标题不应再出现应到/未请假');
 
@@ -339,6 +343,23 @@ test('导出的请假和备注优先取坐班表行内填写，其次才是请�
     data: { __teacherId: 1, __teacherGrid: { 0: { class: 'u', sit: 'u', listen: 'u', research: 'u', leave: '调休', remark: '家里有事' } } } }] })).rows[0];
   assert.equal(filled[9], '调休');
   assert.equal(filled[10], '家里有事');
+});
+
+test('表内登记的请假按节次独立：第 1 节请假不会带到第 8 节', () => {
+  /* 用户 11-15 反馈：第 1 节登记的信息自动带进了第 8 节，每节课录入的内容应各管各的。 */
+  const teachers = [{ id: 1, name: '李老师', subject: '语文', grade: '高一', active: 1 }];
+  const seatRows = [{ teacher: '李老师', subject: '语文',
+    data: { __teacherId: 1, __teacherGrid: { 1: { leave: '事假' }, 8: { leave: '' } } } }];
+  const leaveRecords = [{ id: 'grid:seat:1:李老师', name: '李老师', grade: '高一', subject: '语文', type: '事假',
+    start_date: '2026-11-15', end_date: '2026-11-15', days: 1, duration_unit: 'day', status: '已批',
+    source: 'grid', source_table: 'seat', source_period: 1 }];
+  const context = { seatRows, classRows: [], researchRows: [], leaveRecords, date: '2026-11-15' };
+  assert.equal(deriveRosterState(teachers[0], { ...context, period: 1 }).leave, '事假');
+  assert.equal(deriveRosterState(teachers[0], { ...context, period: 8 }).leave, '');
+  const base = { type: 'seat', grade: '高一', date: '2026-11-15', teachers, seatRows,
+    classRows: [], researchRows: [], leaveRecords };
+  assert.equal(splitAttendanceExportGrid(buildAttendanceExportGrid({ ...base, period: 1 })).rows[0][9], '事假');
+  assert.equal(splitAttendanceExportGrid(buildAttendanceExportGrid({ ...base, period: 8 })).rows[0][9], '');
 });
 
 test('导出 PNG 按页切分，每页都带表头，方便上下滑动查看', () => {

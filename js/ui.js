@@ -1,5 +1,4 @@
 import { api, el, esc, toast, ls, sheet } from './core.js';
-import { decodeQR as qrDecode } from './qrdecode.js';
 import { setActiveAccount, load as loadLocalDB } from './localdb.js';
 import { DEFAULT_PLACE } from './weather-view.mjs';
 
@@ -110,7 +109,7 @@ export const NAV = [
       { id: 'notes', label: '笔记', icon: 'edit' },
   { id: 'selfstudy', label: '自习', icon: 'clock' },
   { id: 'textbook', label: '教材', icon: 'book' },
-  { id: 'pick', label: '抽人', icon: 'dice' },
+  { id: 'pick', label: '点名', icon: 'dice' },
   { id: 'mystery', label: '盲盒', icon: 'gift' },
   { id: 'daily', label: '便签', icon: 'daily' },
   { id: 'study', label: '学习', icon: 'study' },
@@ -457,7 +456,8 @@ export async function render() {
 
   let viewName = seg;
   const isWorkModule = WORK_TABS.some(item => item.id === seg);
-  const isToolModule = ['selfstudy', 'textbook', 'pick', 'mystery'].includes(seg);
+  /* 自习管理是独立的一级页面（见 selfstudy.js），不再落到「课件」工具页 */
+  const isToolModule = ['textbook', 'pick', 'mystery'].includes(seg);
   if (isWorkModule) viewName = 'work';
   if (isToolModule) viewName = 'materials';
   if (seg === 'daily') viewName = 'daily';
@@ -898,7 +898,8 @@ async function decodeFromSource(src) {
     }
   }
   try {
-    return qrDecode(src) || '';
+    const { decodeQR } = await import('./qrdecode.js');
+    return decodeQR(src) || '';
   } catch {
     return '';
   }

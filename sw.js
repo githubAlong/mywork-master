@@ -1,10 +1,11 @@
 ﻿﻿/* 我的工作台 Service Worker
    作用只有两个：可添加到主屏幕、断网时能打开。
 
-   === 为什么策略是「网络优先」 ===
-   踩过坑：缓存优先的写法改完代码用户还看旧版，而且刷新几次都不变，
-   只能手动清缓存，比不能离线更糟。所以任何能连上网络的时候都以网络为准，
-   缓存只用于断网兜底。
+   === 为什么首页网络优先、静态资源按缓存版本更新 ===
+   首页必须网络优先，才能及时发现新版本；JS/CSS 则跟随 CACHE 整体换版，
+   同一个缓存版本内内容不变，可以直接使用预缓存。每次发布必须递增 CACHE，
+   新 Service Worker 激活时会重新预取并删除旧缓存，不会长期停在旧版本。
+   这样避免每次打开都把近百个模块重新请求一遍，慢网络下也不至于白屏一分钟。
 
    === 【2026-10 白屏事故复盘，别再犯】 ===
    现象：同一台电脑，Chrome 正常、另一个浏览器整个页面空白（书签栏还在，
@@ -20,9 +21,9 @@
         不同浏览器对 install 超时的容忍度不同，所以「换个浏览器就好了 / 就坏了」。
    修法：
      1) 清单只列本项目真实存在的文件，并且用脚本核对过全部 200。
-     2) 导航请求（打开页面本身）单独处理：网络最多等 3 秒，
-        超时就用缓存；缓存也没有就返回一个「加载失败，点这里重试」的极简页，
-        永远不让用户对着一片空白猜。
+     2) 导航请求（打开页面本身）单独处理：网络失败才用缓存；
+        缓存也没有就返回一个「加载失败，点这里重试」的极简页，
+        不用固定超时把仍在传输的线上页面误判成离线。
      3) 清单里的 JS 与 index.html 版本绑定在同一个 CACHE 名上，
         改名即全量换新，不会出现「新 HTML 配旧 JS」的错配。
 
@@ -30,12 +31,12 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v264-unified';
+const CACHE = 'wb-v293-material-video';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
    加新模块时记得同步加进来，否则断网时那个页面打不开
-   （联网时没影响，因为网络优先）。
+   （联网且缓存缺失时会回源，发布时随 CACHE 整体换版）。
    核对方法：把下面每个路径拼到站点根地址后面，应当全部返回 200。 */
 const ASSETS = [
   './',
@@ -107,6 +108,7 @@ const ASSETS = [
   './js/repairs-domain.mjs',
   './js/recycle.js',
   './js/selfstudy.js',
+  './js/selfstudy-task-image.mjs',
   /* 功能模块 */
   './js/attendance.js',
   './js/attendance-prd.js',
@@ -136,54 +138,12 @@ const ASSETS = [
   './js/roster-structure.mjs',
 ];
 
-/* 【预缓存的超时】
-   线上实测（GitHub Pages）：manifest 只有 603 字节，也要 36 秒；
-   css/app.css 193KB 要 40 秒。不是文件大小的问题，是每个请求都要排进
-   同一条慢队列。而 install 事件是等 waitUntil 里的 Promise 全部落地才算装完，
-   任一请求挂住，整个 SW 就永远停在 installing：
-     · active 永远是 null → 页面压根没被 SW 接管
-     · 缓存只写进一半
-     · 断网也就打不开
-   所以给每个文件 8 秒上限：拿不到就算了，不拖累整体。
-   断网兜底只要求 index.html + css 在，这两个优先、超时放宽到 15 秒。 */
-const TIMEOUT_MS = 8000;
-const CORE = new Set(['./', './index.html', './css/app.css']);
-
-function withTimeout(p, ms, label) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('超时 ' + ms + 'ms: ' + label)), ms);
-    p.then(
-      (v) => { clearTimeout(t); resolve(v); },
-      (e) => { clearTimeout(t); reject(e); },
-    );
-  });
-}
-
-self.addEventListener('install', (e) => {
+/* 安装阶段不预取文件。冷启动时即使只预取首页核心，也会和当前页面争用
+   慢网络连接；所有资源首次实际使用时由 fetch 处理程序写入同一个 CACHE。
+   ASSETS 仍保留完整清单，供版本换缓存、资源核对和已访问页面离线使用。 */
+self.addEventListener('install', () => {
   // 立刻进入 waiting → activate，不等所有旧标签页关掉
   self.skipWaiting();
-  e.waitUntil((async () => {
-    const c = await caches.open(CACHE);
-    /* 逐个添加，且**互不等待**：某个文件慢或 404 都不影响其它文件落进缓存。
-       核心文件（首页与样式）放最后并且单独一串，超时更宽，
-       这样即使前面几个静态资源全部超时，断网也还能打开站点。 */
-    const others = ASSETS.filter((u) => !CORE.has(u));
-    const cores = ASSETS.filter((u) => CORE.has(u));
-    const grab = (u, ms) => withTimeout(
-      fetch(new Request(u, { cache: 'reload' })).then((r) => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return c.put(u, r);
-      }),
-      ms, u,
-    ).catch((err) => {
-      console.warn('[sw] 预缓存失败，跳过：', u, err && err.message);
-    });
-    // 两串并发跑，谁先完成都不影响谁
-    await Promise.all([
-      Promise.all(others.map((u) => grab(u, TIMEOUT_MS))),
-      Promise.all(cores.map((u) => grab(u, 15000))),
-    ]);
-  })());
 });
 
 self.addEventListener('activate', (e) => {
@@ -243,28 +203,44 @@ self.addEventListener('fetch', (e) => {
   if (u.origin !== self.location.origin) return;
   if (u.pathname.includes('/api/')) return;
 
-  /* 【打开页面本身：缓存优先 + 后台更新（stale-while-revalidate）】
-     这是白屏事故的直接修法，也是唯一一处「缓存优先」。
-     打开页面如果傻等网络，GitHub Pages 一排队就是几十秒，
-     用户看到的就是一片空白，然后自己按 F5，每次结果还不一样。
-     所以：缓存里有首页就**立刻**给（毫秒级，不可能白屏），
-          同时后台去拉最新版，拉到就更新缓存，下次打开就是新的。
-     缓存里没有（第一次来）才走网络；网络也拿不到就返回兜底页。
+  /* 【打开页面本身：网络优先 + 离线缓存兜底】
+     首页不直接沿用缓存，避免新 HTML 与当前 CACHE 的静态资源错配。
+     网络失败时才读首页缓存；网络也拿不到且没有缓存就返回兜底页。
      注意不能把「网络返回的错误页」当成功 —— 502/503 也要走兜底。 */
   if (e.request.mode === 'navigate') {
     const base = self.registration.scope;
-    e.respondWith((async () => {
-      /* TEST：优先取线上最新 HTML，避免旧缓存 HTML 与新 JS 模块错配。
-         网络失败时才回退缓存；不会清除 localStorage / IndexedDB 或业务数据。 */
-      try {
-        const response = await withTimeout(fetch(e.request, { cache: 'no-store' }), 20000, 'navigate-network');
-        if (response && response.ok) {
-          const cache = await caches.open(CACHE);
-          await cache.put(base + 'index.html', response.clone());
-          await cache.put(base, response.clone());
-          return response;
+    const url = new URL(e.request.url);
+    const scopePath = new URL(base).pathname;
+    /* 只有工作台首页（scope 根 / index.html）才按「首页壳」处理。
+       以前所有导航都当成 index.html：打开 student.html 时断网会拿缓存的教师首页
+       顶替（学生端就显示「页面没能加载出来」），联网时还会把学生端 HTML 写进
+       首页缓存，反过来污染工作台。子页面改成网络优先、离线回退自己的缓存。 */
+    if (url.pathname !== scopePath && url.pathname !== scopePath + 'index.html') {
+      e.respondWith((async () => {
+        try {
+          return await fetch(e.request);
+        } catch (error) {
+          console.warn('[sw] 子页面网络失败，尝试使用缓存：', url.pathname, error && error.message);
+          const cached = (await caches.match(e.request))
+            || (url.pathname.includes('student') ? await caches.match(base + 'student.html') : null);
+          return cached || offlineResponse();
         }
-        throw new Error('HTTP ' + (response && response.status));
+      })());
+      return;
+    }
+    e.respondWith((async () => {
+      /* 网络优先，但不人为缩短浏览器自身的网络超时。
+         缓存只用于离线兜底：写入慢或失败都不能丢弃已经成功的网络响应。 */
+      try {
+        const response = await fetch(e.request, { cache: 'no-store' });
+        if (!response || !response.ok) throw new Error('HTTP ' + (response && response.status));
+        caches.open(CACHE).then((cache) => Promise.all([
+          cache.put(base + 'index.html', response.clone()),
+          cache.put(base, response.clone()),
+        ])).catch((cacheError) => {
+          console.warn('[sw] 首页缓存写入失败，仍使用网络页面：', cacheError && cacheError.message);
+        });
+        return response;
       } catch (error) {
         console.warn('[sw] 导航网络请求失败，尝试使用缓存页面：', error && error.message);
         const cached = (await caches.match(base + 'index.html'))
@@ -278,14 +254,20 @@ self.addEventListener('fetch', (e) => {
   }
 
   e.respondWith((async () => {
+    /* JS/CSS 与 CACHE 同版本：命中就直接返回，不再让近百个模块逐个等待网络。
+       发布时递增 CACHE 并重新预缓存；旧缓存会在 activate 时删除。 */
+    const cached = await caches.match(e.request);
+    if (cached) return cached;
     try {
-      const r = await fetch(e.request);
-      return r;
-    } catch (err) {
-      // 断网：先找缓存，找不到再抛给浏览器
-      const hit = await caches.match(e.request);
-      if (hit) return hit;
-      throw err;
+      const response = await fetch(e.request);
+      if (response.ok) {
+        const cache = await caches.open(CACHE);
+        await cache.put(e.request, response.clone());
+      }
+      return response;
+    } catch (error) {
+      console.warn('[sw] 静态资源网络请求失败：', e.request.url, error && error.message);
+      throw error;
     }
   })());
 });

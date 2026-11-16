@@ -19,7 +19,7 @@ export const ATTENDANCE_COLUMNS = {
   seat: TEACHER_COLUMNS,
   class: TEACHER_COLUMNS,
   research: TEACHER_COLUMNS,
-  leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '状态', '备注'],
+  leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
   summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长', '综合状态'],
 };
 
@@ -39,6 +39,14 @@ export function activeLeavesFor(leaveRecords, date, grade) {
     && leaveCoversDate(item, date)
     && item.status !== '已撤销'
   );
+}
+
+/* 表内登记的请假按节次独立：只在登记的那一节生效（用户 11-15 反馈：
+   第 1 节登记的信息被自动带到了第 8 节，每节课录入的内容应各管各的）。
+   请假页手写的整日记录没有 source_period，仍在所有节次生效。 */
+function leavesForPeriod(leaveRecords, period) {
+  return (Array.isArray(leaveRecords) ? leaveRecords : []).filter((item) =>
+    item?.source !== 'grid' || Number(item.source_period ?? 0) === Number(period ?? 0));
 }
 
 function rowData(row) {
@@ -84,7 +92,7 @@ function deriveLegacyRosterState(teacher, {
       && d.attendees.includes(name)
       && matchesAttendancePeriod(d.period_time, period);
   });
-  const leaves = activeLeavesFor(leaveRecords,date).filter((item) =>
+  const leaves = activeLeavesFor(leavesForPeriod(leaveRecords, period),date).filter((item) =>
     String(item.name || item.teacher || '').trim() === name && leaveCoversDate(item, date)
   );
   const classStatus = classRecords.some((row) => (rowData(row).__classRecord || {}).status === 'y') ? 'y'
@@ -379,10 +387,10 @@ export function calculateDailySummary(context = {}) {
 export function parseLeaveDuration(amount, unit='day') {
   if (!['day','hour','month','morning','afternoon'].includes(unit)) throw new Error('请选择请假时长单位');
   if (unit === 'morning' || unit === 'afternoon') return {duration:0.5,duration_unit:unit,days:0.5,hours:0};
-  /* 天单位支持「上午/下午/整天」三个时段（用户 11-15 要求） */
-  if (unit === 'day' && ['上午','下午','整天'].includes(String(amount))) {
-    const days = String(amount) === '整天' ? 1 : 0.5;
-    return {duration:days,duration_unit:'day',days,hours:0,day_part:String(amount)};
+  /* 天单位支持「上午/下午/1天」三个时段（用户 11-15 要求，整天改为 1天） */
+  if (unit === 'day' && ['上午','下午','整天','1天'].includes(String(amount))) {
+    const days = ['整天','1天'].includes(String(amount)) ? 1 : 0.5;
+    return {duration:days,duration_unit:'day',days,hours:0,day_part:days===1?'1天':String(amount)};
   }
   const value=Number(amount);
   if (String(amount).trim()==='' || !Number.isFinite(value) || value<=0) throw new Error('请假时长必须大于0，不能为负数');
@@ -392,6 +400,8 @@ export function parseLeaveDuration(amount, unit='day') {
   return {duration:value,duration_unit:unit,days:unit==='day'?value:0,hours:unit==='hour'?value:0};
 }
 export function formatLeaveDuration(record) {
+  /* 历史数据的「整天」统一展示为「1天」（用户 11-15 要求） */
+  if (record?.day_part === '整天') return '1天';
   if (record?.day_part) return record.day_part;
   if (record?.duration_unit === 'morning') return '上午（0.5天）';
   if (record?.duration_unit === 'afternoon') return '下午（0.5天）';
@@ -443,7 +453,7 @@ const EXPORT_HEADERS = Object.freeze({
   seat: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注'],
   class: ['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注'],
   research: ['序号','归属部门','归属年级','姓名','学科','教研时间','地点','主持人','签到状态','备注'],
-  leave: ['序号','归属部门','归属年级','姓名','学科','请假类型','开始日期','结束日期','时段','请假时长','状态','备注'],
+  leave: ['序号','归属部门','归属年级','姓名','学科','请假类型','开始日期','结束日期','时段','请假时长','备注'],
 });
 
 const exportRowData = row => row?.data && typeof row.data === 'object' ? row.data : {};
@@ -490,6 +500,9 @@ export function buildAttendanceExportGrid({
   const periodNumbers = Number(period) === 0
     ? [0, ...Array.from({ length: 9 }, (_, index) => index + 1)]
     : [Number(period)];
+  /* 表内登记的请假按节次生效（用户 11-15 反馈）：导出某一节时只带这一节的请假，
+     全天导出才汇总当天全部，避免第 1 节的请假被带到第 8 节。 */
+  const scopedLeaveRecords = periodNumbers.length > 1 ? leaveRecords : leavesForPeriod(leaveRecords, period);
   /* 坐班表行内填写的请假/备注写进 __teacherGrid，导出优先取这些填写值；
      touched 记录该字段是否被显式填写过，填过后又清空按「无」处理。 */
   const gridCell = (teacher, key) => {
@@ -523,15 +536,16 @@ export function buildAttendanceExportGrid({
      一级 = 谁的哪张表；二级 = 日期星期 · 节次（起—止时段）；
      三级 = 应到/坐班/上课/听课/教研/请假/未登记人数。
      导出时间不写进标题，由各导出通道画在右下角。 */
-  const titleHead = type === 'seat' || type === 'roster'
-    ? (grade || '全部年级') + '教师' + baseTitle
-    : baseTitle + ' · ' + (grade || '全部年级');
+  /* 统一「年级在前、表名在后」：高一年级教师教研表 / 高一年级教师上课表…
+     以前只给坐班表、花名册这么排，其余表是「教研表 · 高一年级」，
+     同一批导出表抬头顺序不一致，打印出来看着像两套东西（用户 11-15 要求）。 */
+  const titleHead = (grade || '全部年级') + '教师' + baseTitle;
   const subtitle = date + (weekdayText ? ' ' + weekdayText : '')
     + ' · ' + periodLabel(period) + '（' + rangeText(period) + '）';
   const heading = statsLine => [[titleHead], [subtitle], [statsLine]];
 
   if (type === 'seat' || type === 'roster') {
-    const activeLeaves = activeLeavesFor(leaveRecords, date);
+    const activeLeaves = activeLeavesFor(scopedLeaveRecords, date);
     /* 导出表里同一人一次只能有一个状态（用户 11-15 裁决）：
        请假 > 上课 > 坐班 > 听课 > 教研，只给胜出的那一格打勾，其余留空。
        四类都没登记时，只在「坐班」格写「未登记」，避免整行空白看不出是漏登。 */
@@ -596,7 +610,7 @@ export function buildAttendanceExportGrid({
   if (type === 'class' || type === 'research') {
     /* 上课表 / 教研表导出与页面同一套口径（用户 11-15 反馈）：
        只导出本表显示的状态列，勾选取页面的跨表合并状态，以录入的为准。 */
-    const activeLeaves = activeLeavesFor(leaveRecords, date);
+    const activeLeaves = activeLeavesFor(scopedLeaveRecords, date);
     const ownRows = type === 'class' ? classRows : researchRows;
     const STATUS_PRIORITY = ['class', 'sit', 'listen', 'research'];
     const entries = people.map((teacher, index) => {
@@ -687,7 +701,7 @@ export function buildAttendanceExportGrid({
         gradeOf(teacher, record), name, teacher?.subject || record.subject || '',
         record.type || '未填写', record.start_date || '', record.end_date || record.start_date || '',
         exportLeavePeriod(record) || '—', exportLeaveDuration(record),
-        record.status || '未注明', record.remark || '',
+        record.remark || '',
       ];
     });
     /* 用户 11-15 需求：请假表只统计请假人员，不再补未请假名单 */
