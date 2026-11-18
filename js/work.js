@@ -8,7 +8,7 @@ import { detectTimetable } from './ttimage.js';
 import { loginBanner, hookBanner } from './auth.js';
 import { renderPreps } from './prep.js';
 import { renderTripManagement } from './trips.js';
-import { MAX_MATERIAL_SIZE, syncMaterialSharing } from './material-sharing.mjs';
+import { syncMaterialSharing } from './material-sharing.mjs';
 
 const M = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 /* 备注字段统一生成器。
@@ -173,6 +173,8 @@ registerView(async function materials(main, { tab }) {
     textbook: ['教材', '学生端「教材」：你勾了「学生可见」的资料，就是学生看到的全部'],
     pick: ['点名', '学生端「点名」：按号码或按名单，点过的不重复'],
     mystery: ['盲盒', '学生端「盲盒」：点一下随机弹一个任务，这一轮不重复'],
+    misconduct: ['违纪', '学生端「违纪」：录入的违纪内容，学生按班级查看'],
+    bulletin: ['留言板', '学生端「留言板」：发布的留言，学生按班级查看'],
   }[t] || ['小助手', '学生端互动工具统一管理：自习、教材、点名、盲盒'];
 
   main.innerHTML = '<div id="materials-body"></div>';
@@ -188,6 +190,8 @@ registerView(async function materials(main, { tab }) {
   if (t === 'textbook') return renderStudentModule(body, 'textbook');
   if (t === 'pick') return renderStudentModule(body, 'pick');
   if (t === 'mystery') return renderStudentModule(body, 'mystery');
+  if (t === 'misconduct') return renderStudentModule(body, 'misconduct');
+  if (t === 'bulletin') return renderStudentModule(body, 'bulletin');
   return renderMaterials(body);
 });
 
@@ -2581,6 +2585,14 @@ const STUDENT_MOD = {
     name: '盲盒', icon: 'gift', tab: 'punish',
     desc: '学生点「盲盒」随机弹一个。这一轮不重复，点完自动洗牌。',
   },
+  misconduct: {
+    name: '违纪', icon: 'alert', tab: 'misconduct',
+    desc: '从课表选年级班级，录入违纪内容。学生端按班级查看。',
+  },
+  bulletin: {
+    name: '留言板', icon: 'chat', tab: 'bulletin',
+    desc: '输入年级班级和留言内容，学生端按班级查看留言。',
+  },
 };
 
 /* 名单字段在库里可能是两种形态：JSON 数组（导入班级时写入）、
@@ -2597,13 +2609,16 @@ function parseNames(raw) {
 
 async function renderStudentModule(box, key) {
   const meta = STUDENT_MOD[key];
-  const [links, mats, rosters, punishes, punRecs, rollSess] = await Promise.all([
+  const [links, mats, rosters, punishes, punRecs, rollSess, misconducts, bulletins, periods] = await Promise.all([
     api.get('/links').catch(() => []),
     api.get('/materials').catch(() => []),
     api.get('/rosters').catch(() => []),
     api.get('/punishments').catch(() => []),
     api.get('/punish/records', { date: ymd(new Date()) }).catch(() => []),
     api.get('/roll/sessions').catch(() => []),
+    api.get('/misconduct_records').catch(() => []),
+    api.get('/bulletin_records').catch(() => []),
+    api.get('/periods').catch(() => []),
   ]);
   const link = links[0];
   const pubMats = mats.filter((m) => Number(m.public) !== 0);
@@ -2760,6 +2775,133 @@ async function renderStudentModule(box, key) {
 
     inner.querySelector('#pk-try')?.addEventListener('click', () => pickStudentDialog(rosters));
     inner.querySelector('#pk-ros')?.addEventListener('click', () => openRosterDialog(rosters, () => renderStudentModule(box, key)));
+  } else if (key === 'misconduct') {
+    /* —— 违纪 —— */
+    const clsPairs = new Map();
+    (rosters || []).forEach((r) => { if (r.grade || r.class_name) clsPairs.set(clsName(r.grade, r.class_name), { grade: r.grade, class_name: r.class_name }); });
+    const todayYmd = ymd(new Date());
+    const misToday = misconducts.filter((m) => (m.created_at || '').slice(0, 10) === todayYmd);
+    const activeCls = new Set(misconducts.map((m) => clsName(m.grade, m.class_name))).size;
+    inner.innerHTML = `
+      <div class="rp-stats mod-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="card card-pad"><div class="tiny muted">累计违纪</div>
+          <div style="font-size:24px;font-weight:700">${misconducts.length}</div></div>
+        <div class="card card-pad"><div class="tiny muted">今日新增</div>
+          <div style="font-size:24px;font-weight:700;color:var(--amber)">${misToday.length}</div></div>
+        <div class="card card-pad"><div class="tiny muted">涉及班级</div>
+          <div style="font-size:24px;font-weight:700;color:var(--green)">${activeCls}</div></div>
+      </div>
+      <div class="card card-pad" style="margin-top:14px">
+        <div class="card-title">${icon('alert', 15)} 登记违纪</div>
+        <div class="tiny muted" style="margin:4px 0 12px">选班级 → 填违纪内容 → 保存。学生会在自己班级页看到。</div>
+        <div class="field">
+          <label class="field-label">年级班级（从课表名单选）</label>
+          <input class="input" id="mc-cls" list="mc-cls-list" placeholder="比如：高一 · 1 班">
+          <datalist id="mc-cls-list">${[...clsPairs.keys()].map((n) => `<option>${esc(n)}</option>`).join('')}</datalist>
+        </div>
+        <div class="field">
+          <label class="field-label">违纪内容</label>
+          <textarea class="input" id="mc-text" rows="3" placeholder="简明扼要地描述违纪情况"></textarea>
+        </div>
+        <div class="row" style="justify-content:flex-end;gap:8px">
+          <button class="btn primary sm" id="mc-save">保存</button>
+        </div>
+      </div>
+      <div class="card card-pad" style="margin-top:14px" id="mc-list"></div>`;
+
+    const listBox = inner.querySelector('#mc-list');
+    const paintMisList = () => {
+      listBox.innerHTML = misconducts.length
+        ? `<div class="pb-list">${misconducts.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).map((m) => `<div class="pb-row">
+          <span class="chip ${clsName(m.grade, m.class_name) ? 'blue' : 'grey'}">${esc(clsName(m.grade, m.class_name) || '未选班级')}</span>
+          <span class="pb-text">${esc(m.content)}</span>
+          <span class="tiny muted">${esc(fmtTime(m.created_at))}</span>
+          <button class="icon-btn sm" data-mc-del="${m.id}" title="删除">${icon('close', 13)}</button>
+        </div>`).join('')}</div>`
+        : '<div class="empty" style="padding:16px">还没有违纪记录</div>';
+      listBox.querySelectorAll('[data-mc-del]').forEach((b) => {
+        b.onclick = async () => {
+          if (!(await confirmDialog('删掉这条违纪记录？学生端也会同步看不到。'))) return;
+          await api.del('/misconduct_records/' + b.dataset.mcDel); toast('已删除'); renderStudentModule(box, key);
+        };
+      });
+    };
+    paintMisList();
+    inner.querySelector('#mc-save')?.addEventListener('click', async () => {
+      const clsText = inner.querySelector('#mc-cls').value.trim();
+      const content = inner.querySelector('#mc-text').value.trim();
+      if (!content) { toast('违纪内容不能为空', 'err'); return; }
+      const pair = clsPairs.get(clsText) || { grade: '', class_name: '' };
+      if (!pair.grade && !pair.class_name && clsText) {
+        const parts = clsText.split(/[·.\s]+/);
+        if (parts.length >= 2) { pair.grade = parts[0]; pair.class_name = parts.slice(1).join(''); }
+        else { pair.class_name = clsText; }
+      }
+      const nextId = misconducts.reduce((mx, x) => Math.max(mx, Number(x.id) || 0), 0) + 1;
+      await api.post('/misconduct_records', { id: nextId, grade: pair.grade, class_name: pair.class_name, content, student_name: '', student_no: '' });
+      toast('已登记'); renderStudentModule(box, key);
+    });
+  } else if (key === 'bulletin') {
+    /* —— 留言板 —— */
+    const bToday = bulletins.filter((b) => (b.created_at || '').slice(0, 10) === ymd(new Date()));
+    inner.innerHTML = `
+      <div class="rp-stats mod-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+        <div class="card card-pad"><div class="tiny muted">累计留言</div>
+          <div style="font-size:24px;font-weight:700">${bulletins.length}</div></div>
+        <div class="card card-pad"><div class="tiny muted">今日留言</div>
+          <div style="font-size:24px;font-weight:700;color:var(--green)">${bToday.length}</div></div>
+      </div>
+      <div class="card card-pad" style="margin-top:14px">
+        <div class="card-title">${icon('chat', 15)} 发布留言</div>
+        <div class="tiny muted" style="margin:4px 0 12px">手动输入年级和班级，留言会出现在对应班级的学生端留言板里。</div>
+        <div class="row wrap" style="gap:8px">
+          <div class="field" style="flex:1;min-width:120px">
+            <label class="field-label">年级</label>
+            <input class="input" id="bl-grade" placeholder="比如：高一">
+          </div>
+          <div class="field" style="flex:1;min-width:120px">
+            <label class="field-label">班级</label>
+            <input class="input" id="bl-class" placeholder="比如：3 班">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">留言内容</label>
+          <textarea class="input" id="bl-text" rows="3" placeholder="要对这个班级说的话"></textarea>
+        </div>
+        <div class="row" style="justify-content:flex-end;gap:8px">
+          <button class="btn primary sm" id="bl-save">发布</button>
+        </div>
+      </div>
+      <div class="card card-pad" style="margin-top:14px" id="bl-list"></div>`;
+
+    const listBox = inner.querySelector('#bl-list');
+    const paintBlList = () => {
+      listBox.innerHTML = bulletins.length
+        ? `<div class="pb-list">${bulletins.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).map((b) => `<div class="pb-row">
+          <span class="chip blue">${esc(clsName(b.grade, b.class_name) || '未指定班级')}</span>
+          <span class="pb-text">${esc(b.content)}</span>
+          <span class="tiny muted">${esc(fmtTime(b.created_at))}</span>
+          <button class="icon-btn sm" data-bl-del="${b.id}" title="删除">${icon('close', 13)}</button>
+        </div>`).join('')}</div>`
+        : '<div class="empty" style="padding:16px">还没有留言，发一条试试</div>';
+      listBox.querySelectorAll('[data-bl-del]').forEach((b) => {
+        b.onclick = async () => {
+          if (!(await confirmDialog('删掉这条留言？学生端就看不到了。'))) return;
+          await api.del('/bulletin_records/' + b.dataset.blDel); toast('已删除'); renderStudentModule(box, key);
+        };
+      });
+    };
+    paintBlList();
+    inner.querySelector('#bl-save')?.addEventListener('click', async () => {
+      const grade = inner.querySelector('#bl-grade').value.trim();
+      const class_name = inner.querySelector('#bl-class').value.trim();
+      const content = inner.querySelector('#bl-text').value.trim();
+      if (!content) { toast('留言内容不能为空', 'err'); return; }
+      if (!grade && !class_name) { toast('年级或班级至少填一个', 'err'); return; }
+      const nextId = bulletins.reduce((mx, x) => Math.max(mx, Number(x.id) || 0), 0) + 1;
+      await api.post('/bulletin_records', { id: nextId, grade, class_name, content });
+      toast('已发布'); renderStudentModule(box, key);
+    });
   } else {
     /* —— 盲盒 —— */
     const today = punRecs.filter((r) => r.source === 'student');
@@ -3067,21 +3209,40 @@ async function materialEditor(m, catId, reload) {
       <div class="field"><label class="field-label">学生可见</label><select class="input" id="pub"><option value="1" ${m?.public !== 0 ? 'selected' : ''}>是（短链可看）</option><option value="0" ${m?.public === 0 ? 'selected' : ''}>否</option></select></div>
     </div>
     <div class="field"><label class="field-label">说明</label><textarea class="input" id="d" rows="2">${esc(m?.descr || '')}</textarea></div>
-    <div class="field"><label class="field-label">文件（可多选）</label>
-      <input type="file" id="f" multiple class="small">
-      <div class="field-hint" style="margin-top:6px">
-        支持 WPS 全部文件格式，包括 .wps / .wpt、.et / .ett、.dps / .dpt，以及 Word、Excel、PPT、PDF、图片和压缩包。
-        <br>保留原文件名与格式，每次最多 20 个文件，单个文件最大 50 MB，每批合计不超过 50 MB。
+    <div class="field"><label class="field-label">文件（可多选，也可整个文件夹）</label>
+      <div class="row wrap" style="gap:8px">
+        <label class="btn ghost sm" style="cursor:pointer">选择文件<input type="file" id="f" multiple hidden></label>
+        <label class="btn ghost sm" style="cursor:pointer">选择文件夹<input type="file" id="fd" webkitdirectory directory multiple hidden></label>
+      </div>
+      <div class="field-hint" id="f-list" style="margin-top:6px"></div>
+      <div class="field-hint">
+        支持 WPS 全部文件格式，包括 .wps / .wpt、.et / .ett、.dps / .dpt，以及 Word、Excel、PPT、PDF、图片、音视频和压缩包。
+        <br>不限文件数量和大小，保留原文件名与格式。
       </div></div>
     <div class="field-hint">设为学生可见后，学生打开链接即可查看教材和下载原文件，无需账号密码。PDF、图片支持浏览器查看；WPS 文档下载后用 WPS 打开。</div>
     <div class="confirm-actions"><button class="btn ghost" id="c">取消</button><button class="btn primary" id="k">保存</button></div></div>`);
   const s = sheet({ title: isNew ? '上传课件' : '编辑课件', body, wide: true });
   body.querySelector('#c').onclick = s.close;
+  /* 文件和文件夹两个入口都往同一个待上传列表里加，最后一次性提交。 */
+  let pendingFiles = [];
+  const fileList = body.querySelector('#f-list');
+  const paintFileList = () => {
+    fileList.innerHTML = pendingFiles.length
+      ? `已选 ${pendingFiles.length} 个文件：${pendingFiles.slice(0, 5).map((file) => esc(file.name)).join('、')}${pendingFiles.length > 5 ? ' …' : ''} <button class="chip-btn" type="button" id="f-clear">清空</button>`
+      : '还没选文件。';
+    fileList.querySelector('#f-clear')?.addEventListener('click', () => { pendingFiles = []; paintFileList(); });
+  };
+  paintFileList();
+  const addFiles = (list) => {
+    for (const file of list) {
+      if (!pendingFiles.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) pendingFiles.push(file);
+    }
+    paintFileList();
+  };
+  body.querySelector('#f').addEventListener('change', (event) => { addFiles(event.target.files); event.target.value = ''; });
+  body.querySelector('#fd').addEventListener('change', (event) => { addFiles(event.target.files); event.target.value = ''; });
   saving(body.querySelector('#k'), async () => {
-    const selected = [...body.querySelector('#f').files];
-    if (selected.length > 20) throw new Error('每次最多选择 20 个文件');
-    for (const file of selected) if (file.size > MAX_MATERIAL_SIZE) throw new Error('「' + file.name + '」超过 50 MB，请压缩后上传');
-    if (selected.reduce((total, file) => total + file.size, 0) > MAX_MATERIAL_SIZE) throw new Error('每批文件合计不能超过 50 MB，请分批上传');
+    const selected = pendingFiles;
     const categoryName = body.querySelector('#cat').value.trim();
     let categoryId = null;
     if (categoryName) {
