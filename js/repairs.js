@@ -10,7 +10,7 @@ import { registerView, icon, pageHead, onViewLeave } from './ui.js';
 import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusForSave, repairStatusInputValue } from './repairs-domain.mjs';
 
 import { session } from './cloud.js';
-import { autoSync, getAccountSyncStatus, pushNow } from './cloudsync.js';
+import { autoSync, getAccountSyncStatus, pullNow, pushNow } from './cloudsync.js';
 
 /* 维修状态使用自由文本输入，保留旧状态兼容。 */
 const URG = {
@@ -147,11 +147,19 @@ export async function renderRepairsBody(box) {
         <div class="rp-ledger-foot">共 ${stats.total} 条维修记录 · 统计月份：${esc(activeMonth)}</div>
       </section>`;
 
-    box.querySelector('#rp-ledger-view').onclick = () => {
+    box.querySelector('#rp-ledger-view').onclick = async (event) => {
       const nextMonth = box.querySelector('#rp-ledger-month')?.value || '';
       if (!/^\d{4}-\d{2}$/.test(nextMonth)) return toast('请选择有效的统计月份', 'warn');
       activeMonth = nextMonth;
-      load();
+      event.currentTarget.disabled = true;
+      if (session()?.uid) {
+        try {
+          if (await autoSync()) await pullNow();
+        } catch (error) {
+          toast(error.message || '暂时无法读取云端数据，正在显示本机记录', 'warn');
+        }
+      }
+      if (box.isConnected) await load();
     };
     box.querySelector('#rp-ledger-month').onkeydown = (event) => {
       if (event.key === 'Enter') box.querySelector('#rp-ledger-view').click();
