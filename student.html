@@ -227,6 +227,17 @@ const api = async (p, body) => {
   const method = body === undefined ? 'GET' : 'POST';
   const ctx = { query: Object.fromEntries(new URLSearchParams(qs || '')), body };
   const materialRoute = path.match(/^\/public\/link\/([^/]+)(?:\/materials\/(\d+))?$/);
+  if (method === 'GET' && materialRoute && !materialRoute[2]) {
+    const local = await localHandle(method, path, ctx.query).catch(() => null);
+    if (local?.ok) return local.data;
+    try { return await callCloudStudent(method, path, ctx.query); }
+    catch {
+      try {
+        const materials = await getStudentMaterials(materialRoute[1]);
+        return { ...materials, link: { ...materials.link, modules: { material: 1, roll: 0, punish: 0, misconduct: 0, bulletin: 0 } } };
+      } catch (error) { throw new Error(error.message || '学生工作台加载失败'); }
+    }
+  }
   if (method === 'GET' && materialRoute) {
     /* 教材：本地 → 云端 material-sharing */
     const local = await localHandle(method, path, ctx.query).catch(() => null);
@@ -892,9 +903,10 @@ function paintPunish() {
 
 /* 年级 / 班级选项来自老师的课表（/public/link 下发的 classes）；
    旧版后端还没下发时，退回到花名册，保证下拉框不会只剩一行提示。 */
-function classChoices() {
+function classChoices({ timetableOnly = false } = {}) {
   const pairMap = new Map();
-  [...(data?.classes || []), ...(data?.rosters || [])].forEach((r) => {
+  const rows = timetableOnly ? data?.classes || [] : [...(data?.classes || []), ...(data?.rosters || [])];
+  rows.forEach((r) => {
     const grade = String(r?.grade || '').trim();
     const class_name = String(r?.class_name || '').trim();
     if (!grade && !class_name) return;
@@ -918,20 +930,23 @@ function classChoices() {
 
 /* ---------- 违纪：学生填报，教师端查看与编辑 ---------- */
 function paintMisconduct() {
-  const { classPairs, gradeList, classesOf, splitCls } = classChoices();
+  const { classPairs, gradeList, classesOf, splitCls } = classChoices({ timetableOnly: true });
   const saved = prefs();
   const pref = saved.misconduct_grade !== undefined
     ? { grade: String(saved.misconduct_grade || '').trim(), class_name: String(saved.misconduct_cls || '').trim() }
     : splitCls(saved.misconduct_cls);
   const auto = splitCls(myClass());
-  const curGrade = pref.grade || auto.grade;
-  const curClass = pref.class_name || auto.class_name;
+  const selectedGrade = pref.grade || auto.grade;
+  const curGrade = gradeList.includes(selectedGrade) ? selectedGrade : '';
+  const selectedClass = pref.class_name || auto.class_name;
+  const curClass = classesOf(curGrade).includes(selectedClass) ? selectedClass : '';
   const otherGrade = !!curGrade && !gradeList.includes(curGrade);
   const initialClasses = curGrade ? classesOf(curGrade) : [];
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="card-title">${ICON.alert} 违纪登记</div>
     <div class="tiny muted" style="margin:4px 0 12px">选择你所在的年级班级，填写违纪情况后提交，老师会在教师端看到。</div>
+    ${data?.classesUnavailable || !gradeList.length ? '<div class="tiny muted" style="margin-bottom:12px">' + (data?.classesUnavailable ? '暂时无法读取教师课表，请刷新重试。' : '教师课表尚无可选班级。') + '</div>' : ''}
     <div class="field">
       <label class="field-label">年级</label>
       <select class="input" id="mc-grade">

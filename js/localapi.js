@@ -18,7 +18,7 @@ import { prepareStudyImport, studyPayload, studyView } from './study-records-dom
    ========================================================================== */
 
 import {
-  TABLES, load, save, blank, replaceAll, exportJSON,
+  TABLES, load, save, blank, replaceAll, exportJSON, activeAccountId,
   listTable, createRow, updateRow, deleteRow,
   randomCode, nowISO, pad2, ymd, hydrate,
 } from './localdb.js';
@@ -3963,26 +3963,32 @@ on('DELETE', '/roll/sessions/:id', ({ params }) => {
 /* ---- 学生端（免登录） ---- */
 /* 学生端「年级 / 班级」下拉的数据源：以老师课表里的班级为准，
    课表还没排时退回花名册，避免下拉框只剩一行提示。 */
-function publicClassOptions(grades) {
+function publicClassOptions(grades, courses) {
   const out = new Map();
   const add = (row) => {
     const grade = String(row?.grade || '').trim();
     const class_name = String(row?.class_name || '').trim();
-    if (!grade && !class_name) return;
-    if (grades.length && grade && !grades.includes(grade)) return;
+    if (!grade || !class_name) return;
+    if (grades.length && !grades.includes(grade)) return;
     out.set(grade + '\u0000' + class_name, { grade, class_name });
   };
-  rowsOf('courses').forEach(add);
-  if (!out.size) rowsOf('rosters').forEach(add);
+  courses.forEach(add);
   return [...out.values()].sort((a, b) => a.grade.localeCompare(b.grade, 'zh-Hans-CN') || a.class_name.localeCompare(b.class_name, 'zh-Hans-CN'));
 }
 
-on('GET', '/public/link/:code', ({ params, query }) => {
+on('GET', '/public/link/:code', async ({ params, query }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);
   if (!l) fail(404, '链接不存在或已关闭');
   const db = load();
   const u = currentUser();
   const grades = safeJSON(l.grades, []);
+  let courses = rowsOf('courses');
+  let classesUnavailable = false;
+  const cloud = await import('./cloud.js');
+  if (cloud.cfg() && cloud.session()?.uid && cloud.session().uid === activeAccountId()) {
+    try { courses = await cloud.listRows('courses'); }
+    catch { courses = []; classesUnavailable = true; }
+  }
   const mats = rowsOf('materials').filter((m) => num(m.public) === 1)
     .sort((a, b) => b.id - a.id)
     .map((m) => ({ id: m.id, seq: m.seq, title: m.title, grade: m.grade, class_name: m.class_name, descr: m.descr, created_at: m.created_at }));
@@ -4014,7 +4020,7 @@ on('GET', '/public/link/:code', ({ params, query }) => {
   return {
     link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
-    materials: mats, categories: cats, rosters, classes: publicClassOptions(grades), punishments: punish, roll, date,
+    materials: mats, categories: cats, rosters, classes: publicClassOptions(grades, courses), classesUnavailable, punishments: punish, roll, date,
     selfstudyTasks: publicSelfstudyTasks(),
     misconduct, bulletin,
   };
