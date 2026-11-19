@@ -119,7 +119,7 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
 
   /* GET /public/link/:code —— 主接口 */
   async function handleMain(code, query) {
-    const { account, payload, link } = await lookupPayload(code);
+    const { payload, link } = await lookupPayload(code);
     const grades = safeJSON(link.grades, []);
     const mats = (payload.materials || [])
       .filter((m) => live(m) && num(m.public) === 1)
@@ -174,36 +174,19 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
     const addPair = (row) => {
       const grade = String(row?.grade || '').trim();
       const class_name = String(row?.class_name || '').trim();
-      if (!grade || !class_name) return;
-      if (grades.length && !grades.includes(grade)) return;
+      if (!grade && !class_name) return;
+      if (grades.length && grade && !grades.includes(grade)) return;
       classPairs.set(grade + '\u0000' + class_name, { grade, class_name });
     };
-    let classesUnavailable = false;
-    try {
-      const limit = 100;
-      for (let offset = 0; ; offset += limit) {
-        const query = new URLSearchParams({
-          select: 'grade,class_name', user_id: 'eq.' + account.user_id,
-          deleted_at: 'is.null', order: 'id.asc',
-          limit: String(limit), offset: String(offset),
-        });
-        const response = await backend('/rest/v1/courses?' + query);
-        if (!response.ok) throw failure(503, '课表读取失败');
-        const rows = await response.json();
-        rows.forEach(addPair);
-        if (rows.length < limit) break;
-      }
-    } catch {
-      classPairs.clear();
-      classesUnavailable = true;
-    }
+    (payload.courses || []).filter(live).forEach(addPair);
+    if (!classPairs.size) (payload.rosters || []).filter(live).forEach(addPair);
     const classes = [...classPairs.values()]
       .sort((a, b) => a.grade.localeCompare(b.grade, 'zh-Hans-CN') || a.class_name.localeCompare(b.class_name, 'zh-Hans-CN'));
 
     return json({
       link: { code: link.code, title: link.title, grades, modules: linkModules(link) },
       teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
-      materials: mats, categories: cats, rosters, classes, classesUnavailable, punishments: punish, roll, date,
+      materials: mats, categories: cats, rosters, classes, punishments: punish, roll, date,
       selfstudyTasks, misconduct, bulletin,
     });
   }

@@ -220,7 +220,7 @@ function paintDot() {
   const label = {
     live: '实时同步已连接',
     connecting: '正在连接…',
-    error: '实时推送中断，正在重试',
+    error: '未连接，正在重试',
     denied: '订阅被拒：这张表还没在 Supabase 开启实时',
     idle: '',
   }[s] || '';
@@ -230,7 +230,7 @@ function paintDot() {
   host.innerHTML =
     `<span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;` +
     `${s === 'live' ? '' : 'animation:wbpulse 1.4s ease-in-out infinite'}"></span>` +
-    `<span>${dotTick || (s === 'live' ? '实时' : s === 'connecting' ? '实时连接中' : '实时推送中断')}</span>`;
+    `<span>${dotTick || (s === 'live' ? '实时' : '未连')}</span>`;
   host.title = label;
   if (!document.getElementById('wb-live-kf')) {
     const kf = document.createElement('style');

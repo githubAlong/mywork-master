@@ -1,5 +1,5 @@
 import { api, esc, el, sheet, saving, confirmDialog, toast, download } from './core.js';
-import { loadTimetablePeriodOptions } from './timetable.js';
+import { cleanPeriodTime, resolveTimetablePeriods } from './timetable-periods.mjs';
 
 /* 上课类型：预设 + 可手动输入。预设用来带默认课时费与支付状态；
    手动输入或自定义类型按「课时费 0 / 已支付」兜底。
@@ -32,9 +32,6 @@ const TYPE_DEFAULTS = {
 const TYPE_KEY_NORMALIZE = Object.fromEntries(TYPES.map(([v]) => [v, v]));
 for (const [eng, chi] of Object.entries(TYPE_LABEL_ENG)) TYPE_KEY_NORMALIZE[eng] = chi;
 const normalizeTypeKey = (v) => TYPE_KEY_NORMALIZE[String(v || '').trim()] || String(v || '').trim();
-const LEGACY_STORAGE_TYPE = new Map(
-  ['normal', 'i_substitute', 'substituted_for_me', 'swap'].map(key => [TYPE_LABEL_ENG[key], key]),
-);
 const CUSTOM_TYPE_DEFAULTS = { amount: 0, status: '已支付' };
 /* 「无需支付」已全局下线：历史数据里的旧值保留展示，但不再出现在下拉、
    也不会被新表单写入；空值/假期/考试统一走「已支付」表达「结清」语义。 */
@@ -493,13 +490,44 @@ export async function renderClassRecords(root) {
     type.addEventListener('input', applyTypeDefaults);
     if (!editing || (row.amount == null && !row.pay_status)) applyTypeDefaults();
 
+    /* 时间不再单独显示，但节次仍按课表自动带出，保持 class_time 与历史数据兼容。 */
+    let autoTime = initialTime.time;
     const periodInput = form.querySelector('#cr-period');
     let timetableOptions = [];
-    loadTimetablePeriodOptions().then((options) => {
+    const fillTime = () => {
+      const matches = timetableOptions.filter((option) => option.name === periodInput.value);
+      const times = [...new Set(matches.map((option) => option.time).filter(Boolean))];
+      if (times.length === 1) autoTime = times[0];
+    };
+    periodInput.addEventListener('input', fillTime);
+    const parseSettings = (value) => {
+      if (value && typeof value === 'object') return value;
+      try { return JSON.parse(value || '{}'); } catch { return {}; }
+    };
+    Promise.all([api.get('/periods'), api.get('/courses'), api.get('/me')]).then(([periods, courses, me]) => {
       if (!form.isConnected) return;
-      timetableOptions = options;
-      form.querySelector('#cr-period-options').innerHTML = [...new Set(options.map(({ name }) => name).filter(Boolean))]
-        .map((name) => `<option value="${esc(name)}"></option>`).join('');
+      const preference = parseSettings(localStorage.getItem('wb_timetable_view_v1'));
+      const scheduleType = preference.type === '冬令时课表' ? '冬令时课表' : '夏令时课表';
+      const timetable = parseSettings(parseSettings(me?.settings).timetable);
+      const periodTimes = parseSettings(timetable.periodTimes);
+      /* 节次候选必须和课表用同一套解析：作息定义 → 秋季原件铺满 + 节次表额外编号 → 课程补齐。
+         只读节次表会出现「课表显示 9 节、这里只剩 2 节」，因为那 9 节在秋季原件常量里，
+         节次表只存了用户真正建过的第8、第9节。 */
+      const resolved = resolveTimetablePeriods({
+        periodDefinitions: parseSettings(timetable.periodDefinitions),
+        periods: Array.isArray(periods) ? periods : [],
+        courses: Array.isArray(courses) ? courses : [],
+        periodTimes,
+        scheduleType,
+      });
+      timetableOptions = resolved.map((period) => {
+        const override = periodTimes[scheduleType]?.[String(period.period_no)] || {};
+        const start = cleanPeriodTime(override.start_time) || cleanPeriodTime(period.start_time);
+        const end = cleanPeriodTime(override.end_time) || cleanPeriodTime(period.end_time);
+        return { name: period.name || '第' + period.period_no + '节', time: start && end ? start + '-' + end : '' };
+      });
+      form.querySelector('#cr-period-options').innerHTML = [...new Set(timetableOptions.map((option) => option.name))].map((name) => `<option value="${esc(name)}"></option>`).join('');
+      fillTime();
     }).catch(() => { if (form.isConnected) toast('课表加载失败，仍可手动填写节次', 'warn'); });
 
     saving(form.querySelector('#cr-save'), async () => {
@@ -509,12 +537,9 @@ export async function renderClassRecords(root) {
       if (!date) throw new Error('请填写上课日期');
       if (!grade) throw new Error('请填写上课年级');
       if (!className) throw new Error('请填写上课班级');
-      const period = periodInput.value.trim();
-      const timetableTime = timetableOptions.find(option => option.name === period)?.time;
-      const savedTime = period === initialTime.period ? initialTime.time : '';
-      const classTime = joinClassTime(date, period, savedTime || timetableTime || '');
+      const classTime = joinClassTime(date, periodInput.value, autoTime);
       const data = {
-        class_type: LEGACY_STORAGE_TYPE.get(normalizeTypeKey(type.value)) ?? (normalizeTypeKey(type.value) || 'normal'),
+        class_type: normalizeTypeKey(type.value) || '正常上课',
         subject: form.querySelector('#cr-subject').value.trim(),
         class_name: className,
         grade: grade || null,

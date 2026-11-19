@@ -18,7 +18,7 @@ import { prepareStudyImport, studyPayload, studyView } from './study-records-dom
    ========================================================================== */
 
 import {
-  TABLES, load, save, blank, replaceAll, exportJSON, activeAccountId,
+  TABLES, load, save, blank, replaceAll, exportJSON,
   listTable, createRow, updateRow, deleteRow,
   randomCode, nowISO, pad2, ymd, hydrate,
 } from './localdb.js';
@@ -373,42 +373,11 @@ function pushMessage({ type = 'system', title, body = '', link = '', refType = n
 
 /* 把「今天到期的事项 / 待办」变成任务提醒消息。
    打开消息中心时触发，够用且不用起定时器。 */
-// The original seed writes every sample in one batch with the same timestamp.
-function removeLegacyDemoTasks(db) {
-  const items = db.items || [];
-  const todos = db.todos || [];
-  const meeting = items.filter(row => row.kind === '事项' &&
-    row.title === '高二语文备课组会' && row.detail === '讨论下周《劝学》教学进度');
-  const seedNotes = todos.filter(row => row.content === '' && row.due_at == null &&
-    ['把月考答题卡交到教务处', '给(3)班准备《劝学》课件', '联系家长沟通作业情况'].includes(row.title));
-  const timestamps = new Set(meeting.map(row => row.created_at).filter(timestamp =>
-    timestamp && seedNotes.some(row => row.created_at === timestamp && row.title === '把月考答题卡交到教务处') &&
-    seedNotes.some(row => row.created_at === timestamp && row.title === '给(3)班准备《劝学》课件')));
-  if (!timestamps.size) return false;
-
-  const seedItems = items.filter(row =>
-    (row.kind === '任务' && row.title === '提交十月课时统计表' && row.detail === '月底与财务核对课时') ||
-    (row.kind === '倒计时' && row.title === '期中考试命题截止' && row.detail === '完成试卷与答题卡'));
-  const sources = [...meeting, ...seedItems, ...seedNotes].filter(row => timestamps.has(row.created_at));
-  const counterparts = sources.map(row => {
-    const linked = linkedTaskRow(todos.includes(row) ? 'todos' : 'items', row);
-    return linked?.created_at === row.created_at && linked?.title === row.title ? linked : null;
-  });
-  const remaining = [...new Set([...sources, ...counterparts])].filter(row => row && !row.deleted_at);
-  const now = nowISO();
-  for (const row of remaining) {
-    row.deleted_at = now;
-    row.updated_at = now;
-  }
-  return remaining.length > 0;
-}
-
 function syncTaskMessages() {
   const db = load();
-  const cleaned = globalThis.location?.hostname === 'githubalong.github.io' && removeLegacyDemoTasks(db);
   const linked = reconcileTaskLinks(db);
   const messages = reconcileTaskMessages(db, { today: cnDate() });
-  if (cleaned || linked || messages) save();
+  if (linked || messages) save();
 }
 
 /* 到点提醒：替代服务端的 setInterval(tick)。
@@ -3963,32 +3932,26 @@ on('DELETE', '/roll/sessions/:id', ({ params }) => {
 /* ---- 学生端（免登录） ---- */
 /* 学生端「年级 / 班级」下拉的数据源：以老师课表里的班级为准，
    课表还没排时退回花名册，避免下拉框只剩一行提示。 */
-function publicClassOptions(grades, courses) {
+function publicClassOptions(grades) {
   const out = new Map();
   const add = (row) => {
     const grade = String(row?.grade || '').trim();
     const class_name = String(row?.class_name || '').trim();
-    if (!grade || !class_name) return;
-    if (grades.length && !grades.includes(grade)) return;
+    if (!grade && !class_name) return;
+    if (grades.length && grade && !grades.includes(grade)) return;
     out.set(grade + '\u0000' + class_name, { grade, class_name });
   };
-  courses.forEach(add);
+  rowsOf('courses').forEach(add);
+  if (!out.size) rowsOf('rosters').forEach(add);
   return [...out.values()].sort((a, b) => a.grade.localeCompare(b.grade, 'zh-Hans-CN') || a.class_name.localeCompare(b.class_name, 'zh-Hans-CN'));
 }
 
-on('GET', '/public/link/:code', async ({ params, query }) => {
+on('GET', '/public/link/:code', ({ params, query }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);
   if (!l) fail(404, '链接不存在或已关闭');
   const db = load();
   const u = currentUser();
   const grades = safeJSON(l.grades, []);
-  let courses = rowsOf('courses');
-  let classesUnavailable = false;
-  const cloud = await import('./cloud.js');
-  if (cloud.cfg() && cloud.session()?.uid && cloud.session().uid === activeAccountId()) {
-    try { courses = await cloud.listRows('courses'); }
-    catch { courses = []; classesUnavailable = true; }
-  }
   const mats = rowsOf('materials').filter((m) => num(m.public) === 1)
     .sort((a, b) => b.id - a.id)
     .map((m) => ({ id: m.id, seq: m.seq, title: m.title, grade: m.grade, class_name: m.class_name, descr: m.descr, created_at: m.created_at }));
@@ -4020,7 +3983,7 @@ on('GET', '/public/link/:code', async ({ params, query }) => {
   return {
     link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
-    materials: mats, categories: cats, rosters, classes: publicClassOptions(grades, courses), classesUnavailable, punishments: punish, roll, date,
+    materials: mats, categories: cats, rosters, classes: publicClassOptions(grades), punishments: punish, roll, date,
     selfstudyTasks: publicSelfstudyTasks(),
     misconduct, bulletin,
   };

@@ -259,10 +259,7 @@ export function createRow(t, body = {}) {
   if (t === 'links' && !row.code) row.code = randomCode(6);
   if (t === 'links' && row.enabled === undefined) row.enabled = 1;
   db[t].push(row);
-  if (!save() && t === 'repairs') {
-    replaceMemFromDisk();
-    throw new Error('维修记录未保存：本机存储写入失败，请释放空间后重试');
-  }
+  save();
   return hydrate(t, row);
 }
 
@@ -277,10 +274,7 @@ export function updateRow(t, id, body = {}) {
   if (!fields.length) return hydrate(t, row);
   for (const field of fields) row[field] = body[field];
   row.updated_at = nowISO();
-  if (!save() && t === 'repairs') {
-    replaceMemFromDisk();
-    throw new Error('维修记录未保存：本机存储写入失败，请释放空间后重试');
-  }
+  save();
   return hydrate(t, row);
 }
 
