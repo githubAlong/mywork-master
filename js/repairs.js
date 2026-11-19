@@ -6,8 +6,11 @@
 import {
   api, esc, toast, sheet, confirmDialog, ymd,
 } from './core.js';
-import { registerView, icon, pageHead } from './ui.js';
+import { registerView, icon, pageHead, onViewLeave } from './ui.js';
 import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusForSave, repairStatusInputValue } from './repairs-domain.mjs';
+
+import { session } from './cloud.js';
+import { autoSync, getAccountSyncStatus, pushNow } from './cloudsync.js';
 
 /* 维修状态使用自由文本输入，保留旧状态兼容。 */
 const URG = {
@@ -31,6 +34,37 @@ export async function renderRepairsBody(box) {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   let activeMonth = currentMonth;
+
+  const syncLabel = () => {
+    const uid = session()?.uid;
+    const status = getAccountSyncStatus();
+    if (!uid) return '仅本机';
+    if (status?.uid !== uid) return '正在连接账号';
+    return {
+      saved: '已同步到账号', saving: '正在同步', pending: '待同步到账号',
+      offline: '离线 · 待同步', conflict: '同步冲突 · 本机已保留', error: '同步异常',
+    }[status.status] || '正在连接账号';
+  };
+  const paintSync = () => {
+    const badge = box.querySelector('[data-repair-sync]');
+    if (!badge) return;
+    badge.textContent = syncLabel();
+    badge.title = getAccountSyncStatus()?.message || '';
+  };
+  window.addEventListener('wb:sync-status', paintSync);
+  onViewLeave(() => window.removeEventListener('wb:sync-status', paintSync));
+
+  const syncSavedRepair = async () => {
+    if (!session()?.uid) return toast('已保存到本机');
+    try {
+      if (await autoSync()) await pushNow();
+    } catch (error) {
+      toast(error.message || '云端未确认，本机已保存', 'warn');
+      return;
+    }
+    if (syncLabel() === '已同步到账号') toast('已同步到账号');
+    else toast('已保存到本机，等待账号同步', 'warn');
+  };
 
   const load = async () => {
     box.innerHTML = '<div class="empty">正在加载维修记录…</div>';
@@ -80,6 +114,7 @@ export async function renderRepairsBody(box) {
             <input id="rp-ledger-month" type="month" value="${esc(activeMonth)}">
             <button type="button" class="btn ghost sm" id="rp-ledger-view">查看该月数据</button>
           </div>
+          <span class="tiny muted" role="status" data-repair-sync></span>
           <button type="button" class="btn primary sm rp-ledger-add" id="rp-ledger-add">${icon('plus', 15)} 新增维修记录</button>
         </div>
         <div class="rp-ledger-stats">
@@ -122,6 +157,7 @@ export async function renderRepairsBody(box) {
       if (event.key === 'Enter') box.querySelector('#rp-ledger-view').click();
     };
     box.querySelector('#rp-ledger-add').onclick = () => editor(null);
+    paintSync();
     box.querySelectorAll('[data-rp-edit]').forEach((button) => {
       button.onclick = () => editor(rows.find((row) => String(row.id) === button.dataset.rpEdit));
     });
@@ -231,7 +267,9 @@ export async function renderRepairsBody(box) {
       try {
         if (isNew) await api.post('/repairs', payload);
         else await api.patch('/repairs/' + row.id, payload);
-        s.close(); toast('已保存'); load();
+        s.close();
+        void load();
+        await syncSavedRepair();
       } catch (e) {
         btn.disabled = false; btn.textContent = '保存';
         toast(e.message || '保存失败', 'err');
