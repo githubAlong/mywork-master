@@ -373,11 +373,42 @@ function pushMessage({ type = 'system', title, body = '', link = '', refType = n
 
 /* 把「今天到期的事项 / 待办」变成任务提醒消息。
    打开消息中心时触发，够用且不用起定时器。 */
+// The original seed writes every sample in one batch with the same timestamp.
+function removeLegacyDemoTasks(db) {
+  const items = db.items || [];
+  const todos = db.todos || [];
+  const meeting = items.filter(row => row.kind === '事项' &&
+    row.title === '高二语文备课组会' && row.detail === '讨论下周《劝学》教学进度');
+  const seedNotes = todos.filter(row => row.content === '' && row.due_at == null &&
+    ['把月考答题卡交到教务处', '给(3)班准备《劝学》课件', '联系家长沟通作业情况'].includes(row.title));
+  const timestamps = new Set(meeting.map(row => row.created_at).filter(timestamp =>
+    timestamp && seedNotes.some(row => row.created_at === timestamp && row.title === '把月考答题卡交到教务处') &&
+    seedNotes.some(row => row.created_at === timestamp && row.title === '给(3)班准备《劝学》课件')));
+  if (!timestamps.size) return false;
+
+  const seedItems = items.filter(row =>
+    (row.kind === '任务' && row.title === '提交十月课时统计表' && row.detail === '月底与财务核对课时') ||
+    (row.kind === '倒计时' && row.title === '期中考试命题截止' && row.detail === '完成试卷与答题卡'));
+  const sources = [...meeting, ...seedItems, ...seedNotes].filter(row => timestamps.has(row.created_at));
+  const counterparts = sources.map(row => {
+    const linked = linkedTaskRow(todos.includes(row) ? 'todos' : 'items', row);
+    return linked?.created_at === row.created_at && linked?.title === row.title ? linked : null;
+  });
+  const remaining = [...new Set([...sources, ...counterparts])].filter(row => row && !row.deleted_at);
+  const now = nowISO();
+  for (const row of remaining) {
+    row.deleted_at = now;
+    row.updated_at = now;
+  }
+  return remaining.length > 0;
+}
+
 function syncTaskMessages() {
   const db = load();
+  const cleaned = globalThis.location?.hostname === 'githubalong.github.io' && removeLegacyDemoTasks(db);
   const linked = reconcileTaskLinks(db);
   const messages = reconcileTaskMessages(db, { today: cnDate() });
-  if (linked || messages) save();
+  if (cleaned || linked || messages) save();
 }
 
 /* 到点提醒：替代服务端的 setInterval(tick)。
