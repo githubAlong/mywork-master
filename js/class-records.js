@@ -32,6 +32,9 @@ const TYPE_DEFAULTS = {
 const TYPE_KEY_NORMALIZE = Object.fromEntries(TYPES.map(([v]) => [v, v]));
 for (const [eng, chi] of Object.entries(TYPE_LABEL_ENG)) TYPE_KEY_NORMALIZE[eng] = chi;
 const normalizeTypeKey = (v) => TYPE_KEY_NORMALIZE[String(v || '').trim()] || String(v || '').trim();
+const LEGACY_STORAGE_TYPE = new Map(
+  ['normal', 'i_substitute', 'substituted_for_me', 'swap'].map(key => [TYPE_LABEL_ENG[key], key]),
+);
 const CUSTOM_TYPE_DEFAULTS = { amount: 0, status: '已支付' };
 /* 「无需支付」已全局下线：历史数据里的旧值保留展示，但不再出现在下拉、
    也不会被新表单写入；空值/假期/考试统一走「已支付」表达「结清」语义。 */
@@ -471,7 +474,7 @@ export async function renderClassRecords(root) {
         <div class="cr-field"><label>支付状态</label><input id="cr-status" list="cr-status-options" value="${esc(row?.pay_status || '')}" placeholder="选择或手动输入支付状态"><datalist id="cr-status-options">${PAY_OPTIONS.map((s) => '<option value="' + s + '"></option>').join('')}</datalist></div>
       </div>
       <div class="cr-field" style="margin-top:14px"><label>备注说明</label><textarea id="cr-remark" placeholder="换课说明、特殊情况备注等">${esc(row?.remark || '')}</textarea></div>
-      <div class="cr-form-foot"><button class="cr-btn" id="cr-cancel" type="button">关闭</button><button class="cr-btn primary" id="cr-save" type="button">${editing ? '保存修改' : '保存记录'}</button></div>
+      <div class="cr-form-foot"><button class="cr-btn" id="cr-cancel" type="button">关闭</button><button class="cr-btn primary" id="cr-save" type="button">${editing ? '保存修改' : '保存'}</button></div>
     </div>`);
     const sh = sheet({ title: editing ? '编辑上课记录' : '新增上课记录', body: form, cls: 'cr-record-drawer' });
     sh.wrap.classList.add('cr-record-drawer-mask');
@@ -531,7 +534,7 @@ export async function renderClassRecords(root) {
       if (!className) throw new Error('请填写上课班级');
       const classTime = joinClassTime(date, periodInput.value, autoTime);
       const data = {
-        class_type: normalizeTypeKey(type.value) || '正常上课',
+        class_type: LEGACY_STORAGE_TYPE.get(normalizeTypeKey(type.value)) ?? (normalizeTypeKey(type.value) || 'normal'),
         subject: form.querySelector('#cr-subject').value.trim(),
         class_name: className,
         grade: grade || null,
