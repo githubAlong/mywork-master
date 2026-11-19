@@ -609,33 +609,40 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const title=String(headings[0]||fileBase),subtitle=String(headings[1]||''),stats=String(headings[2]||'');
     const widths=headers.map((header,index)=>{
       const max=Math.max(String(header).length,...bodyRows.map(row=>String(row[index]??'').length));
-      return Math.max(90,Math.min(260,70+max*13));
+      return Math.max(96,Math.min(280,76+max*15));
     });
     const totalWidth=widths.reduce((sum,value)=>sum+value,0);
     const headingBlocks=[];
     if(title)headingBlocks.push({text:title,font:'bold 24px "Microsoft YaHei",sans-serif',color:'#10203a',gap:28,rule:true});
-    if(subtitle)headingBlocks.push({text:subtitle,font:'600 14px "Microsoft YaHei",sans-serif',color:'#1f3550',gap:26});
-    if(stats)headingBlocks.push({text:stats,font:'12.5px "Microsoft YaHei",sans-serif',color:'#40536e',gap:26});
+    if(subtitle)headingBlocks.push({text:subtitle,font:'600 14px "Microsoft YaHei",sans-serif',color:'#16263c',gap:26});
+    if(stats)headingBlocks.push({text:stats,font:'12.5px "Microsoft YaHei",sans-serif',color:'#2b3b53',gap:26});
     /* 抬头区高度按实际标题行数算：标题 46 起步，行距 28/26/26，底部留 6 */
-    const rowH=42,titleH=headingBlocks.length?46+headingBlocks.reduce((sum,block)=>sum+block.gap,0)+6:26,footH=44,rowsPerPage=120;
+    const rowH=48,titleH=headingBlocks.length?46+headingBlocks.reduce((sum,block)=>sum+block.gap,0)+6:26,footH=44,rowsPerPage=60;
+    /* 表格字体：楷体 18 号（用户 11-19 要求），行高同步放大保证不挤压 */
+    const tableFont='18px KaiTi,"KaiTi_GB2312","楷体",serif';
     const pages=[];
     for(const page of paginateExportGrid(grid, rowsPerPage)){
       const slice=page.rows, pageCount=page.pageCount, pageIndex=page.index;
       const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');
-      canvas.width=Math.max(totalWidth,520);
-      canvas.height=titleH+(slice.length+1)*rowH+footH;
-      ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+      /* 以 2 倍像素渲染：导出图放大查看时文字仍清晰（用户 11-19 反馈放大后模糊） */
+      const pixelScale=2;
+      const W=Math.max(totalWidth,520);
+      const H=titleH+(slice.length+1)*rowH+footH;
+      canvas.width=Math.round(W*pixelScale);
+      canvas.height=Math.round(H*pixelScale);
+      ctx.scale(pixelScale,pixelScale);
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
       ctx.textAlign='center';
       let lineY=46;
       headingBlocks.forEach(block=>{
         ctx.fillStyle=block.color;ctx.font=block.font;
-        ctx.fillText(block.text,canvas.width/2,lineY);
-        if(block.rule){ctx.fillStyle='#2a6bf2';ctx.fillRect(canvas.width/2-58,lineY+13,116,2.5);}
+        ctx.fillText(block.text,W/2,lineY);
+        if(block.rule){ctx.fillStyle='#2a6bf2';ctx.fillRect(W/2-58,lineY+13,116,2.5);}
         lineY+=block.gap;
       });
       if(headingBlocks.length){
         ctx.strokeStyle='#dfe7f2';ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(0,titleH-1.5);ctx.lineTo(canvas.width,titleH-1.5);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,titleH-1.5);ctx.lineTo(W,titleH-1.5);ctx.stroke();
       }
       ctx.textAlign='left';
       let y=titleH,x=0;
@@ -643,9 +650,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         ctx.fillStyle='#eef3fa';ctx.fillRect(x,y,widths[index],rowH);
         ctx.strokeStyle='#b7c6db';ctx.lineWidth=1.4;
         ctx.strokeRect(x+0.7,y+0.7,widths[index]-1.4,rowH-1.4);
-        ctx.fillStyle='#34445d';ctx.font='bold 12px "Microsoft YaHei",sans-serif';
+        ctx.fillStyle='#34445d';ctx.font='bold '+tableFont;
         ctx.textAlign='center';
-        ctx.fillText(String(label),x+widths[index]/2,y+26);x+=widths[index];
+        ctx.fillText(String(label),x+widths[index]/2,y+31);x+=widths[index];
       });
       slice.forEach((row,rowIndex)=>{
         y+=rowH;x=0;
@@ -653,20 +660,20 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
           ctx.fillStyle=rowIndex%2?'#f9fbfe':'#fff';ctx.fillRect(x,y,widths[index],rowH);
           ctx.strokeStyle='#cbd7e7';ctx.lineWidth=1.2;
           ctx.strokeRect(x+0.6,y+0.6,widths[index]-1.2,rowH-1.2);
-          ctx.fillStyle='#34445d';ctx.font='12px "Microsoft YaHei",sans-serif';
+          ctx.fillStyle='#34445d';ctx.font=tableFont;
           ctx.textAlign='center';
-          ctx.fillText(String(value??'').slice(0,32),x+widths[index]/2,y+26);x+=widths[index];
+          ctx.fillText(String(value??'').slice(0,32),x+widths[index]/2,y+31);x+=widths[index];
         });
       });
       ctx.strokeStyle='#9fb1ca';ctx.lineWidth=2;
-      ctx.strokeRect(1,titleH+1,Math.min(totalWidth,canvas.width)-2,(slice.length+1)*rowH-2);
+      ctx.strokeRect(1,titleH+1,Math.min(totalWidth,W)-2,(slice.length+1)*rowH-2);
       ctx.fillStyle='#8290a5';ctx.font='11px "Microsoft YaHei",sans-serif';ctx.textAlign='left';
-      ctx.fillText((pageCount>1?'第 '+(pageIndex+1)+' / '+pageCount+' 页 · ':'')+'共 '+rowCount+' 条',20,canvas.height-16);
+      ctx.fillText((pageCount>1?'第 '+(pageIndex+1)+' / '+pageCount+' 页 · ':'')+'共 '+rowCount+' 条',20,H-16);
       if(exportTime){
         ctx.textAlign='right';
-        ctx.fillText('导出时间：'+exportTime,canvas.width-20,canvas.height-16);
+        ctx.fillText('导出时间：'+exportTime,W-20,H-16);
       }
-      paintWatermark(ctx,canvas.width,canvas.height,watermark);
+      paintWatermark(ctx,W,H,watermark);
       pages.push(canvas.toDataURL('image/png'));
     }
     return pages;
@@ -1254,17 +1261,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const activeStateKeys = (GRID_STATE_COLUMNS[type] || []).filter(key =>
       type === 'class' && key === 'listen' ? hasListen
         : type === 'research' && key === 'leave' ? hasLeave : true);
-    const listedTeachers = type === 'class'
-      ? list.filter(teacher => {
-        const state = statusOfTeacher(teacher);
-        return state.class === 'y' || state.listenStatus === 'y' || state.listen === true || state.listen === 'y';
-      })
-      : type === 'research'
-        ? list.filter(teacher => {
-          const state = statusOfTeacher(teacher);
-          return state.researchStatus === 'y' || state.research === true || !!state.leave;
-        })
-        : list;
+    /* 教研/上课子表现在直接显示筛选到的所有教师：
+       以前只在有记录时才出现一行，用户选完学科下拉后下方空白，
+       以为筛选没生效。现在每个筛到的老师都出现在表里，
+       状态格空白就是"未登记"，可以直接点勾选，操作更直观。 */
+    const listedTeachers = list;
     /* 花名册只维护教师名单：考勤状态不展示，但保留一列可直接填写的备注（用户 11-15 要求）。 */
     const columns = type === 'roster'
       ? ['序号','归属部门','归属年级','姓名','学科','备注','操作']
