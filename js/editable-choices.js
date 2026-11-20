@@ -8,11 +8,11 @@ function historyKey(input) {
   const field = input.id || input.name;
   const account = activeAccountId();
   const dialog = input.closest('.sheet');
-  const label = input.labels?.[0]?.textContent || input.previousElementSibling?.textContent || '';
+  const label = input.labels?.[0]?.textContent || (input.closest('.editable-choice') || input).previousElementSibling?.textContent || '';
   const autocomplete = input.getAttribute('autocomplete') || '';
   if (!field || !account || document.getElementById('s-app') || input.type === 'password'
       || input.form?.querySelector('input[type="password"]')
-      || input.closest('[data-no-input-history]')
+      || input.closest('[data-no-input-history], [data-hist]')
       || /password|username|one-time-code|email|tel|cc-/i.test(autocomplete)
       || /pass(word)?|secret|token|captcha|otp|api[-_ ]?key|access[-_ ]?key|(?:^|[-_])(?:pin|pwd|acct|account|phone|email|reset|rst)(?:$|[-_])|密码|验证码|口令|账号|电话|手机|邮箱|身份证/i.test(field + ' ' + label)
       || dialog?.querySelector('input[type="password"]')) return '';
