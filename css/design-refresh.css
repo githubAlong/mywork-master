@@ -83,3 +83,15 @@ button, input, textarea, select { font-family: inherit; }
 @media print {
   .me-dashboard-footer, .me-edit-profile { display: none; }
 }
+
+.editable-choice { position: relative; display: inline-grid; width: 100%; min-width: 0; }
+.editable-choice > input { box-sizing: border-box; min-width: 0; width: 100%; padding-inline-end: 36px; }
+.editable-choice > input[list]::-webkit-calendar-picker-indicator { display: none; }
+.editable-choice-picker, .editable-choice-arrow {
+  position: absolute; inset-block: 0; inset-inline-end: 0; width: 34px; height: 100%; margin: 0;
+}
+.editable-choice-picker { opacity: 0; cursor: pointer; z-index: 1; }
+.editable-choice-arrow { display: grid; place-items: center; color: inherit; pointer-events: none; }
+.editable-choice-picker:focus-visible + .editable-choice-arrow { outline: 2px solid var(--primary, #2563eb); outline-offset: -3px; }
+
+.editable-choice-picker[hidden], .editable-choice-arrow[hidden] { display: none; }

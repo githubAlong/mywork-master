@@ -3,6 +3,7 @@ import { ls, toast, STATIC, api } from './core.js';
 import { setActiveAccount, activeAccountId } from './localdb.js';
 import { load as loadTaskData, save as saveTaskData } from './localdb.js';
 import { reconcileTaskLinks } from './todo-item-sync.mjs';
+import './editable-choices.js';
 import { takeRetiredResetParam } from './startup-safety.mjs';
 
 /* 静态托管没有打包器，首屏静态导入所有页面会迫使浏览器先下载完整模块图。
