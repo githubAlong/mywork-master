@@ -672,6 +672,7 @@ function lessonSummaryPayload(month, rows) {
 const DEFAULT_INVIG_RULES = {
   mode: '分钟',
   perMinute: 0.4,
+  schoolHourlyRate: 40,
   perSession: 60,
   perHour: 30,
   peerPerSession: 50,
@@ -2974,8 +2975,13 @@ on('GET', '/invig/rules', () => ({ rules: getInvigRules(), defaults: DEFAULT_INV
 on('PATCH', '/invig/rules', ({ body }) => {
   const u = currentUser();
   const cur = getInvigRules();
+  const hourly = body?.schoolHourlyRate ?? cur.schoolHourlyRate;
+  if (hourly === '' || !Number.isFinite(Number(hourly)) || Number(hourly) < 0) {
+    fail(422, '请输入有效的学校发放标准');
+  }
   const next = {
-    mode: body?.mode === '时长' ? '时长' : body?.mode === '分钟' ? '分钟' : '场次',
+    schoolHourlyRate: Number(hourly),
+    mode: ['时长', '分钟', '场次'].includes(body?.mode) ? body.mode : cur.mode,
     perMinute: Number(body?.perMinute ?? cur.perMinute) || 0,
     perSession: Number(body?.perSession ?? cur.perSession) || 0,
     perHour: Number(body?.perHour ?? cur.perHour) || 0,
@@ -4310,12 +4316,12 @@ for (const table of CRUD_TABLES) {
       class_records: [['class_month', '请填写上课日期'], ['grade', '请填写上课年级'], ['class_name', '请填写上课班级']],
       preps: [['topic', '请填写标题']],
       trips: [['to_place', '目的地不能为空']],
-      invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
+      invigilations: [['__atLeastOne', '考试名称、考场、开始时间或监考时长至少填一项']],
     }[table];
     if (REQUIRED) {
       for (const [k, msg] of REQUIRED) {
         if (k === '__atLeastOne') {
-          const any = ['exam_name', 'room', 'start_time'].some((f) => String(b[f] ?? '').trim());
+          const any = ['exam_name', 'room', 'start_time'].some((f) => String(b[f] ?? '').trim()) || Number(b.duration_min) > 0;
           if (!any) fail(422, msg);
         } else if (!String(b[k] ?? '').trim()) {
           fail(422, msg);

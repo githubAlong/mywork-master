@@ -159,6 +159,10 @@ export function calcInvigAmount(dutyType, durationMinutes, rules = {}) {
   if (dutyType !== 'school') return roundMoney(rules.peerPerSession == null ? 50 : rules.peerPerSession);
   const mode = rules.mode || '分钟';
   const minutes = Math.max(0, Number(durationMinutes) || 0);
+  if (mode === '小时') {
+    const rate = Number(rules.schoolHourlyRate ?? 40);
+    return roundMoney(minutes * (Number.isFinite(rate) ? Math.max(0, rate) : 0) / 60);
+  }
   if (mode === '分钟') {
     const rate = rules.perMinute == null ? 0.4 : Number(rules.perMinute);
     return roundMoney(minutes * (Number.isFinite(rate) ? rate : 0));

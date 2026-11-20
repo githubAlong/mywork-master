@@ -17,10 +17,8 @@ const TYPE_LABEL = {
 };
 const DEFAULT_RULES = {
   mode: '分钟',
-  perMinute: 0.4,
-  perSession: 60,
+  schoolHourlyRate: 40,
   peerPerSession: 50,
-  tiers: [{ max: 90, amount: 50 }, { max: 150, amount: 70 }, { max: 999, amount: 90 }],
 };
 
 function currentMonth() {
@@ -501,8 +499,9 @@ export async function renderInvigilation(box) {
       + '<div class="iv-form-section"><div class="iv-form-section-title">03 · 时间与金额</div><div class="form-grid">'
       + '<div class="field"><label class="field-label">开始时间</label><input class="input" id="iv-start" type="time" value="' + esc(row && row.start_time || '') + '"></div>'
       + '<div class="field"><label class="field-label">结束时间</label><input class="input" id="iv-end" type="time" value="' + esc(row && row.end_time || '') + '"></div>'
-      + '<div class="field"><label class="field-label">监考时长（自动计算）</label><input class="input" id="iv-minutes" readonly value="' + esc(row && (row.duration_min || row.minutes) || '') + '"></div>'
-      + '<div class="field"><label class="field-label">本场应结金额（元）</label><input class="input" id="iv-amount" type="number" min="0" step="0.01" value="' + esc(row && (row.pay_amount != null ? row.pay_amount : row.amount) != null ? (row.pay_amount != null ? row.pay_amount : row.amount) : '') + '"></div>'
+      + '<div class="field"><label class="field-label" for="iv-minutes">监考时长（分钟）</label><input class="input" id="iv-minutes" type="number" min="0" step="1" value="' + esc(row && (row.duration_min || row.minutes) || '') + '"></div>'
+      + '<div class="field" id="iv-hourly-wrap"><label class="field-label" for="iv-hourly">学校发放标准（元/小时）</label><input class="input" id="iv-hourly" type="number" min="0" step="0.01" value="' + esc(row?.pay_rule === '小时' && row.unit_price != null ? row.unit_price : rules.schoolHourlyRate) + '"></div>'
+      + '<div class="field"><label class="field-label" for="iv-amount" id="iv-amount-label">本场应结金额（元）</label><input class="input" id="iv-amount" type="number" min="0" step="0.01" value="' + esc(row && (row.pay_amount != null ? row.pay_amount : row.amount) != null ? (row.pay_amount != null ? row.pay_amount : row.amount) : '') + '"></div>'
       + '</div><div class="iv-form-hint" id="iv-price-hint"></div></div>'
       + '<div class="iv-form-section"><div class="iv-form-section-title">04 · 监考人员</div>'
       + '<div class="field" id="iv-peer-wrap"><label class="field-label" id="iv-peer-label">对方老师</label><input class="input" id="iv-peer" list="iv-peer-list" value="' + esc(row && row.peer_name || '') + '" placeholder="填写老师姓名"><datalist id="iv-peer-list"></datalist></div>'
@@ -514,6 +513,7 @@ export async function renderInvigilation(box) {
     const modal = sheet({ title: isNew ? '新增监考记录' : '编辑监考记录', body, wide: true });
     const q = (id) => body.querySelector('#' + id);
     let dutyType = initialType;
+    let schoolPriceChanged = isNew;
     const oldPayNote = row && row.pay_note || '';
     const oldMeta = parseSettlementMeta(oldPayNote);
     const peerList = [...new Set(rows.map((item) => item.peer_name).filter(Boolean))];
@@ -522,6 +522,8 @@ export async function renderInvigilation(box) {
     const syncKind = () => {
       const school = dutyType === 'school';
       q('iv-peer-wrap').classList.toggle('hidden', school);
+      q('iv-hourly-wrap').classList.toggle('hidden', !school);
+      q('iv-amount-label').textContent = school ? '学校应付金额（元）' : '本场应结金额（元）';
       q('iv-peer-label').textContent = dutyType === '替他人' ? '原监考人 / 委托老师' : '实际监考人 / 代监老师';
       q('iv-kind-hint').textContent = school
         ? '学校统一安排，学校款单独核算，不计入同事往来净额。'
@@ -534,27 +536,37 @@ export async function renderInvigilation(box) {
           ? '原监考人：' + (q('iv-peer').value || '待填写') + '　｜　实际监考人：本人'
           : '原监考人：本人　｜　实际监考人：' + (q('iv-peer').value || '待填写');
       body.querySelectorAll('[data-kind]').forEach((button) => button.classList.toggle('on', button.dataset.kind === dutyType));
-      q('iv-price-hint').textContent = dutyType === 'school'
-        ? (rules.mode === '分钟' ? '学校按时长计价：' + money(rules.perMinute) + ' 元 / 分钟。' : rules.mode === '时长' ? '学校按时长分档计价。' : '学校按场次计价：' + money(rules.perSession) + ' 元 / 场。')
+      q('iv-price-hint').textContent = school
+        ? '可直接填写分钟数，或填写起止时间自动计算。默认标准可在「计价设置」修改。'
         : '同事代监默认 ' + money(rules.peerPerSession) + ' 元 / 场，可在计价设置中调整。';
     };
-    const recalc = () => {
+    const syncDuration = () => {
       const duration = calcDurationMinutes(q('iv-start').value, q('iv-end').value);
-      if (duration == null) return;
-      q('iv-minutes').value = duration;
-      q('iv-amount').value = calcInvigAmount(dutyType, duration, rules);
-      syncKind();
+      q('iv-minutes').readOnly = duration != null;
+      if (duration != null) q('iv-minutes').value = duration;
+    };
+    const recalc = () => {
+      const duration = Number(q('iv-minutes').value);
+      if (dutyType === 'school') {
+        schoolPriceChanged = true;
+        const rate = q('iv-hourly');
+        q('iv-amount').value = q('iv-minutes').value && rate.value && rate.validity.valid
+          ? calcInvigAmount('school', duration, { mode: '小时', schoolHourlyRate: rate.value }).toFixed(2) : '';
+      } else {
+        q('iv-amount').value = calcInvigAmount(dutyType, duration, rules);
+      }
     };
     body.querySelectorAll('[data-kind]').forEach((button) => {
       button.onclick = () => {
+        if (dutyType === button.dataset.kind) return;
         dutyType = button.dataset.kind;
         syncKind();
-        const duration = Number(q('iv-minutes').value) || 0;
-        if (duration > 0) q('iv-amount').value = calcInvigAmount(dutyType, duration, rules);
+        recalc();
       };
     });
-    q('iv-start').onchange = recalc;
-    q('iv-end').onchange = recalc;
+    q('iv-start').oninput = q('iv-end').oninput = () => { syncDuration(); recalc(); };
+    q('iv-minutes').oninput = q('iv-hourly').oninput = recalc;
+    syncDuration();
     q('iv-peer').oninput = syncKind;
     syncKind();
 
@@ -570,8 +582,14 @@ export async function renderInvigilation(box) {
       if (!date) return toast('请选择监考日期', 'warn');
       if (dutyType !== 'school' && !peer) return toast('请填写对方老师姓名', 'warn');
       if (!!start !== !!end) return toast('开始时间和结束时间需要同时填写', 'warn');
-      if (!exam && !room && !start) return toast('考试名称、考场或开始时间至少填写一项', 'warn');
-      const duration = start && end ? calcDurationMinutes(start, end) : Number(q('iv-minutes').value) || 0;
+      const durationInput = q('iv-minutes');
+      const rateInput = q('iv-hourly');
+      if (!durationInput.validity.valid) return toast('监考时长请输入非负整数分钟', 'warn');
+      if (dutyType === 'school' && schoolPriceChanged && (!rateInput.value || !rateInput.validity.valid)) {
+        return toast('请输入有效的学校发放标准', 'warn');
+      }
+      const duration = start && end ? calcDurationMinutes(start, end) : Number(durationInput.value) || 0;
+      if (!exam && !room && !start && !duration) return toast('考试名称、考场、开始时间或监考时长至少填一项', 'warn');
       const amount = Number(q('iv-amount').value) || 0;
       // 注意：oldState 必须在 if (row) 外面声明——后面拼 payload 时（第 621 行附近）
       // 还要用它判断结构化收付，写在块内会变成 ReferenceError，编辑已有记录必挂。
@@ -605,9 +623,9 @@ export async function renderInvigilation(box) {
         pay_hours: Math.round(duration / 60 * 100) / 100,
         pay_amount: amount,
         amount,
-        pay_rule: dutyType === 'school' ? rules.mode : '场次',
+        pay_rule: dutyType === 'school' ? (schoolPriceChanged ? '小时' : row?.pay_rule) : '场次',
         unit_price: dutyType === 'school'
-          ? rules.mode === '分钟' ? Number(rules.perMinute) || 0 : Number(rules.perSession) || 0
+          ? (schoolPriceChanged ? Number(rateInput.value) : row?.unit_price)
           : Number(rules.peerPerSession) || 0,
         peer_name: dutyType === 'school' ? '' : peer,
         person: actualTeacher,
@@ -642,42 +660,26 @@ export async function renderInvigilation(box) {
 
   async function openRules() {
     const current = { ...DEFAULT_RULES, ...(rules || {}) };
-    const tiers = Array.isArray(current.tiers) && current.tiers.length ? current.tiers : DEFAULT_RULES.tiers;
-    const body = el('<div class="sheet-body iv-sheet-body"><div class="field"><label class="field-label">学校计价方式</label><select class="input" id="iv-rule-mode"><option value="分钟">按分钟计价</option><option value="场次">按场次计价</option><option value="时长">按时长分档</option></select></div>'
-      + '<div class="field" id="iv-rule-minute"><label class="field-label">学校单价（元 / 分钟）</label><input class="input" id="iv-rule-per-minute" type="number" min="0" step="0.01" value="' + esc(current.perMinute == null ? 0.4 : current.perMinute) + '"></div>'
-      + '<div class="field hidden" id="iv-rule-session"><label class="field-label">学校单价（元 / 场）</label><input class="input" id="iv-rule-per-session" type="number" min="0" step="0.01" value="' + esc(current.perSession) + '"></div>'
-      + '<div class="field hidden" id="iv-rule-tiers"><label class="field-label">学校时长分档（分钟以内 / 金额）</label>' + tiers.map((tier, index) => '<div class="iv-tier-row"><input class="input" type="number" data-tier-max="' + index + '" value="' + esc(tier.max) + '" placeholder="分钟上限"><span>分钟以内</span><input class="input" type="number" step="0.01" data-tier-amount="' + index + '" value="' + esc(tier.amount) + '" placeholder="金额"></div>').join('') + '</div>'
-      + '<div class="field"><label class="field-label">同事代监单价（元 / 场）</label><input class="input" id="iv-rule-peer" type="number" min="0" step="0.01" value="' + esc(current.peerPerSession) + '"></div>'
-      + '<div class="iv-form-hint">新规则只影响之后新增或重新编辑的记录，不会自动改写历史金额。</div>'
+    const body = el('<div class="sheet-body iv-sheet-body">'
+      + '<div class="field"><label class="field-label" for="iv-rule-hourly">学校默认发放标准（元/小时）</label><input class="input" id="iv-rule-hourly" type="number" min="0" step="0.01" value="' + esc(current.schoolHourlyRate) + '"></div>'
+      + '<div class="field"><label class="field-label" for="iv-rule-peer">同事代监单价（元/场）</label><input class="input" id="iv-rule-peer" type="number" min="0" step="0.01" value="' + esc(current.peerPerSession) + '"></div>'
+      + '<div class="iv-form-hint">默认标准用于之后新增的监考记录。</div>'
       + '<div class="confirm-actions"><button class="btn ghost" id="iv-rule-cancel">取消</button><button class="btn primary" id="iv-rule-save">保存计价规则</button></div></div>');
     const modal = sheet({ title: '监考计价设置', body, wide: true });
-    const mode = body.querySelector('#iv-rule-mode');
-    mode.value = ['分钟', '场次', '时长'].includes(current.mode) ? current.mode : '分钟';
-    const sync = () => {
-      body.querySelector('#iv-rule-minute').classList.toggle('hidden', mode.value !== '分钟');
-      body.querySelector('#iv-rule-session').classList.toggle('hidden', mode.value !== '场次');
-      body.querySelector('#iv-rule-tiers').classList.toggle('hidden', mode.value !== '时长');
-    };
-    mode.onchange = sync;
-    sync();
+    const hourly = body.querySelector('#iv-rule-hourly');
+    const peer = body.querySelector('#iv-rule-peer');
     body.querySelector('#iv-rule-cancel').onclick = modal.close;
-    body.querySelector('#iv-rule-save').onclick = async () => {
-      const nextTiers = [...body.querySelectorAll('[data-tier-max]')].map((input, index) => ({
-        max: Number(input.value) || 0,
-        amount: Number(body.querySelector('[data-tier-amount="' + index + '"]').value) || 0,
-      }));
+    const saveButton = body.querySelector('#iv-rule-save');
+    saveButton.onclick = async () => {
+      if (!hourly.value || !hourly.validity.valid || !peer.value || !peer.validity.valid) return toast('请输入有效的计价标准', 'warn');
+      saveButton.disabled = true;
       try {
-        await api.patch('/invig/rules', {
-          mode: mode.value,
-          perMinute: Number(body.querySelector('#iv-rule-per-minute').value) || 0,
-          perSession: Number(body.querySelector('#iv-rule-per-session').value) || 0,
-          peerPerSession: Number(body.querySelector('#iv-rule-peer').value) || 0,
-          tiers: nextTiers,
-        });
+        await api.patch('/invig/rules', { schoolHourlyRate: Number(hourly.value), peerPerSession: Number(peer.value) });
         modal.close();
         toast('计价规则已保存');
         reload();
       } catch (error) { toast(error.message || '保存计价规则失败', 'err'); }
+      finally { saveButton.disabled = false; }
     };
   }
 
