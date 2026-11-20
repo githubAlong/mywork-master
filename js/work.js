@@ -1643,7 +1643,7 @@ function periodEditor(periods, reload) {
 /* ================= 监考 ================= */
 async function renderInvigilation(box) {
   const module = await import('./invigilation.js');
-  return module.renderInvigilation(box);
+  return module.renderInvigilation(box, state.user?.nickname);
 }
 
 /* ================= 出差 ================= */

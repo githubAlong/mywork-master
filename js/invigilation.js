@@ -118,7 +118,7 @@ function sheetDocument(month, rows) {
     + htmlTable(rows) + '<div class="sign"><span>填表人：________________</span><span>审核：________________</span><span>日期：________________</span></div></body></html>';
 }
 
-export async function renderInvigilation(box) {
+export async function renderInvigilation(box, profileName) {
   let month = currentMonth();
   let activeTab = 'records';
   let rows = [];
@@ -485,6 +485,11 @@ export async function renderInvigilation(box) {
   function openEditor(row) {
     const isNew = !row;
     const initialType = rowType(row || { duty_type: 'school' });
+    const teachers = row ? invigTeacherNames(row) : { original: '', actual: '' };
+    const savedSelfName = initialType === '他人替我' ? teachers.original : teachers.actual;
+    const selfName = profileName?.trim() || savedSelfName || '本人';
+    let peerName = initialType === 'school' ? '' : initialType === '替他人' ? teachers.original : teachers.actual;
+    if (peerName === '本人') peerName = '';
     const paidState = row ? settlementOf(row) : { paid: 0, total: 0, remaining: 0, structured: false, legacy: false };
     const body = el('<div class="sheet-body iv-sheet-body">'
       + '<div class="iv-form-section"><div class="iv-form-section-title">01 · 监考关系</div><div class="iv-type-options">'
@@ -508,6 +513,7 @@ export async function renderInvigilation(box) {
       + '<div class="field"><label class="field-label" for="iv-amount" id="iv-amount-label">本场应结金额（元）</label><input class="input" id="iv-amount" type="number" min="0" step="0.01" value="' + esc(row && (row.pay_amount != null ? row.pay_amount : row.amount) != null ? (row.pay_amount != null ? row.pay_amount : row.amount) : '') + '"></div>'
       + '</div><div class="iv-form-hint" id="iv-price-hint"></div></div>'
       + '<div class="iv-form-section"><div class="iv-form-section-title">04 · 监考人员</div>'
+      + '<div class="field" id="iv-self-wrap"><label class="field-label" for="iv-self">监考人</label><input class="input" id="iv-self" readonly value="' + esc(selfName) + '"></div>'
       + '<div class="form-grid" id="iv-peer-wrap">'
       + '<div class="field"><label class="field-label" for="iv-original">原监考人</label><input class="input" id="iv-original" list="iv-peer-list" placeholder="填写原监考人姓名"></div>'
       + '<div class="field"><label class="field-label" for="iv-substitute">代监考人</label><input class="input" id="iv-substitute" list="iv-peer-list" placeholder="填写代监考人姓名"></div>'
@@ -522,20 +528,22 @@ export async function renderInvigilation(box) {
     let schoolPriceChanged = isNew;
     const oldPayNote = row && row.pay_note || '';
     const oldMeta = parseSettlementMeta(oldPayNote);
-    const teachers = row && initialType !== 'school' ? invigTeacherNames(row) : { original: '', actual: '' };
-    const inputName = value => value === '本人' ? '' : value;
     const savedPeerRate = row?.pay_rule === '代监按分钟' ? row.unit_price : null;
     const peerRate = Number(savedPeerRate ?? rules.peerPerMinute);
     const peerRules = { ...rules, peerPerMinute: peerRate };
-    let namedType = initialType === 'school' ? '替他人' : initialType;
-    q('iv-original').value = inputName(teachers.original);
-    q('iv-substitute').value = inputName(teachers.actual);
     const peerList = [...new Set(rows.flatMap(item => [item.peer_name, item.orig_teacher, item.person]).filter(name => name && name !== '本人'))];
     q('iv-peer-list').innerHTML = peerList.map((name) => '<option value="' + esc(name) + '">').join('');
 
     const syncKind = () => {
       const school = dutyType === 'school';
+      q('iv-self-wrap').classList.toggle('hidden', !school);
       q('iv-peer-wrap').classList.toggle('hidden', school);
+      const original = q('iv-original');
+      const substitute = q('iv-substitute');
+      original.readOnly = dutyType === '他人替我';
+      substitute.readOnly = dutyType === '替他人';
+      original.value = original.readOnly ? selfName : peerName;
+      substitute.value = substitute.readOnly ? selfName : peerName;
       q('iv-hourly-wrap').classList.toggle('hidden', !school);
       q('iv-amount-label').textContent = school ? '学校应付金额（元）' : '本场应结金额（元）';
       q('iv-amount').readOnly = !school;
@@ -570,13 +578,10 @@ export async function renderInvigilation(box) {
     body.querySelectorAll('[data-kind]').forEach((button) => {
       button.onclick = () => {
         if (dutyType === button.dataset.kind) return;
-        dutyType = button.dataset.kind;
-        if (dutyType !== 'school' && dutyType !== namedType) {
-          const original = q('iv-original');
-          const substitute = q('iv-substitute');
-          [original.value, substitute.value] = [substitute.value, original.value];
-          namedType = dutyType;
+        if (dutyType !== 'school') {
+          peerName = q(dutyType === '替他人' ? 'iv-original' : 'iv-substitute').value;
         }
+        dutyType = button.dataset.kind;
         syncKind();
         recalc();
       };
@@ -593,8 +598,10 @@ export async function renderInvigilation(box) {
       const date = q('iv-date').value;
       const start = q('iv-start').value;
       const end = q('iv-end').value;
-      const originalTeacher = dutyType === 'school' ? row?.orig_teacher || '' : q('iv-original').value.trim();
-      const actualTeacher = dutyType === 'school' ? '本人' : q('iv-substitute').value.trim();
+      const originalTeacher = dutyType === 'school'
+        ? (initialType === 'school' ? row?.orig_teacher || '' : '')
+        : q('iv-original').value.trim();
+      const actualTeacher = dutyType === 'school' ? selfName : q('iv-substitute').value.trim();
       const peer = dutyType === '替他人' ? originalTeacher : actualTeacher;
       const exam = q('iv-exam').value.trim();
       const room = q('iv-room').value.trim();
