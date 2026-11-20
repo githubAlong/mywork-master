@@ -5029,7 +5029,7 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
   .lp-footer-actions .btn { flex: 1 1 0; }
 }
 
-/* 班级输入框候选下拉（class-picker.mjs） */
+/* 班级输入框候选下拉（class-picker.mjs）：箭头展开自绘面板，输入框主体始终可打字 */
 .class-picker {
   position: relative;
   display: flex;
@@ -5039,35 +5039,19 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .class-picker > input {
   flex: 1;
   min-width: 0;
-}
-.class-picker:has(> .class-picker-options:not([hidden])) > input {
   padding-inline-end: 34px;
 }
-.class-picker > select.class-picker-options {
+.class-picker > .class-picker-arrow {
   position: absolute;
-  inset: 1px 1px 1px auto;
-  width: 32px;
-  height: auto;
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  opacity: 0;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
   cursor: pointer;
+  border-radius: 0 9px 9px 0;
 }
-.class-picker:has(> .class-picker-options:not([hidden]))::after {
-  content: '';
-  position: absolute;
-  inset-inline-end: 13px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-inline-end: 1px solid currentColor;
-  border-block-end: 1px solid currentColor;
-  transform: translateY(-70%) rotate(45deg);
-  pointer-events: none;
-}
-.class-picker:has(> .class-picker-options:focus-visible) {
-  outline: 2px solid var(--blue, #2563eb);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
+.class-picker > .class-picker-arrow:hover { color: var(--text); }
+.class-picker > .class-picker-arrow[hidden] { display: none; }
+.class-picker:has(> input:focus) > .class-picker-arrow { color: var(--text-2); }

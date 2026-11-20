@@ -540,7 +540,20 @@ export async function renderClassRecords(root) {
         const end = cleanPeriodTime(override.end_time) || cleanPeriodTime(period.end_time);
         return { name: period.name || '第' + period.period_no + '节', time: start && end ? start + '-' + end : '' };
       });
-      form.querySelector('#cr-period-options').innerHTML = [...new Set(timetableOptions.map((option) => option.name))].map((name) => `<option value="${esc(name)}"></option>`).join('');
+      /* 节次面板右侧带作息时间段，录记录时不用另翻课表；同名节次只留第一条。 */
+      const periodChoices = [];
+      const seenPeriod = new Set();
+      for (const option of timetableOptions) {
+        if (seenPeriod.has(option.name)) continue;
+        seenPeriod.add(option.name);
+        periodChoices.push({
+          value: option.name,
+          label: option.name,
+          hint: option.time ? option.time.replace('-', '–') : '',
+        });
+      }
+      periodInput.__choiceItems = periodChoices;
+      form.querySelector('#cr-period-options').innerHTML = periodChoices.map((option) => `<option value="${esc(option.value)}"></option>`).join('');
       fillTime();
     }).catch(() => { if (form.isConnected) toast('课表加载失败，仍可手动填写节次', 'warn'); });
 

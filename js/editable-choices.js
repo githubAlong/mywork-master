@@ -1,7 +1,8 @@
 import { activeAccountId } from './localdb.js';
+import { openChoices, updateChoices, closeChoices, isChoicesOpen } from './choice-panel.mjs';
 
 const selector = 'input[list], input:not([type]), input[type="text"], input[type="search"]';
-const pickers = new WeakMap();
+const wired = new WeakMap();
 const HISTORY_LIMIT = 5;
 
 function historyKey(input) {
@@ -29,61 +30,124 @@ function recent(key) {
   } catch { return []; }
 }
 
-function allOptions(input, key) {
-  const options = new Map();
+/* 候选来源优先级：页面显式挂的 __choiceItems（可带分组和时间段）→ 原生 datalist → 历史输入。 */
+function collectItems(input, key) {
+  const items = [];
+  const seen = new Set();
+  const push = (value, label, hint, group) => {
+    const text = String(value ?? '').trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    items.push({ value: text, label: String(label ?? text).trim() || text, hint, group });
+  };
+
+  const custom = input.__choiceItems;
+  if (Array.isArray(custom) && custom.length) {
+    for (const item of custom) push(item.value, item.label, item.hint, item.group);
+    return items;
+  }
+
   for (const option of input.list?.options || []) {
-    if (option.value && !option.disabled) options.set(option.value, option.label || option.value);
+    if (option.value && !option.disabled) push(option.value, option.label || option.value);
   }
-  for (const value of recent(key)) {
-    if (!options.has(value)) options.set(value, value);
-  }
-  return options;
+  for (const value of recent(key)) push(value, value);
+  return items;
+}
+
+function chevron() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('viewBox', '0 0 14 14');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M3.5 5.5L7 9l3.5-3.5');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.4');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
+
+function refreshArrow(input) {
+  const state = wired.get(input);
+  if (!state) return;
+  const items = collectItems(input, historyKey(input));
+  state.items = items;
+  state.arrow.hidden = !items.length;
+  const labelText = input.getAttribute('aria-label') || input.labels?.[0]?.textContent?.trim() || input.placeholder || '选项';
+  state.arrow.setAttribute('aria-label', '展开' + labelText.replace(/\s*\*?\s*$/, ''));
+  state.arrow.title = '展开选项（也可以直接输入）';
 }
 
 function enhance(input) {
   if (!(input instanceof HTMLInputElement)) return;
+  /* 班级字段由 class-picker 接管（候选来自课表 + 花名册），别再套一层历史值下拉。 */
+  if (input.closest('.class-picker')) return;
   const key = historyKey(input);
   if (key && !input.hasAttribute('autocomplete')) input.autocomplete = 'off';
-  const options = allOptions(input, key);
-  if (!input.list && !options.size) return;
-  const existing = pickers.get(input);
-  if (existing) { existing(); return; }
 
-  const wrap = document.createElement('span');
+  const items = collectItems(input, key);
+  if (!input.list && !items.length) return;
+
+  if (wired.get(input)) { refreshArrow(input); return; }
+
+  const doc = input.ownerDocument;
+  const wrap = doc.createElement('span');
   wrap.className = 'editable-choice';
-  const picker = document.createElement('select');
-  picker.className = 'editable-choice-picker';
-  const label = input.getAttribute('aria-label') || input.labels?.[0]?.textContent || input.previousElementSibling?.textContent;
-  picker.setAttribute('aria-label', label?.trim() ? '选择' + label.trim() : '打开选项');
-  const arrow = document.createElement('span');
-  arrow.className = 'editable-choice-arrow';
-  arrow.setAttribute('aria-hidden', 'true');
-  arrow.textContent = '▾';
   input.before(wrap);
-  wrap.append(input, picker, arrow);
+  wrap.append(input);
 
-  const sync = () => {
-    const choices = allOptions(input, historyKey(input));
-    picker.disabled = input.matches(':disabled') || input.readOnly || !choices.size;
-    picker.hidden = arrow.hidden = !choices.size;
-    const placeholder = new Option('请选择', '');
-    placeholder.disabled = true;
-    picker.replaceChildren(placeholder, ...Array.from(choices, ([value, text]) => new Option(text, value)));
-    picker.value = input.value;
-    if (picker.selectedIndex < 0) picker.selectedIndex = 0;
+  const arrow = doc.createElement('span');
+  arrow.className = 'editable-choice-arrow';
+  arrow.setAttribute('role', 'button');
+  arrow.setAttribute('tabindex', '-1');
+  arrow.append(chevron());
+  wrap.append(arrow);
+
+  wired.set(input, { arrow, items, key });
+  refreshArrow(input);
+
+  const show = (filter) => {
+    const list = collectItems(input, historyKey(input));
+    if (!list.length) { closeChoices(); return; }
+    openChoices(wrap, {
+      items: list,
+      input,
+      filter,
+      selected: input.value.trim(),
+      emptyHint: filter ? '没找到「' + filter + '」，直接输入也能保存' : '',
+      minWidth: Math.max(220, wrap.offsetWidth),
+    });
   };
-  pickers.set(input, sync);
-  picker.addEventListener('pointerdown', sync);
-  picker.addEventListener('focus', sync);
-  picker.addEventListener('input', event => event.stopPropagation());
-  picker.addEventListener('change', event => {
+
+  arrow.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
     event.stopPropagation();
-    if (!picker.value) return;
-    input.value = picker.value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
+    if (isChoicesOpen()) { closeChoices(); return; }
+    if (input.readOnly || input.disabled) return;
+    show('');
   });
-  sync();
+
+  /* 只响应用户真打字：选中后回填会以程序方式派发 input，那种不该把面板再弹出来。 */
+  input.addEventListener('input', (event) => {
+    if (!event.isTrusted) return;
+    if (input.readOnly || input.disabled) return;
+    const list = collectItems(input, historyKey(input));
+    if (!input.value.trim() || !list.length) { closeChoices(); return; }
+    const emptyHint = '没找到「' + input.value.trim() + '」，直接输入也能保存';
+    if (isChoicesOpen()) updateChoices({ items: list, filter: input.value, selected: input.value, emptyHint });
+    else show(input.value);
+  });
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' || isChoicesOpen()) return;
+    if (input.readOnly || input.disabled) return;
+    event.preventDefault();
+    show(input.value.trim());
+  });
 }
 
 document.addEventListener('change', ({ target: input }) => {
