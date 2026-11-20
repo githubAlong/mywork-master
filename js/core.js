@@ -357,10 +357,8 @@ export function sheet({ title = '', body = '', footer = '', wide = false, onMoun
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('in'));
   let closed = false;
-  let onKey = null;
   const close = () => {
     if (closed) return; closed = true;
-    if (onKey) document.removeEventListener('keydown', onKey);
     wrap.classList.remove('in');
     setTimeout(() => {
       wrap.remove();
@@ -369,17 +367,7 @@ export function sheet({ title = '', body = '', footer = '', wide = false, onMoun
     }, 220);
     onClose?.();
   };
-  // Esc 关闭：桌面上点 X 离手太远，键盘用户也指望这个键。
-  // 只在「最上层」弹层响应，避免嵌套弹层一按 Esc 全关。
-  onKey = (e) => {
-    if (e.key !== 'Escape') return;
-    const masks = document.querySelectorAll('.sheet-mask');
-    if (masks[masks.length - 1] !== wrap) return;
-    e.stopPropagation(); close();
-  };
-  document.addEventListener('keydown', onKey);
   wrap.querySelector('.sheet-close').onclick = close;
-  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
   onMount?.(wrap, close);
   return { wrap, close, body: bodyEl };
 }

@@ -155,6 +155,7 @@
 </div>
 <div class="s-wrap" id="s-app"><div class="empty">加载中…</div></div>
 <script type="module">
+import './js/editable-choices.js';
 /* 短链编码：有服务端时是 /s/<code>，从路径第二段取。
    静态版在 GitHub Pages 上，/s/<code> 这种「服务端路由」不存在（会 404），
    所以退一步：支持 ?code=xxx，以及 sessionStorage 记住上次的 code。
@@ -402,7 +403,6 @@ function openTaskModal(t) {
   </div>`;
   const close = () => wrap.remove();
   wrap.querySelector('button').onclick = close;
-  wrap.onclick = (e) => { if (e.target === wrap) close(); };
   document.body.appendChild(wrap);
 }
 
