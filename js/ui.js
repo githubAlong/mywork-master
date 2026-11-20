@@ -111,7 +111,7 @@ export const NAV = [
       { id: 'notes', label: '笔记', icon: 'edit' },
   { id: 'daily', label: '便签', icon: 'daily' },
   { id: 'study', label: '学习', icon: 'study' },
-  { id: 'selfstudy', label: '自习', icon: 'clock' },
+  { id: 'selfstudy', label: '任务', icon: 'clock' },
   { id: 'textbook', label: '教材', icon: 'book' },
   { id: 'pick', label: '点名', icon: 'dice' },
   { id: 'mystery', label: '盲盒', icon: 'gift' },
