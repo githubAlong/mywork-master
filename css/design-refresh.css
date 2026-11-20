@@ -113,6 +113,6 @@ button, input, textarea, select { font-family: inherit; }
   cursor: pointer;
   z-index: 2;
 }
-.editable-choice-picker:focus-visible + .editable-choice-arrow { outline: 2px solid var(--primary, #2563eb); outline-offset: -3px; }
+.editable-choice:has(> .editable-choice-picker:focus-visible) { outline: 2px solid var(--primary, #2563eb); outline-offset: 1px; border-radius: 10px; }
 
 .editable-choice > .editable-choice-picker[hidden], .editable-choice-arrow[hidden] { display: none; }
