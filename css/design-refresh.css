@@ -84,14 +84,35 @@ button, input, textarea, select { font-family: inherit; }
   .me-dashboard-footer, .me-edit-profile { display: none; }
 }
 
+/* 输入框 + 右侧下拉箭头。
+   约束：透明 select 只能盖住右边 34px 的箭头区，输入框主体必须能点击、能打字。
+   早期版本这条规则特异性不足，被页面里的 select 全宽样式覆盖，
+   导致所有带候选的输入框点哪都弹下拉、一个字都输不进去。 */
 .editable-choice { position: relative; display: inline-grid; width: 100%; min-width: 0; }
 .editable-choice > input { box-sizing: border-box; min-width: 0; width: 100%; padding-inline-end: 36px; }
 .editable-choice > input[list]::-webkit-calendar-picker-indicator { display: none; }
-.editable-choice-picker, .editable-choice-arrow {
+.editable-choice-arrow {
   position: absolute; inset-block: 0; inset-inline-end: 0; width: 34px; height: 100%; margin: 0;
+  display: grid; place-items: center; color: inherit; pointer-events: none;
 }
-.editable-choice-picker { opacity: 0; cursor: pointer; z-index: 1; }
-.editable-choice-arrow { display: grid; place-items: center; color: inherit; pointer-events: none; }
+.editable-choice > .editable-choice-picker {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: auto 0;
+  width: 34px;
+  min-width: 0;
+  max-width: 34px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
 .editable-choice-picker:focus-visible + .editable-choice-arrow { outline: 2px solid var(--primary, #2563eb); outline-offset: -3px; }
 
-.editable-choice-picker[hidden], .editable-choice-arrow[hidden] { display: none; }
+.editable-choice > .editable-choice-picker[hidden], .editable-choice-arrow[hidden] { display: none; }
