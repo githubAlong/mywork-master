@@ -285,14 +285,12 @@ const todayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/* 老师在「教材 / 点名 / 盲盒」页里可以逐个关掉学生端模块；
-   自习没有单独的开关，发布了任务就相当于这个模块存在。
-   全部关掉且没有任务/签到时，整页只显示「正在来的路上」。 */
+/* 教师端的显示开关决定模块页签，签到页签随进行中的场次出现。 */
 function visibleTabs() {
   const mods = data?.link?.modules || {};
   const on = (k) => Number(mods[k]) !== 0;
   const list = [];
-  if (on('selfstudy') && (data?.selfstudyTasks || []).length) list.push('selfstudy');
+  if (on('selfstudy')) list.push('selfstudy');
   if (data?.roll && data.roll.length) list.push('checkin');
   if (on('material')) list.push('material');
   if (on('roll')) list.push('roll');
@@ -307,10 +305,10 @@ async function init() {
   catch (e) { $('#s-app').innerHTML = `<div class="card card-pad empty"><div class="em">${ICON.lock}</div>${esc(e.message)}</div>`; return; }
   document.title = '学生工作台';
   availTabs = visibleTabs();
-  /* 老师端各模块的链接会带 ?tab=，直接落到对应页签（教材/点名/盲盒/自习）；
-     该模块被关掉时退回第一个可见页签。 */
+  /* 带 tab 的链接直接打开对应页签。通用链接优先打开有内容的模块。 */
   const wanted = new URLSearchParams(location.search).get('tab');
-  tab = availTabs.includes(wanted) ? wanted : (availTabs[0] || null);
+  const landing = availTabs.find((id) => id !== 'selfstudy' || data.selfstudyTasks?.length);
+  tab = availTabs.includes(wanted) ? wanted : (landing || availTabs[0] || null);
   paint();
 }
 const TAB_DEF = {

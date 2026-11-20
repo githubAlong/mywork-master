@@ -549,7 +549,7 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
              <button class="btn ghost sm" id="ss-copy">${icon('copy', 14)} 复制链接</button>
              <a class="btn ghost sm" href="${esc(studentUrl(link.code, 'tab=selfstudy'))}" target="_blank" rel="noopener">打开看看</a>
            </div>
-           <div class="field-hint" style="margin-top:8px">开启学生端显示并发布任务后，学生打开链接即可在「自习」页查看。</div>`
+           <div class="field-hint" style="margin-top:8px">开启后，学生端会显示「自习」页签。任务发布后，学生可在该页查看。</div>`
       : `<div class="empty" style="padding:18px">还没有生成学生链接。<button class="btn primary sm" id="ss-mklink">生成一条</button></div>`}
     </div>
     ${entryOnly && link ? `<div class="card card-pad" style="margin-bottom:14px">
