@@ -247,9 +247,14 @@ export function openChoices(anchor, options = {}) {
   }
 }
 
+/* 面板是单例的：正在给哪个 input 用，只有它自己有权改内容。
+   别的字段（没带 input 校验）来 updateChoices 会把内容换成自己的候选，
+   但 state.input 还指着上一个字段 —— 之后一选中就写进别人框里。
+   所以这里要求调用方报上门牌，对不上就直接忽略。 */
 export function updateChoices(options = {}) {
   if (!state) return;
-  const { items, filter, selected, emptyHint } = options;
+  const { items, filter, selected, emptyHint, input } = options;
+  if (input && state.input !== input) return;
   if (items) state.items = items;
   if (typeof filter === 'string') state.filter = filter;
   if (typeof selected === 'string') state.selectedValue = selected;
@@ -273,4 +278,9 @@ export function closeChoices() {
 
 export function isChoicesOpen() {
   return !!state;
+}
+
+/* 当前面板是不是这个输入框的。用来判断「再点一下收起」还是「切换到我这来」。 */
+export function isChoicesFor(input) {
+  return !!state && !!input && state.input === input;
 }

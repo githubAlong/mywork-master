@@ -1,5 +1,5 @@
 import { activeAccountId } from './localdb.js';
-import { openChoices, updateChoices, closeChoices, isChoicesOpen } from './choice-panel.mjs';
+import { openChoices, updateChoices, closeChoices, isChoicesFor } from './choice-panel.mjs';
 
 const selector = 'input[list], input:not([type]), input[type="text"], input[type="search"]';
 const wired = new WeakMap();
@@ -126,7 +126,8 @@ function enhance(input) {
   arrow.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (isChoicesOpen()) { closeChoices(); return; }
+    /* 面板正给自己用 → 再点一次收起；面板在别的字段上 → 换成自己的候选（不要只关掉）。 */
+    if (isChoicesFor(input)) { closeChoices(); return; }
     if (input.readOnly || input.disabled) return;
     show('');
   });
@@ -138,12 +139,14 @@ function enhance(input) {
     const list = collectItems(input, historyKey(input));
     if (!input.value.trim() || !list.length) { closeChoices(); return; }
     const emptyHint = '没找到「' + input.value.trim() + '」，直接输入也能保存';
-    if (isChoicesOpen()) updateChoices({ items: list, filter: input.value, selected: input.value, emptyHint });
+    /* 只有面板归自己时才就地刷新；归别人时直接另开一个，
+       否则面板会被换成我的候选、选中却写回上一个字段。 */
+    if (isChoicesFor(input)) updateChoices({ items: list, filter: input.value, selected: input.value, emptyHint, input });
     else show(input.value);
   });
 
   input.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowDown' || isChoicesOpen()) return;
+    if (event.key !== 'ArrowDown' || isChoicesFor(input)) return;
     if (input.readOnly || input.disabled) return;
     event.preventDefault();
     show(input.value.trim());

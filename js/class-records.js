@@ -553,7 +553,12 @@ export async function renderClassRecords(root) {
         });
       }
       periodInput.__choiceItems = periodChoices;
-      form.querySelector('#cr-period-options').innerHTML = periodChoices.map((option) => `<option value="${esc(option.value)}"></option>`).join('');
+      /* 候选挂到 __choiceItems 之后就把原生 datalist 摘掉：
+         留着 list 属性，Chrome 会在框下面再弹一层自己的小面板（按当前值过滤，
+         常常只剩一行「第9节」），跟自绘面板叠在一起，看着像两个字段串了值。
+         摘 list 顺带会触发 editable-choices 的观察器，把右侧箭头刷新出来。 */
+      periodInput.removeAttribute('list');
+      form.querySelector('#cr-period-options')?.remove();
       fillTime();
     }).catch(() => { if (form.isConnected) toast('课表加载失败，仍可手动填写节次', 'warn'); });
 

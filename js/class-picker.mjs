@@ -1,4 +1,4 @@
-import { openChoices, isChoicesOpen, closeChoices } from './choice-panel.mjs';
+import { openChoices, isChoicesFor, closeChoices } from './choice-panel.mjs';
 
 export function classSuggestions(rows, { qualified = false } = {}) {
   const unique = new Map();
@@ -66,7 +66,8 @@ export function setClassSuggestions(input, rows, { gradeInput, qualified } = {})
     arrow.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (isChoicesOpen()) { closeChoices(); return; }
+      /* 面板正给自己用 → 再点一次收起；在别的字段上 → 直接换成自己的候选。 */
+      if (isChoicesFor(input)) { closeChoices(); return; }
       if (input.readOnly || input.disabled) return;
       show(input.value.trim());
     });
@@ -80,7 +81,7 @@ export function setClassSuggestions(input, rows, { gradeInput, qualified } = {})
     });
 
     input.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowDown' || isChoicesOpen()) return;
+      if (event.key !== 'ArrowDown' || isChoicesFor(input)) return;
       if (input.readOnly || input.disabled) return;
       event.preventDefault();
       show(input.value.trim());
