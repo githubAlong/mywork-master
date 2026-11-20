@@ -1,3 +1,4 @@
+import { state } from './ui.js';
 import { api, el, esc, toast, sheet, confirmDialog, ymd, download } from './core.js';
 import {
   addPaymentPatch,
@@ -18,7 +19,6 @@ const TYPE_LABEL = {
 const DEFAULT_RULES = {
   mode: '分钟',
   schoolHourlyRate: 40,
-  peerPerSession: 50,
 };
 
 function currentMonth() {
@@ -94,12 +94,18 @@ function downloadBlob(content, mime, filename) {
   download(url, filename);
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
+function invigTeacherNames(row) {
+  const type = rowType(row);
+  if (type === 'school') return { original: row.orig_teacher || '学校分配', actual: row.person || '本人' };
+  return {
+    original: row.orig_teacher || (type === '替他人' ? row.peer_name || '' : '本人'),
+    actual: type === '他人替我' ? (row.person && row.person !== '本人' ? row.person : row.peer_name || '') : row.person || '本人',
+  };
+}
 function htmlTable(rows) {
   return '<table><thead><tr><th>日期</th><th>类型</th><th>考试名称</th><th>科目</th><th>考场</th><th>时间</th><th>时长</th><th>原监考人</th><th>实际监考人</th><th>金额（元）</th><th>签字</th></tr></thead><tbody>'
     + rows.map((row) => {
-      const type = rowType(row);
-      const original = type === '替他人' ? row.peer_name || row.orig_teacher || '' : type === '他人替我' ? '本人' : '学校分配';
-      const actual = type === '他人替我' ? row.peer_name || row.person || '' : '本人';
+      const { original, actual } = invigTeacherNames(row);
       return '<tr><td>' + esc(row.date || '') + '</td><td>' + esc(typeLabel(row)) + '</td><td>' + esc(row.exam_name || '') + '</td><td>' + esc(row.subject || '') + '</td><td>' + esc(row.room || row.place || '') + '</td><td>' + esc(timeLabel(row)) + '</td><td>' + esc(row.duration_min || row.minutes || 0) + ' 分钟</td><td>' + esc(original) + '</td><td>' + esc(actual) + '</td><td>' + money(row.pay_amount != null ? row.pay_amount : row.amount) + '</td><td></td></tr>';
     }).join('')
     + '</tbody></table>';
@@ -320,9 +326,7 @@ export async function renderInvigilation(box) {
     const filtered = rows.filter((row) => sheetFilter === 'all' || rowType(row) === sheetFilter)
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.start_time || '').localeCompare(String(b.start_time || '')));
     const body = filtered.length ? filtered.map((row, index) => {
-      const type = rowType(row);
-      const original = type === '替他人' ? row.peer_name || row.orig_teacher || '' : type === '他人替我' ? '本人' : '学校分配';
-      const actual = type === '他人替我' ? row.peer_name || row.person || '' : '本人';
+      const { original, actual } = invigTeacherNames(row);
       return '<tr><td>' + (index + 1) + '</td><td>' + esc(dateLabel(row.date)) + '</td><td>' + esc(typeLabel(row)) + '</td><td>' + esc(row.exam_name || '') + '</td><td>' + esc(row.subject || '') + '</td><td>' + esc(row.room || row.place || '') + '</td><td>' + esc(timeLabel(row)) + '</td><td>' + money(row.duration_min || row.minutes || 0) + '</td><td>' + esc(original) + '</td><td>' + esc(actual) + '</td><td>¥' + money(row.pay_amount != null ? row.pay_amount : row.amount) + '</td><td></td></tr>';
     }).join('') : '<tr><td colspan="12"><div class="iv-empty compact">当前月份暂无监考记录</div></td></tr>';
     return '<div class="iv-sheet-toolbar"><div><b>' + monthLabel(month) + '监考表</b><span>自动汇总本月监考安排，可打印或导出。</span></div>'
@@ -504,8 +508,10 @@ export async function renderInvigilation(box) {
       + '<div class="field"><label class="field-label" for="iv-amount" id="iv-amount-label">本场应结金额（元）</label><input class="input" id="iv-amount" type="number" min="0" step="0.01" value="' + esc(row && (row.pay_amount != null ? row.pay_amount : row.amount) != null ? (row.pay_amount != null ? row.pay_amount : row.amount) : '') + '"></div>'
       + '</div><div class="iv-form-hint" id="iv-price-hint"></div></div>'
       + '<div class="iv-form-section"><div class="iv-form-section-title">04 · 监考人员</div>'
-      + '<div class="field" id="iv-peer-wrap"><label class="field-label" id="iv-peer-label">对方老师</label><input class="input" id="iv-peer" list="iv-peer-list" value="' + esc(row && row.peer_name || '') + '" placeholder="填写老师姓名"><datalist id="iv-peer-list"></datalist></div>'
-      + '<div class="iv-role-note" id="iv-role-note"></div></div>'
+      + '<div class="form-grid" id="iv-peer-wrap">'
+      + '<div class="field"><label class="field-label" for="iv-original">原监考人</label><input class="input" id="iv-original" list="iv-peer-list" placeholder="填写原监考人姓名"></div>'
+      + '<div class="field"><label class="field-label" for="iv-substitute">代监考人</label><input class="input" id="iv-substitute" list="iv-peer-list" placeholder="填写代监考人姓名"></div>'
+      + '<datalist id="iv-peer-list"></datalist></div></div>'
       + '<div class="iv-form-section"><div class="iv-form-section-title">05 · 备注</div><div class="field"><textarea class="input" id="iv-remark" rows="3" placeholder="记录考场要求、试卷领取地点等">' + esc(row && row.remark || '') + '</textarea></div></div>'
       + (row ? '<div class="iv-edit-settlement">当前收付：已收 / 已付 ¥' + money(paidState.paid) + '，剩余 ¥' + money(paidState.remaining) + '。<button type="button" class="iv-action" id="iv-edit-history">查看收付明细</button></div>' : '')
       + '<div class="confirm-actions"><button class="btn ghost" id="iv-edit-cancel">取消</button><button class="btn primary" id="iv-edit-save">保存监考记录</button></div>'
@@ -516,7 +522,13 @@ export async function renderInvigilation(box) {
     let schoolPriceChanged = isNew;
     const oldPayNote = row && row.pay_note || '';
     const oldMeta = parseSettlementMeta(oldPayNote);
-    const peerList = [...new Set(rows.map((item) => item.peer_name).filter(Boolean))];
+    const selfName = String(state.user?.nickname || '').trim();
+    const teachers = row && initialType !== 'school' ? invigTeacherNames(row) : { original: '', actual: '本人' };
+    const inputName = value => value === '本人' ? selfName : value;
+    let namedType = initialType === 'school' ? '替他人' : initialType;
+    q('iv-original').value = inputName(teachers.original);
+    q('iv-substitute').value = inputName(teachers.actual);
+    const peerList = [...new Set(rows.flatMap(item => [item.peer_name, item.orig_teacher, item.person]).filter(name => name && name !== '本人'))];
     q('iv-peer-list').innerHTML = peerList.map((name) => '<option value="' + esc(name) + '">').join('');
 
     const syncKind = () => {
@@ -524,21 +536,16 @@ export async function renderInvigilation(box) {
       q('iv-peer-wrap').classList.toggle('hidden', school);
       q('iv-hourly-wrap').classList.toggle('hidden', !school);
       q('iv-amount-label').textContent = school ? '学校应付金额（元）' : '本场应结金额（元）';
-      q('iv-peer-label').textContent = dutyType === '替他人' ? '原监考人 / 委托老师' : '实际监考人 / 代监老师';
+      q('iv-amount').readOnly = !school;
       q('iv-kind-hint').textContent = school
         ? '学校统一安排，学校款单独核算，不计入同事往来净额。'
         : dutyType === '替他人'
           ? '你替同事完成监考，对方应向你付款，系统记入「我应收」。'
           : '同事替你完成监考，你需要向对方付款，系统记入「我应付」。';
-      q('iv-role-note').textContent = school
-        ? '原监考关系：学校分配　｜　实际监考人：本人'
-        : dutyType === '替他人'
-          ? '原监考人：' + (q('iv-peer').value || '待填写') + '　｜　实际监考人：本人'
-          : '原监考人：本人　｜　实际监考人：' + (q('iv-peer').value || '待填写');
       body.querySelectorAll('[data-kind]').forEach((button) => button.classList.toggle('on', button.dataset.kind === dutyType));
       q('iv-price-hint').textContent = school
         ? '可直接填写分钟数，或填写起止时间自动计算。默认标准可在「计价设置」修改。'
-        : '同事代监默认 ' + money(rules.peerPerSession) + ' 元 / 场，可在计价设置中调整。';
+        : '同事代监按 1 元/分钟计算。';
     };
     const syncDuration = () => {
       const duration = calcDurationMinutes(q('iv-start').value, q('iv-end').value);
@@ -560,6 +567,12 @@ export async function renderInvigilation(box) {
       button.onclick = () => {
         if (dutyType === button.dataset.kind) return;
         dutyType = button.dataset.kind;
+        if (dutyType !== 'school' && dutyType !== namedType) {
+          const original = q('iv-original');
+          const substitute = q('iv-substitute');
+          [original.value, substitute.value] = [substitute.value, original.value];
+          namedType = dutyType;
+        }
         syncKind();
         recalc();
       };
@@ -567,8 +580,8 @@ export async function renderInvigilation(box) {
     q('iv-start').oninput = q('iv-end').oninput = () => { syncDuration(); recalc(); };
     q('iv-minutes').oninput = q('iv-hourly').oninput = recalc;
     syncDuration();
-    q('iv-peer').oninput = syncKind;
     syncKind();
+    if (dutyType !== 'school' && !paidState.paid && !paidState.legacy && Number(q('iv-minutes').value) > 0) recalc();
 
     q('iv-edit-cancel').onclick = modal.close;
     q('iv-edit-history')?.addEventListener('click', () => { modal.close(); openHistory(row); });
@@ -576,11 +589,13 @@ export async function renderInvigilation(box) {
       const date = q('iv-date').value;
       const start = q('iv-start').value;
       const end = q('iv-end').value;
-      const peer = q('iv-peer').value.trim();
+      const originalTeacher = dutyType === 'school' ? row?.orig_teacher || '' : q('iv-original').value.trim();
+      const actualTeacher = dutyType === 'school' ? '本人' : q('iv-substitute').value.trim();
+      const peer = dutyType === '替他人' ? originalTeacher : actualTeacher;
       const exam = q('iv-exam').value.trim();
       const room = q('iv-room').value.trim();
       if (!date) return toast('请选择监考日期', 'warn');
-      if (dutyType !== 'school' && !peer) return toast('请填写对方老师姓名', 'warn');
+      if (dutyType !== 'school' && (!originalTeacher || !actualTeacher)) return toast('请分别填写原监考人和代监考人的姓名', 'warn');
       if (!!start !== !!end) return toast('开始时间和结束时间需要同时填写', 'warn');
       const durationInput = q('iv-minutes');
       const rateInput = q('iv-hourly');
@@ -590,6 +605,7 @@ export async function renderInvigilation(box) {
       }
       const duration = start && end ? calcDurationMinutes(start, end) : Number(durationInput.value) || 0;
       if (!exam && !room && !start && !duration) return toast('考试名称、考场、开始时间或监考时长至少填一项', 'warn');
+      if (dutyType !== 'school' && duration <= 0 && (isNew || initialType !== dutyType)) return toast('请输入代监时长', 'warn');
       const amount = Number(q('iv-amount').value) || 0;
       // 注意：oldState 必须在 if (row) 外面声明——后面拼 payload 时（第 621 行附近）
       // 还要用它判断结构化收付，写在块内会变成 ReferenceError，编辑已有记录必挂。
@@ -602,8 +618,9 @@ export async function renderInvigilation(box) {
           return toast('本场金额不能低于已经实际收付的金额，请先调整收付明细。', 'warn');
         }
       }
-      const originalTeacher = dutyType === '替他人' ? peer : dutyType === '他人替我' ? '本人' : '';
-      const actualTeacher = dutyType === '他人替我' ? peer : '本人';
+      const keepLegacyPrice = dutyType !== 'school' && initialType === dutyType && row
+        && row.pay_rule !== '代监按分钟' && amount === paidState.total
+        && (paidState.paid > 0 || paidState.legacy || duration <= 0);
       const payload = {
         date,
         duty_type: dutyType,
@@ -623,10 +640,11 @@ export async function renderInvigilation(box) {
         pay_hours: Math.round(duration / 60 * 100) / 100,
         pay_amount: amount,
         amount,
-        pay_rule: dutyType === 'school' ? (schoolPriceChanged ? '小时' : row?.pay_rule) : '场次',
+        pay_rule: dutyType === 'school' ? (schoolPriceChanged ? '小时' : row?.pay_rule)
+          : keepLegacyPrice ? row.pay_rule : '代监按分钟',
         unit_price: dutyType === 'school'
           ? (schoolPriceChanged ? Number(rateInput.value) : row?.unit_price)
-          : Number(rules.peerPerSession) || 0,
+          : keepLegacyPrice ? row.unit_price : 1,
         peer_name: dutyType === 'school' ? '' : peer,
         person: actualTeacher,
         orig_teacher: originalTeacher,
@@ -662,19 +680,18 @@ export async function renderInvigilation(box) {
     const current = { ...DEFAULT_RULES, ...(rules || {}) };
     const body = el('<div class="sheet-body iv-sheet-body">'
       + '<div class="field"><label class="field-label" for="iv-rule-hourly">学校默认发放标准（元/小时）</label><input class="input" id="iv-rule-hourly" type="number" min="0" step="0.01" value="' + esc(current.schoolHourlyRate) + '"></div>'
-      + '<div class="field"><label class="field-label" for="iv-rule-peer">同事代监单价（元/场）</label><input class="input" id="iv-rule-peer" type="number" min="0" step="0.01" value="' + esc(current.peerPerSession) + '"></div>'
+      + '<div class="iv-form-hint">同事代监按 1 元/分钟计算。</div>'
       + '<div class="iv-form-hint">默认标准用于之后新增的监考记录。</div>'
       + '<div class="confirm-actions"><button class="btn ghost" id="iv-rule-cancel">取消</button><button class="btn primary" id="iv-rule-save">保存计价规则</button></div></div>');
     const modal = sheet({ title: '监考计价设置', body, wide: true });
     const hourly = body.querySelector('#iv-rule-hourly');
-    const peer = body.querySelector('#iv-rule-peer');
     body.querySelector('#iv-rule-cancel').onclick = modal.close;
     const saveButton = body.querySelector('#iv-rule-save');
     saveButton.onclick = async () => {
-      if (!hourly.value || !hourly.validity.valid || !peer.value || !peer.validity.valid) return toast('请输入有效的计价标准', 'warn');
+      if (!hourly.value || !hourly.validity.valid) return toast('请输入有效的计价标准', 'warn');
       saveButton.disabled = true;
       try {
-        await api.patch('/invig/rules', { schoolHourlyRate: Number(hourly.value), peerPerSession: Number(peer.value) });
+        await api.patch('/invig/rules', { schoolHourlyRate: Number(hourly.value) });
         modal.close();
         toast('计价规则已保存');
         reload();
@@ -716,12 +733,12 @@ export async function renderInvigilation(box) {
   }
 
   function exportRecords() {
-    const headers = ['日期', '监考类型', '考试名称', '科目', '年级', '考场', '开始时间', '结束时间', '时长（分钟）', '对方老师', '应结金额', '已收付', '剩余未结', '结算状态', '备注'];
+    const headers = ['日期', '监考类型', '考试名称', '科目', '年级', '考场', '开始时间', '结束时间', '时长（分钟）', '对方老师', '原监考人', '代监考人', '应结金额', '已收付', '剩余未结', '结算状态', '备注'];
     const data = rows.map((row) => {
       const state = settlementOf(row);
       return [
         row.date, typeLabel(row), row.exam_name, row.subject, row.grade, row.room || row.place,
-        row.start_time, row.end_time, row.duration_min || row.minutes, peerLabel(row),
+        row.start_time, row.end_time, row.duration_min || row.minutes, peerLabel(row), invigTeacherNames(row).original, invigTeacherNames(row).actual,
         state.total, state.paid, state.remaining, statusLabel(row, state), row.remark,
       ];
     });
@@ -734,12 +751,11 @@ export async function renderInvigilation(box) {
     if (format === 'csv') {
       const headers = ['序号', '日期', '类型', '考试名称', '科目', '考场', '时间', '时长（分钟）', '原监考人', '实际监考人', '金额（元）', '签字'];
       const data = selected.map((row, index) => {
-        const type = rowType(row);
+        const { original, actual } = invigTeacherNames(row);
         return [
           index + 1, row.date, typeLabel(row), row.exam_name, row.subject, row.room || row.place,
           timeLabel(row), row.duration_min || row.minutes || 0,
-          type === '替他人' ? row.peer_name || row.orig_teacher : type === '他人替我' ? '本人' : '学校分配',
-          type === '他人替我' ? row.peer_name || row.person : '本人',
+          original, actual,
           row.pay_amount != null ? row.pay_amount : row.amount, '',
         ];
       });

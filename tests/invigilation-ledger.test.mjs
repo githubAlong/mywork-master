@@ -19,11 +19,13 @@ test('监考时长由起止时间计算，并兼容跨午夜场次', () => {
   assert.equal(calcDurationMinutes('', '10:00'), null);
 });
 
-test('学校按分钟计价，同事代监按场次计价', () => {
+test('学校按分钟计价，同事代监固定每分钟一元', () => {
   assert.equal(calcInvigAmount('school', 150, { mode: '分钟', perMinute: 0.4 }), 60);
   assert.equal(calcInvigAmount('school', 80, { mode: '场次', perSession: 72 }), 72);
   assert.equal(calcInvigAmount('school', 120, { mode: '时长', tiers: [{ max: 90, amount: 50 }, { max: 150, amount: 70 }] }), 70);
-  assert.equal(calcInvigAmount('替他人', 120, { peerPerSession: 55 }), 55);
+  assert.equal(calcInvigAmount('替他人', 155, { peerPerSession: 55 }), 155);
+  assert.equal(calcInvigAmount('他人替我', 155, { peerPerSession: 55 }), 155);
+  assert.equal(calcInvigAmount('school', 155, { mode: '小时', schoolHourlyRate: 40 }), 103.33);
 });
 
 test('同一场可以分多次收款，剩余金额自动计算，足额后才结清', () => {

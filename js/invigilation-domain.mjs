@@ -156,7 +156,7 @@ export function calcDurationMinutes(startTime, endTime) {
 }
 
 export function calcInvigAmount(dutyType, durationMinutes, rules = {}) {
-  if (dutyType !== 'school') return roundMoney(rules.peerPerSession == null ? 50 : rules.peerPerSession);
+  if (dutyType !== 'school') return roundMoney(Math.max(0, Number(durationMinutes) || 0));
   const mode = rules.mode || '分钟';
   const minutes = Math.max(0, Number(durationMinutes) || 0);
   if (mode === '小时') {
