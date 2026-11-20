@@ -1,4 +1,3 @@
-import { state } from './ui.js';
 import { api, el, esc, toast, sheet, confirmDialog, ymd, download } from './core.js';
 import {
   addPaymentPatch,
@@ -19,6 +18,7 @@ const TYPE_LABEL = {
 const DEFAULT_RULES = {
   mode: '分钟',
   schoolHourlyRate: 40,
+  peerPerMinute: 1,
 };
 
 function currentMonth() {
@@ -522,9 +522,11 @@ export async function renderInvigilation(box) {
     let schoolPriceChanged = isNew;
     const oldPayNote = row && row.pay_note || '';
     const oldMeta = parseSettlementMeta(oldPayNote);
-    const selfName = String(state.user?.nickname || '').trim();
-    const teachers = row && initialType !== 'school' ? invigTeacherNames(row) : { original: '', actual: '本人' };
-    const inputName = value => value === '本人' ? selfName : value;
+    const teachers = row && initialType !== 'school' ? invigTeacherNames(row) : { original: '', actual: '' };
+    const inputName = value => value === '本人' ? '' : value;
+    const savedPeerRate = row?.pay_rule === '代监按分钟' ? row.unit_price : null;
+    const peerRate = Number(savedPeerRate ?? rules.peerPerMinute);
+    const peerRules = { ...rules, peerPerMinute: peerRate };
     let namedType = initialType === 'school' ? '替他人' : initialType;
     q('iv-original').value = inputName(teachers.original);
     q('iv-substitute').value = inputName(teachers.actual);
@@ -545,7 +547,8 @@ export async function renderInvigilation(box) {
       body.querySelectorAll('[data-kind]').forEach((button) => button.classList.toggle('on', button.dataset.kind === dutyType));
       q('iv-price-hint').textContent = school
         ? '可直接填写分钟数，或填写起止时间自动计算。默认标准可在「计价设置」修改。'
-        : '同事代监按 1 元/分钟计算。';
+        : '同事代监默认 ' + money(rules.peerPerMinute) + ' 元/分钟，可在计价设置中调整。'
+          + (peerRate !== Number(rules.peerPerMinute) ? '本场单价 ' + money(peerRate) + ' 元/分钟。' : '');
     };
     const syncDuration = () => {
       const duration = calcDurationMinutes(q('iv-start').value, q('iv-end').value);
@@ -560,7 +563,8 @@ export async function renderInvigilation(box) {
         q('iv-amount').value = q('iv-minutes').value && rate.value && rate.validity.valid
           ? calcInvigAmount('school', duration, { mode: '小时', schoolHourlyRate: rate.value }).toFixed(2) : '';
       } else {
-        q('iv-amount').value = calcInvigAmount(dutyType, duration, rules);
+        q('iv-amount').value = q('iv-minutes').value
+          ? calcInvigAmount(dutyType, duration, peerRules).toFixed(2) : '';
       }
     };
     body.querySelectorAll('[data-kind]').forEach((button) => {
@@ -644,7 +648,7 @@ export async function renderInvigilation(box) {
           : keepLegacyPrice ? row.pay_rule : '代监按分钟',
         unit_price: dutyType === 'school'
           ? (schoolPriceChanged ? Number(rateInput.value) : row?.unit_price)
-          : keepLegacyPrice ? row.unit_price : 1,
+          : keepLegacyPrice ? row.unit_price : peerRate,
         peer_name: dutyType === 'school' ? '' : peer,
         person: actualTeacher,
         orig_teacher: originalTeacher,
@@ -680,18 +684,19 @@ export async function renderInvigilation(box) {
     const current = { ...DEFAULT_RULES, ...(rules || {}) };
     const body = el('<div class="sheet-body iv-sheet-body">'
       + '<div class="field"><label class="field-label" for="iv-rule-hourly">学校默认发放标准（元/小时）</label><input class="input" id="iv-rule-hourly" type="number" min="0" step="0.01" value="' + esc(current.schoolHourlyRate) + '"></div>'
-      + '<div class="iv-form-hint">同事代监按 1 元/分钟计算。</div>'
+      + '<div class="field"><label class="field-label" for="iv-rule-peer-minute">同事代监默认单价（元/分钟）</label><input class="input" id="iv-rule-peer-minute" type="number" min="0" step="0.01" value="' + esc(current.peerPerMinute) + '"></div>'
       + '<div class="iv-form-hint">默认标准用于之后新增的监考记录。</div>'
       + '<div class="confirm-actions"><button class="btn ghost" id="iv-rule-cancel">取消</button><button class="btn primary" id="iv-rule-save">保存计价规则</button></div></div>');
     const modal = sheet({ title: '监考计价设置', body, wide: true });
     const hourly = body.querySelector('#iv-rule-hourly');
+    const perMinute = body.querySelector('#iv-rule-peer-minute');
     body.querySelector('#iv-rule-cancel').onclick = modal.close;
     const saveButton = body.querySelector('#iv-rule-save');
     saveButton.onclick = async () => {
-      if (!hourly.value || !hourly.validity.valid) return toast('请输入有效的计价标准', 'warn');
+      if (!hourly.value || !hourly.validity.valid || !perMinute.value || !perMinute.validity.valid) return toast('请输入有效的计价标准', 'warn');
       saveButton.disabled = true;
       try {
-        await api.patch('/invig/rules', { schoolHourlyRate: Number(hourly.value) });
+        await api.patch('/invig/rules', { schoolHourlyRate: Number(hourly.value), peerPerMinute: Number(perMinute.value) });
         modal.close();
         toast('计价规则已保存');
         reload();

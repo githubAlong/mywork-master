@@ -673,6 +673,7 @@ const DEFAULT_INVIG_RULES = {
   mode: '分钟',
   perMinute: 0.4,
   schoolHourlyRate: 40,
+  peerPerMinute: 1,
   perSession: 60,
   perHour: 30,
   peerPerSession: 50,
@@ -2979,8 +2980,13 @@ on('PATCH', '/invig/rules', ({ body }) => {
   if (hourly === '' || !Number.isFinite(Number(hourly)) || Number(hourly) < 0) {
     fail(422, '请输入有效的学校发放标准');
   }
+  const peerRate = body?.peerPerMinute ?? cur.peerPerMinute;
+  if (peerRate === '' || !Number.isFinite(Number(peerRate)) || Number(peerRate) < 0) {
+    fail(422, '请输入有效的同事代监每分钟单价');
+  }
   const next = {
     schoolHourlyRate: Number(hourly),
+    peerPerMinute: Number(peerRate),
     mode: ['时长', '分钟', '场次'].includes(body?.mode) ? body.mode : cur.mode,
     perMinute: Number(body?.perMinute ?? cur.perMinute) || 0,
     perSession: Number(body?.perSession ?? cur.perSession) || 0,

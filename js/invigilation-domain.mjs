@@ -156,7 +156,11 @@ export function calcDurationMinutes(startTime, endTime) {
 }
 
 export function calcInvigAmount(dutyType, durationMinutes, rules = {}) {
-  if (dutyType !== 'school') return roundMoney(Math.max(0, Number(durationMinutes) || 0));
+  if (dutyType !== 'school') {
+    const raw = Number(rules.peerPerMinute ?? 1);
+    const rate = Number.isFinite(raw) && raw >= 0 ? raw : 1;
+    return roundMoney(Math.max(0, Number(durationMinutes) || 0) * rate);
+  }
   const mode = rules.mode || '分钟';
   const minutes = Math.max(0, Number(durationMinutes) || 0);
   if (mode === '小时') {
