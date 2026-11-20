@@ -1,4 +1,4 @@
-import { api, classPicker, esc, el, sheet, saving, confirmDialog, toast, download } from './core.js';
+import { api, classPickerAuto, esc, el, sheet, saving, confirmDialog, toast, download } from './core.js';
 import { cleanPeriodTime, resolveTimetablePeriods } from './timetable-periods.mjs';
 
 /* 上课类型：预设 + 可手动输入。预设用来带默认课时费与支付状态；
@@ -502,19 +502,7 @@ export async function renderClassRecords(root) {
        年级框一起带上 —— 选完班级顺手把上课年级补上，不用再选一遍。
        两个来源都取不到时下拉自动隐藏，输入框照旧可以手填，不会卡住录入。 */
     const classInput = form.querySelector('#cr-class');
-    const gradeInput = form.querySelector('#cr-grade');
-    classPicker(classInput, { courses: [], qualified: true, gradeInput });
-    Promise.all([
-      api.get('/courses', null, { silent: true }).catch(() => []),
-      api.get('/rosters', null, { silent: true }).catch(() => []),
-    ]).then(([courses, rosters]) => {
-      if (!form.isConnected) return;
-      const rows = [
-        ...(Array.isArray(courses) ? courses : []),
-        ...(Array.isArray(rosters) ? rosters : []),
-      ];
-      classPicker(classInput, { courses: rows, qualified: true, gradeInput });
-    }).catch(() => {});
+    classPickerAuto(classInput, { gradeInput: form.querySelector('#cr-grade') });
 
     /* 时间不再单独显示，但节次仍按课表自动带出，保持 class_time 与历史数据兼容。 */
     let autoTime = initialTime.time;

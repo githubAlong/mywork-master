@@ -82,6 +82,34 @@ export function classPicker(input, { courses, extra = [], ...options } = {}) {
   }
 }
 
+/* 「挂上就行」版：课表（/courses）+ 班级名单（/rosters）合并当候选，
+   页面不用自己发两次请求。传 gradeInput 就选完班级顺手补齐年级。
+   两个来源都取不到时下拉自动隐藏，输入框本身照旧能手动输入。 */
+export function classPickerAuto(input, { gradeInput } = {}) {
+  if (!input) return;
+  classPicker(input, { courses: [], qualified: true, gradeInput });
+  Promise.all([
+    api.get('/courses', null, { silent: true }).catch(() => []),
+    api.get('/rosters', null, { silent: true }).catch(() => []),
+  ]).then(([courses, rosters]) => {
+    if (!input.isConnected) return;
+    const rows = [
+      ...(Array.isArray(courses) ? courses : []),
+      ...(Array.isArray(rosters) ? rosters : []),
+    ];
+    /* 已经有候选了，就把同字段的原生 datalist 摘掉：
+       两套下拉叠在同一个框里会冒出两个箭头，点哪个都可能落空。
+       候选为空时保留 datalist —— 那时它是唯一的选择入口。
+       有页面（课表课程弹层）是另发一个请求补历史候选、回来才 setAttribute('list')，
+       比这里晚一步，所以再延迟补一次清理。 */
+    if (rows.length) {
+      input.removeAttribute('list');
+      setTimeout(() => { if (input.isConnected) input.removeAttribute('list'); }, 500);
+    }
+    classPicker(input, { courses: rows, qualified: true, gradeInput });
+  }).catch(() => {});
+}
+
 /* ---------- 时间 / 日期 ---------- */
 export const pad2 = (n) => String(n).padStart(2, '0');
 export const WD_CN = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];

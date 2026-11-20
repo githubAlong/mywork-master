@@ -1,4 +1,4 @@
-import { api, el, esc, clsName, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath } from './core.js';
+import { api, el, esc, clsName, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath, classPickerAuto } from './core.js';
 import { printStatement } from './pdfprint.js';
 import { registerView, state, icon, go, pageHead, onViewLeave } from './ui.js';
 import { renderAttendance } from './attendance.js';
@@ -691,6 +691,8 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
   </div>`);
   const s = sheet({ title: isNew ? '记一节课' : '编辑上课记录', body, wide: true });
   const $ = (q) => body.querySelector(q);
+  /* 班级框直接给课表里的班级候选，选完不用再手打；取不到候选也能直接输入。 */
+  classPickerAuto($('#class'));
   let type = curType;
 
   const syncType = () => {
@@ -1589,6 +1591,8 @@ function courseEditor(row, reload) {
     }
   }).catch(() => {});
   const s = sheet({ title: isNew ? '添加课程' : '修改课程', body });
+  /* 班级候选来自课表与班级名单；选完顺手把年级补上，仍可手填。 */
+  classPickerAuto(body.querySelector('#class_name'), { gradeInput: body.querySelector('#grade') });
   body.querySelector('#cancel').onclick = s.close;
   body.querySelector('#del')?.addEventListener('click', async () => {
     if (await confirmDialog('删除这门课？')) { await api.del('/courses/' + row.id); s.close(); reload(); }
