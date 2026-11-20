@@ -189,7 +189,7 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 import { handle as localHandle } from './js/localapi.js';
 import { getStudentMaterials, materialEndpoint, passcodeHeaders } from './js/material-sharing.mjs';
 import { resolveEnvironmentProfile } from './js/environment-config.mjs';
-import { setActiveAccount } from './js/localdb.js';
+import { replaceMemFromDisk, setActiveAccount } from './js/localdb.js';
 import { taskImagePages, downloadCanvas } from './js/selfstudy-task-image.mjs';
 /* 同一个浏览器里演示时，学生端要读老师那份账号库。
    localdb 会记住最后登录的账号，这里先恢复，否则读到默认空库，
@@ -292,7 +292,7 @@ function visibleTabs() {
   const mods = data?.link?.modules || {};
   const on = (k) => Number(mods[k]) !== 0;
   const list = [];
-  if ((data?.selfstudyTasks || []).length) list.push('selfstudy');
+  if (on('selfstudy') && (data?.selfstudyTasks || []).length) list.push('selfstudy');
   if (data?.roll && data.roll.length) list.push('checkin');
   if (on('material')) list.push('material');
   if (on('roll')) list.push('roll');
@@ -419,11 +419,13 @@ function openTaskModal(t) {
 /* 学生端 60 秒轮询一次：任务或模块开关有变化才重绘，避免大屏上闪白 */
 setInterval(async () => {
   try {
+    replaceMemFromDisk();
     const d = await api(`/public/link/${code}`);
     const before = JSON.stringify(data?.selfstudyTasks || []);
     const after = JSON.stringify(d.selfstudyTasks || []);
     if (data) { data.selfstudyTasks = d.selfstudyTasks || []; if (d.link) data.link = d.link; }
     const next = visibleTabs();
+    if (!next.includes('selfstudy')) $('.stu-modal')?.remove();
     const tabsChanged = next.join(',') !== availTabs.join(',');
     availTabs = next;
     if (tabsChanged) paint();

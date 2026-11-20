@@ -3830,12 +3830,11 @@ on('DELETE', '/attachments/:id', ({ params }) => {
 });
 
 /* ---- 学生短链 ---- */
-/* 学生页「教材 / 点名 / 盲盒」三个模块的可见开关，存在 links.modules 上。
+/* 学生页各模块的可见开关，存在 links.modules 上。
    默认全开：老链接没有这个字段时，学生看到的还是原来的样子。 */
-const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin'];
+const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin', 'selfstudy'];
 function linkModules(l) {
-  let raw = {};
-  try { raw = JSON.parse(l?.modules || '{}') || {}; } catch { raw = {}; }
+  const raw = safeJSON(l?.modules, {}) || {};
   const out = {};
   for (const k of LINK_MODULE_KEYS) out[k] = Number(raw[k]) === 0 ? 0 : 1;
   return out;
@@ -3866,7 +3865,7 @@ on('PATCH', '/links/:id', ({ params, body }) => {
   for (const k of ['title', 'enabled']) if (k in (body || {})) l[k] = body[k];
   if (body?.grades) l.grades = JSON.stringify(body.grades);
   if (body?.modules && typeof body.modules === 'object') {
-    l.modules = JSON.stringify(linkModules({ modules: JSON.stringify(body.modules) }));
+    l.modules = JSON.stringify(linkModules({ modules: { ...linkModules(l), ...body.modules } }));
   }
   l.updated_at = nowISO();
   save();
@@ -4044,7 +4043,7 @@ on('GET', '/public/link/:code', ({ params, query }) => {
     link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
     materials: mats, categories: cats, rosters, classes: publicClassOptions(grades), punishments: punish, roll, date,
-    selfstudyTasks: publicSelfstudyTasks(),
+    selfstudyTasks: publicSelfstudyTasks(l),
     misconduct, bulletin,
   };
 });
@@ -4075,7 +4074,8 @@ function sixthPeriodEnd() {
 
 /* 学生端可见的自习任务：只下发已发布的，其余（班级匹配、PC 开关）由学生端判定。
    这样总开关一关，下一次轮询拿到的就是空数组，学生端立即进入空态。 */
-function publicSelfstudyTasks() {
+function publicSelfstudyTasks(link) {
+  if (linkModules(link).selfstudy === 0) return [];
   const periods = rowsOf('periods');
   const endTimeOf = (period) => {
     const no = String(period || '').replace(/[^\d]/g, '');
@@ -4100,7 +4100,7 @@ function publicSelfstudyTasks() {
 on('GET', '/public/link/:code/selfstudy', ({ params }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);
   if (!l) fail(404, '链接不存在或已关闭');
-  return { tasks: publicSelfstudyTasks() };
+  return { tasks: publicSelfstudyTasks(l) };
 });
 on('GET', '/public/link/:code/file/:id', ({ params, query }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);

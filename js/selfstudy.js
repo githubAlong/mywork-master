@@ -12,6 +12,7 @@ import { registerView, icon, pageHead, state } from './ui.js';
 import { taskImagePages, canvasToDataUrl, downloadCanvas } from './selfstudy-task-image.mjs';
 import { cleanPeriodTime, normalizeTimetablePeriods, completeTimetablePeriods } from './timetable-periods.mjs';
 import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.mjs';
+import { syncMaterialSharing } from './material-sharing.mjs';
 
 /* 单独占一个视图名还保留着，是为了 #/selfstudy 这种老链接能落到正确的地方；
    实际渲染走 render() 里的 translate，这里只做兜底。 */
@@ -536,6 +537,7 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
     api.get('/rosters').catch(() => []),
   ]);
   const link = links[0];
+  let visible = link?.modules?.selfstudy !== 0;
   const open = sessions.filter((s) => s.status === 'open');
   const today = sessions.filter((s) => String(s.date || '') === ymd(new Date()));
   box.innerHTML = `
@@ -547,9 +549,18 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
              <button class="btn ghost sm" id="ss-copy">${icon('copy', 14)} 复制链接</button>
              <a class="btn ghost sm" href="${esc(studentUrl(link.code, 'tab=selfstudy'))}" target="_blank" rel="noopener">打开看看</a>
            </div>
-           <div class="field-hint" style="margin-top:8px">学生打开这个链接，发布任务后顶部会出现「自习」页；没有进行中的签到时，页面会显示「现在没有在进行的签到」。</div>`
+           <div class="field-hint" style="margin-top:8px">开启学生端显示并发布任务后，学生打开链接即可在「自习」页查看。</div>`
       : `<div class="empty" style="padding:18px">还没有生成学生链接。<button class="btn primary sm" id="ss-mklink">生成一条</button></div>`}
     </div>
+    ${entryOnly && link ? `<div class="card card-pad" style="margin-bottom:14px">
+      <div class="ssm-card-title">是否在学生端显示</div>
+      <div class="ssm-pc-row">
+        <button type="button" class="ssm-switch ${visible ? 'on' : ''}" id="ss-visible"
+                role="switch" aria-label="在学生端显示自习" aria-checked="${visible}"></button>
+        <span class="ssm-pc-text ${visible ? 'on' : ''}" id="ss-visible-text">${visible ? '开启' : '关闭'}</span>
+      </div>
+      <div class="ssm-pc-note">关闭后隐藏学生端的「自习」页签。重新开启会恢复已发布的任务。</div>
+    </div>` : ''}
     ${entryOnly ? '' : `
     <div class="ss-stats mod-stats">
       <div class="card card-pad ss-stat"><div class="ss-k">进行中</div>
@@ -580,7 +591,33 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
     await api.post('/links', { title: '班级资料站' }).catch(() => { });
     renderStudentSelfstudy(box, entryOnly);
   });
-  if (entryOnly) return;
+  if (entryOnly) {
+    const btn = box.querySelector('#ss-visible');
+    btn?.addEventListener('click', async () => {
+      const next = !visible;
+      const label = box.querySelector('#ss-visible-text');
+      btn.disabled = true;
+      try {
+        await api.patch('/links/' + link.id, { modules: { selfstudy: next ? 1 : 0 } });
+        visible = next;
+        btn.setAttribute('aria-checked', String(next));
+        btn.classList.toggle('on', next);
+        label.classList.toggle('on', next);
+        label.textContent = next ? '开启' : '关闭';
+        try {
+          await syncMaterialSharing();
+          if (navigator.onLine === false) toast('已保存到本机，联网后同步到学生端', 'warn');
+        } catch (error) {
+          toast('已保存到本机，学生端同步失败。' + (error.message || '请稍后重试'), 'err');
+        }
+      } catch (error) {
+        toast(error.message || '保存失败，请重试', 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    return;
+  }
   box.querySelector('#ss-open')?.addEventListener('click', () => openRollDialog(rosters, () => renderStudentSelfstudy(box)));
 
   /* 场次列表 */

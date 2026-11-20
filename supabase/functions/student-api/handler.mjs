@@ -16,10 +16,9 @@ function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin'];
+const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin', 'selfstudy'];
 function linkModules(l) {
-  let raw = {};
-  try { raw = JSON.parse(l?.modules || '{}') || {}; } catch { raw = {}; }
+  const raw = safeJSON(l?.modules, {}) || {};
   const out = {};
   for (const k of LINK_MODULE_KEYS) out[k] = Number(raw[k]) === 0 ? 0 : 1;
   return out;
@@ -120,6 +119,7 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
   /* GET /public/link/:code —— 主接口 */
   async function handleMain(code, query) {
     const { payload, link } = await lookupPayload(code);
+    const modules = linkModules(link);
     const grades = safeJSON(link.grades, []);
     /* 教材列表的过滤规则与 material-sharing 保持一致：学生从哪个入口拿到的都是同一批资料，
        不会出现「列表里有、点开说不存在」。口令只折算成一个 locked，原文不下发。 */
@@ -152,8 +152,8 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
     /* 自习任务：和 localapi.js 的 publicSelfstudyTasks 保持一致的筛选逻辑 */
     const deadlineFallback = computeDeadline(payload);
     const u = payload.meta?.user || {};
-    const selfstudyTasks = (payload.selfstudy_tasks || [])
-      .filter((t) => t.status === 'published')
+    const selfstudyTasks = modules.selfstudy === 0 ? [] : (payload.selfstudy_tasks || [])
+      .filter((t) => live(t) && t.status === 'published')
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || (b.id - a.id))
       .map((t) => ({
         id: t.id, title: t.title, class_scope: t.class_scope, class_label: t.class_label,
@@ -186,7 +186,7 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
       .sort((a, b) => a.grade.localeCompare(b.grade, 'zh-Hans-CN') || a.class_name.localeCompare(b.class_name, 'zh-Hans-CN'));
 
     return json({
-      link: { code: link.code, title: link.title, grades, modules: linkModules(link) },
+      link: { code: link.code, title: link.title, grades, modules },
       teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
       materials: mats, categories: cats, rosters, classes, punishments: punish, roll, date,
       selfstudyTasks, misconduct, bulletin,

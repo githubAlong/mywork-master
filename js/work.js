@@ -2712,10 +2712,8 @@ async function renderStudentModule(box, key) {
     const next = !modOn;
     btn.disabled = true;
     try {
-      const modules = { ...(link.modules || {}), [modKey]: next ? 1 : 0 };
-      await api.patch('/links/' + link.id, { modules });
+      await api.patch('/links/' + link.id, { modules: { [modKey]: next ? 1 : 0 } });
       modOn = next;
-      link.modules = modules;
       btn.classList.toggle('on', next);
       txt.textContent = next ? '开启' : '关闭';
       txt.classList.toggle('on', next);
