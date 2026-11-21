@@ -845,6 +845,7 @@ function attTablesList(q = {}) {
     .filter((t) => (!q.kind || tableTypeOf(t) === q.kind)
       && (!q.sheet_type || tableTypeOf(t) === q.sheet_type)
       && (!q.sheet_date || String(t.sheet_date || '') === String(q.sheet_date))
+      && (!q.month || String(t.month || t.sheet_date || '').slice(0, 7) === String(q.month))
       && (!q.grade || t.grade === q.grade))
     .sort((a, b) => String(b.sheet_date || '').localeCompare(String(a.sheet_date || '')) || b.id - a.id);
   return out.map((t) => {
@@ -873,6 +874,7 @@ function attTablesList(q = {}) {
       row_count: rows.length,
       subjects,
       summary: { leave: leaveCount, leave_names: leaveNames.slice(0, 6), none: unchecked },
+      ...(q.month && q.include_rows === '1' ? { rows: rows.map(attRowShape) } : {}),
     };
   });
 }
@@ -2480,6 +2482,8 @@ on('PATCH', '/attendance/:id', ({ params, body }) => {
 });
 /* 确认生成：点一下才算正式生效（PRD FR-TABLE-4）。
    确认之后仍然可以改，改完再点一次「重新确认」覆盖（FR-TABLE-5）。 */
+const separateWorkspaceResult = key => /^(?:leave:\d+|summary(?::month)?)$/.test(key);
+
 function workspaceConfirmation(meta, body) {
   const snapshot = body?.workspace_snapshot;
   if (snapshot && /^\d+$/.test(String(snapshot.period)) && Array.isArray(snapshot.rows)) {
@@ -2488,7 +2492,7 @@ function workspaceConfirmation(meta, body) {
     } };
   }
   const result = body?.workspace_result;
-  if (!result || !/^(?:(seat|class|research|leave):\d+|summary)$/.test(result.key)
+  if (!result || !(separateWorkspaceResult(result.key) || /^(seat|class|research):\d+$/.test(result.key))
     || !Array.isArray(result.rows)) return meta;
   return { ...meta, workspace_results: {
     ...meta.workspace_results, [result.key]: { rows: result.rows, grid: result.grid, confirmed_at: nowISO() },
@@ -2501,7 +2505,7 @@ on('POST', '/attendance/:id/confirm', ({ params, body }) => {
     fail(409, 'WB_ATTENDANCE_CONFLICT: 表头已被另一台设备修改');
   }
   const meta = workspaceConfirmation(safeJSON(t.meta, {}), body);
-  if (/^(?:leave:\d+|summary)$/.test(body?.workspace_result?.key)) {
+  if (separateWorkspaceResult(body?.workspace_result?.key)) {
     t.meta = JSON.stringify(meta);
     t.updated_at = nowISO();
     save();
@@ -4885,7 +4889,7 @@ async function cloudRoute(method, clean, query, body) {
     /* ---- 列表：/attendance ---- */
     if (method === 'GET' && !second) {
       const { tables, rows } = await m.listAttendance(query);
-      return attListShape(tables, rows);
+      return attListShape(tables, rows, query.month && query.include_rows === '1');
     }
 
     /* ---- 新建：/attendance ---- */
@@ -4964,7 +4968,7 @@ async function cloudRoute(method, clean, query, body) {
       const t = await m.getRow('attendance_tables', id);
       if (!t) throw new Error('考勤表不存在');
       const prevM = safeJSON(t.meta, {});
-      if (/^(?:leave:\d+|summary)$/.test(body?.workspace_result?.key)) {
+      if (separateWorkspaceResult(body?.workspace_result?.key)) {
         const meta = workspaceConfirmation(prevM, body);
         const row = await m.updateAttendanceTable(id, { meta }, body.expected_updated_at);
         return { ...row, columns: attCols(row), meta };
@@ -5107,7 +5111,7 @@ function attConfirmState(meta) {
   return num(m.confirm_dirty) ? 'modified' : 'confirmed';
 }
 
-function attListShape(tables, rows) {
+function attListShape(tables, rows, includeRows = false) {
   const byTable = new Map();
   for (const r of rows) {
     const k = String(r.table_id);
@@ -5137,6 +5141,7 @@ function attListShape(tables, rows) {
       row_count: mine.length,
       subjects,
       summary: { leave: leaveCount, leave_names: leaveNames.slice(0, 6), none: unchecked },
+      ...(includeRows ? { rows: mine.map(attRowShape) } : {}),
     };
   }).sort((a, b) => String(b.sheet_date || '').localeCompare(String(a.sheet_date || ''))
     || Number(b.id) - Number(a.id));

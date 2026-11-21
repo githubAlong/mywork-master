@@ -7,12 +7,14 @@ import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } 
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
+import { keeperForDailySlot } from './attendance-domain.mjs';
 import {
   DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS, buildAttendanceExportGrid, parseLeaveDuration, formatLeaveDuration,
   nextTriState, activeLeavesFor, deriveRosterState, calculateDailySummary,
   matchesAttendancePeriod, deriveTableGridState, updateTeacherGrid, mergeTeacherGridRows, matchesGridTeacher, paginateExportGrid,
   splitAttendanceExportGrid,
-  SUMMARY_COUNT_FIELDS, attendanceSummaryTotals, updateAttendanceSummaryRow, importAttendanceSummary,
+  SUMMARY_COUNT_FIELDS, attendanceSummaryTotals, attendanceSummaryMonthBounds, summarizeAttendanceMonth,
+  updateAttendanceSummaryRow, importAttendanceSummary,
 } from './attendance-prd-domain.mjs';
 
 const TABS = [
@@ -79,13 +81,19 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   let timetableSettings = {}, timetableCourses = [], timetablePeriods = [], periodTimeEdits = {};
   let showAddTeacher = false;
   let generating = false, editingSheet = '';
+  let summaryMode = 'day', summaryMonth = date.slice(0,7), monthly = null;
   const summaryDrafts = new Map();
-  const summaryDraftKey = () => grade+'|'+date;
-  const resultKey = type => type==='summary' ? type : type+':'+period;
+  const isMonthlySummary = type => type==='summary' && summaryMode==='month';
+  const monthKey = () => grade+'|'+summaryMonth;
+  const summaryDraftKey = () => isMonthlySummary('summary') ? monthKey() : grade+'|'+date;
+  const resultKey = type => isMonthlySummary(type) ? 'summary:month' : type==='summary' ? type : type+':'+period;
   // 请假与汇总没有独立的工作表表头，随当前年级和日期的坐班表同步。
   const resultTableType = type => TYPE[type] || 'seat';
-  const confirmedResult = type => objectValue(details[resultTableType(type)]?.meta).workspace_results?.[resultKey(type)];
-  const editKey = type => summaryDraftKey()+'|'+resultKey(type);
+  const confirmedResult = type => {
+    const table=isMonthlySummary(type) ? (monthly?.key===monthKey()?monthly.table:null) : details[resultTableType(type)];
+    return objectValue(table?.meta).workspace_results?.[resultKey(type)];
+  };
+  const editKey = type => (type==='summary' ? summaryDraftKey() : grade+'|'+date)+'|'+resultKey(type);
   const isEditing = type => editingSheet===editKey(type);
   const editConfirmedSheet = () => {
     if (confirmedResult(tab)) editingSheet=editKey(tab);
@@ -141,6 +149,25 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     return edited ? [edited.start || start, edited.end || end] : [start,end];
   };
   let busy = false;
+  const loadMonth = async () => {
+    const state = {key:monthKey(), loading:true};
+    const month=summaryMonth, selectedGrade=grade;
+    const roster=teachers, leaves=leaveRecords;
+    monthly=state;
+    paint();
+    try {
+      const tables = await api.get('/attendance',{grade:selectedGrade,month,include_rows:'1'});
+      if(monthly!==state) return;
+      const {start} = attendanceSummaryMonthBounds(month);
+      state.table=keeperForDailySlot(tables,start,selectedGrade,'seat');
+      state.rows=summarizeAttendanceMonth({month,grade:selectedGrade,teachers:roster,tables,leaveRecords:leaves});
+    } catch(error) {
+      state.error=attendanceErrorText(error);
+    } finally {
+      state.loading=false;
+      if(monthly===state && tab==='summary' && isMonthlySummary(tab) && state.key===monthKey())paint();
+    }
+  };
   const load = async () => {
     if (busy) return; busy = true;
     try {
@@ -164,7 +191,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const t = tables.find(x => (x.sheet_type || x.kind) === type && !x.deleted_at);
         if (t) details[type] = await api.get('/attendance/'+t.id);
       }
-      paint();
+      if(isMonthlySummary(tab))await loadMonth();
+      else paint();
     } catch(e) {
       root.innerHTML = '<div class="att-work-error">'+esc(e.message || '考勤数据加载失败')+'</div>';
     } finally { busy = false; }
@@ -531,6 +559,20 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     autoSaveTimer=setTimeout(()=>{void flushBeforeSwitch();},350);
   };
   const confirmTable = async (type, result) => {
+    if(isMonthlySummary(type)){
+      const {start}=attendanceSummaryMonthBounds(summaryMonth);
+      let table=monthly.table;
+      if(!table){
+        const created=await createSlot({date:start,grade,type:'seat',period:'0'});
+        table=await api.get('/attendance/'+created.id);
+      }
+      const header=await api.post('/attendance/'+table.id+'/confirm',{
+        expected_updated_at:table.updated_at||'',workspace_result:{key:resultKey(type),...result},
+      });
+      monthly.table=syncHeader(null,table,header);
+      if(String(details.seat?.id)===String(table.id))syncHeader('seat',details.seat,header);
+      return;
+    }
     const tableType=resultTableType(type);
     const table=details[tableType] || await getTable(tableType,{seedClass:false});
     const body={expected_updated_at:table.updated_at||'',workspace_result:{key:resultKey(type),...result}};
@@ -559,7 +601,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     if(type==='leave')leaveOnlyDate=date;
     editingSheet='';
     paint();
-    toast(SHEET_LABELS[type]+'已确认生成 · '+grade+' · '+date,'ok',4000);
+    toast(SHEET_LABELS[type]+'已确认生成 · '+grade+' · '+(isMonthlySummary(type)?summaryMonth:date),'ok',4000);
   };
   const teacherSubjects = () => [...new Set([...teachers, ...(tab === 'leave' ? leaveRecords : [])].map(item=>String(item.subject||'').trim()).filter(Boolean))].sort();
   /* 每个学科有多少位教师：科目下拉里直接带上人数，选之前就知道要记多少人。 */
@@ -785,12 +827,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     includeUnlisted: true,
     worksheetEntries: type==='class'||type==='research' ? entries : null,
     summaryRows: type==='summary' ? entries : null,
+    summaryMonth: isMonthlySummary(type) ? summaryMonth : '',
   });
   const exportRoster = (format) => {
     const exportType = currentExportType();
     const typeLabel = SHEET_LABELS[exportType] || '花名册';
-    const periodText = period===0||exportType==='summary'?'全天':'第'+period+'节';
-    const fileBase=(grade||'教师')+typeLabel+'-'+date+'-'+periodText;
+    const periodText = isMonthlySummary(exportType) ? '月汇总'
+      : exportType==='summary' ? '日汇总' : period===0 ? '全天' : '第'+period+'节';
+    const fileBase=(grade||'教师')+typeLabel+'-'+(isMonthlySummary(exportType)?summaryMonth:date)+'-'+periodText;
     const watermarkBox=root.querySelector('#aprd-export-watermark');
     const watermarkInput=root.querySelector('#aprd-export-watermark-text');
     watermarkOn=!!watermarkBox?.checked;
@@ -800,7 +844,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const entries = exportType==='summary' ? summaryRows() : exportType==='leave'
       ? (result?.rows ?? leavesForSelection())
       : TYPE[exportType] && worksheetEntries(exportType,isEditing(exportType));
-    const grid = result?.grid || sheetExportGrid(exportType,entries);
+    const grid = (exportType==='summary'?null:result?.grid) || sheetExportGrid(exportType,entries);
     const {headings, headers, rows} = splitAttendanceExportGrid(grid);
     const rowCount = rows.length;
     if(!rowCount){toast('当前表格没有符合条件的记录','warn');return;}
@@ -1418,9 +1462,18 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const calculateSummaryRows = () => calculateDailySummary({teachers,seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],
       researchRows:details.research?.rows||[],leaveRecords:activeLeavesFor(leaveRecords,date,grade),date}).rows;
-  const summaryRows = () => summaryDrafts.get(summaryDraftKey()) ?? confirmedResult('summary')?.rows ?? calculateSummaryRows();
+  const summaryBaseRows = () => isMonthlySummary('summary') ? monthly?.rows || [] : calculateSummaryRows();
+  const summaryRows = () => summaryDrafts.get(summaryDraftKey()) ?? confirmedResult('summary')?.rows ?? summaryBaseRows();
   const summaryDuration = row => formatLeaveDuration({days:row.leaveDays,hours:row.leaveHours});
   const summaryHtml = () => {
+    const byMonth=isMonthlySummary('summary');
+    const rangeSelect='<label>统计范围 <select id="aprd-summary-mode"><option value="day"'+(byMonth?'':' selected')+'>按日</option>'
+      +'<option value="month"'+(byMonth?' selected':'')+'>按月</option></select></label>';
+    if(byMonth && (monthly?.key!==monthKey() || monthly.loading || monthly.error)){
+      const message=monthly?.key===monthKey() ? monthly.error : '';
+      return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+'</div></div>'
+        +'<div class="aprd-empty" role="status">'+(message?esc(message)+' <button type="button" class="aprd-op" data-summary-retry>重新加载</button>':'正在加载月汇总…')+'</div>';
+    }
     const editing=isEditing('summary');
     const showActions=editing || !!confirmedResult('summary');
     const visible=summaryRows().map((row,index)=>({row,index})).filter(({row})=>matchesSheetFilter(row));
@@ -1428,11 +1481,13 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const kpis=[['应到教师',s.expectedTeachers+'人'],['坐班次数',s.seatPresent],['上课次数',s.classes],['听课人次',s.listens],['请假人数',s.leavePeople+'人']];
     const rows=visible.map(({row:r,index})=>'<tr><td>'+r.serial+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.subject)+'</td>'
       +SUMMARY_COUNT_FIELDS.map(([key])=>'<td>'+esc(r[key])+'</td>').join('')
-      +'<td>'+esc(summaryDuration(r))+'</td><td>'+esc(r.overall)+'</td>'
+      +'<td>'+esc(summaryDuration(r))+'</td>'
       +(showActions?'<td><button type="button" class="aprd-op" data-summary-edit-row="'+index+'">编辑</button></td>':'')+'</tr>').join('');
-    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()
-      +'<button type="button" class="aprd-op" data-summary-import>批量导入</button>'+exportMenuHtml(teachers.length)
+    const range = byMonth ? attendanceSummaryMonthBounds(summaryMonth) : null;
+    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+teacherFiltersHtml()
+      +'<button type="button" class="aprd-op" data-summary-import>批量导入</button>'+exportMenuHtml(summaryRows().length)
       +sheetButtonsHtml('summary')+(editing?'<button type="button" class="aprd-op" data-summary-recalculate>按考勤重新统计</button>':'')
+      +'<span class="aprd-filter-count">'+(range?range.start+' 至 '+range.end:date)+'</span>'
       +'</div></div><div class="aprd-kpis">'+kpis.map(([label,value])=>'<div class="aprd-kpi"><span>'+label+'</span><b>'+value+'</b></div>').join('')+'</div>'
       +'<div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.summary.map(c=>'<th>'+c+'</th>').join('')
       +(showActions?'<th>操作</th>':'')+'</tr></thead><tbody>'+(rows||'<tr><td class="aprd-empty" colspan="'+(ATTENDANCE_COLUMNS.summary.length+Number(showActions))+'">暂无统计记录</td></tr>')+'</tbody></table></div>';
@@ -1472,27 +1527,50 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const renderPage = () => {
     const content = ['roster','seat','class','research'].includes(tab)?rosterHtml(tab):tab==='leave'?leaveHtml():summaryHtml();
     const periodRange = resolvePeriodRange(period);
+    const byMonth=isMonthlySummary(tab);
     root.innerHTML='<div class="attendance-prd">'
       +'<header class="aprd-head"><div class="aprd-head-title"><h2>考勤管理</h2><p>按年级独立管理坐班、教研与上课记录；完成后人工确认生效</p></div>'
       +'<span class="aprd-live"><i></i>实时</span></header>'
       +'<div class="aprd-grade">'+grades.map(g=>'<button data-grade-tab="'+esc(g)+'" class="'+(g===grade?'on':'')+'">'+esc(g)+'</button>').join('')+'</div>'
       +'<div class="aprd-filter"><div class="aprd-filter-fields">'
-      +'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
+      +(byMonth?'<label>月份 <input type="month" id="aprd-summary-month" value="'+summaryMonth+'"></label>'
+      :'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
       +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label>'
-      +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>'
+      +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>')
       +'</div><div class="aprd-filter-actions">'
       +'<button type="button" class="aprd-voice" data-workspace-voice>'+icon('speak',15)+'语音登记</button></div></div>'
       +'<section class="aprd-card"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
       +'<div class="aprd-panel">'+content+'</div></section></div>';
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=async()=>{
-      if(generating || !await flushBeforeSwitch())return;
+      if(busy || generating || !await flushBeforeSwitch())return;
       tab=b.dataset.tab;
-      search='';subject='';paint();
+      search='';subject='';
+      if(isMonthlySummary(tab))await loadMonth();
+      else paint();
     });
     root.querySelector('[data-leave-show-all]')?.addEventListener('click',()=>{leaveOnlyDate='';paint();});
-    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{if(generating||!await flushBeforeSwitch())return;grade=b.dataset.gradeTab;leaveOnlyDate=date;await load();});
-    root.querySelector('#aprd-date').onchange=async e=>{if(generating||!await flushBeforeSwitch()){e.target.value=date;return;}date=e.target.value;leaveOnlyDate=date;await load();};
-    root.querySelector('#aprd-period').onchange=async e=>{if(generating||!await flushBeforeSwitch()){e.target.value=String(period);return;}period=Number(e.target.value);paint();};
+    root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{if(busy||generating||!await flushBeforeSwitch())return;grade=b.dataset.gradeTab;leaveOnlyDate=date;await load();});
+    const dateInput=root.querySelector('#aprd-date');
+    if(dateInput)dateInput.onchange=async e=>{
+      if(busy||generating||!e.target.value||!await flushBeforeSwitch()){e.target.value=date;return;}
+      date=e.target.value;summaryMonth=date.slice(0,7);leaveOnlyDate=date;await load();
+    };
+    const periodInput=root.querySelector('#aprd-period');
+    if(periodInput)periodInput.onchange=async e=>{if(busy||generating||!await flushBeforeSwitch()){e.target.value=String(period);return;}period=Number(e.target.value);paint();};
+    const summaryModeInput=root.querySelector('#aprd-summary-mode');
+    if(summaryModeInput)summaryModeInput.onchange=async e=>{
+      if(busy||generating){e.target.value=summaryMode;return;}
+      summaryMode=e.target.value==='month'?'month':'day';
+      if(isMonthlySummary(tab))await loadMonth();
+      else paint();
+    };
+    const monthInput=root.querySelector('#aprd-summary-month');
+    if(monthInput)monthInput.onchange=async e=>{
+      if(busy||generating||!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(e.target.value)){e.target.value=summaryMonth;return;}
+      summaryMonth=e.target.value;
+      await loadMonth();
+    };
+    root.querySelector('[data-summary-retry]')?.addEventListener('click',loadMonth);
     const rememberPeriodTime = () => {
       const start=root.querySelector('#aprd-start')?.value||'';
       const end=root.querySelector('#aprd-end')?.value||'';
@@ -1520,16 +1598,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     root.querySelector('[data-summary-import]')?.addEventListener('click',()=>{if(!generating)openSummaryImport();});
     root.querySelector('[data-summary-recalculate]')?.addEventListener('click',async()=>{
       const scope=summaryDraftKey();
-      if(generating || !await confirmDialog('按当天考勤重新统计并替换当前汇总草稿？'))return;
+      if(generating || !await confirmDialog('按所选'+(isMonthlySummary('summary')?'月份':'日期')+'的考勤重新统计并替换当前汇总草稿？'))return;
       if(tab!=='summary' || scope!==summaryDraftKey())return;
-      summaryDrafts.set(scope,calculateSummaryRows());
+      summaryDrafts.set(scope,summaryBaseRows());
       paint();
     });
     root.querySelectorAll('[data-summary-edit-row]').forEach(button=>button.onclick=()=>{
       if(generating)return;
       const index=Number(button.dataset.summaryEditRow), row=summaryRows()[index], scope=summaryDraftKey();
       const fields=[...SUMMARY_COUNT_FIELDS.map(([key,label])=>({key,label,type:'number',min:0,step:1,required:true})),
-        {key:'leaveDuration',label:'请假时长'},{key:'overall',label:'综合状态'}];
+        {key:'leaveDuration',label:'请假时长'}];
       openEditor('编辑汇总统计 · '+row.name,fields,{...row,leaveDuration:summaryDuration(row)},async values=>{
         if(scope!==summaryDraftKey() || tab!=='summary')return;
         const rows=summaryRows().slice();

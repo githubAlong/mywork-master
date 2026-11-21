@@ -5,6 +5,7 @@ import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
   deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration, buildAttendanceExportGrid,
   deriveTableGridState, paginateExportGrid, splitAttendanceExportGrid, importAttendanceSummary, attendanceSummaryTotals,
+  summarizeAttendanceMonth, attendanceSummaryMonthBounds,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -13,7 +14,7 @@ test('PRD 固定六页签字段顺序', () => {
     assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
   }
   assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长','综合状态']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
 });
 
 test('三态循环保持未登记、在岗、未在岗语义', () => {
@@ -27,19 +28,46 @@ test('批量导入汇总按姓名和学科匹配，验证整批数据并保留�
     { name:'李老师', subject:'语文', seatPresent:1, classes:2, listens:0, research:0, leaveDays:0, leaveHours:0 },
     { name:'李老师', subject:'数学', seatPresent:0, classes:0, listens:1, research:0, leaveDays:0, leaveHours:0 },
   ];
-  const headers = ['姓名','学科','上课','听课','请假时长'];
-  const valid = ['李老师','数学','3','','0.5天 / 2小时'];
+  const headers = ['姓名','学科','上课','听课','请假时长','综合状态'];
+  const valid = ['李老师','数学','3','','0.5天 / 2小时','已登记'];
   const imported = importAttendanceSummary([['汇总统计表'],headers,valid,['','','','','导出时间：2026-11-21']],rows);
   assert.equal(imported.count,1);
   assert.deepEqual(imported.rows[0],rows[0]);
   assert.equal(imported.rows[1].listens,1);
   assert.equal(imported.rows[1].leaveDays,0.5);
   assert.equal(imported.rows[1].leaveHours,2);
+  assert.equal(imported.rows[1].overall,undefined);
   assert.equal(attendanceSummaryTotals(imported.rows).classes,5);
   assert.equal(attendanceSummaryTotals(imported.rows).leavePeople,1);
   assert.throws(()=>importAttendanceSummary([headers,valid,['李老师','语文','-1']],rows),/第 3 行.*非负整数/);
   assert.throws(()=>importAttendanceSummary([headers,['李老师','','1']],rows),/无法唯一匹配/);
   assert.equal(rows[1].classes,0);
+});
+
+test('月汇总按日期和年级累计，优先取确认过的日表，跨月请假按覆盖日期分摊', () => {
+  const teachers=[{id:1,name:'李老师',subject:'语文'},{id:2,name:'王老师',subject:'数学'}];
+  const leaveRecords=[{name:'李老师',subject:'语文',grade:'高一',start_date:'2026-10-31',end_date:'2026-11-02',days:3}];
+  const tables=[
+    {id:1,sheet_date:'2026-11-01',grade:'高一',sheet_type:'seat',meta:{workspace_results:{summary:{
+      rows:[{name:'李老师',subject:'语文',seatPresent:2,classes:3,listens:0,research:0,leaveDays:3,overall:'已登记'}],
+    }}},rows:[{teacher:'李老师',subject:'语文',data:{__teacherGrid:{0:{sit:'y'}}}}]},
+    {id:2,sheet_date:'2026-11-02',grade:'高一',sheet_type:'class',rows:[{
+      teacher:'李老师',subject:'语文',data:{__classRecord:{period:1,status:'y'}},
+    }]},
+    {id:3,sheet_date:'2026-10-31',grade:'高一',sheet_type:'class',rows:[{
+      teacher:'李老师',subject:'语文',data:{__classRecord:{period:1,status:'y'}},
+    }]},
+    {id:4,sheet_date:'2026-11-02',grade:'高二',sheet_type:'class',rows:[{
+      teacher:'李老师',subject:'语文',data:{__classRecord:{period:1,status:'y'}},
+    }]},
+  ];
+  const summaryRows=summarizeAttendanceMonth({month:'2026-11',grade:'高一',teachers,tables,leaveRecords});
+  assert.deepEqual(summaryRows.map(row=>[row.name,row.seatPresent,row.classes,row.leaveDays]),
+    [['李老师',2,4,2],['王老师',0,0,0]]);
+  assert.equal(attendanceSummaryMonthBounds('2024-02').end,'2024-02-29');
+  const grid=buildAttendanceExportGrid({type:'summary',grade:'高一',summaryMonth:'2026-11',summaryRows});
+  assert.equal(grid[1][0],'月汇总 · 2026-11-01 至 2026-11-30');
+  assert.deepEqual(grid[4],[1,'李老师','语文',2,4,0,0,'2天']);
 });
 
 test('请假区间按开始与结束日期覆盖当前日期', () => {
@@ -204,9 +232,9 @@ test('四类导出都保留全量名单并显示对应状态（11-12 新裁决�
   const summary = buildAttendanceExportGrid({...common,type:'summary'});
   assert.equal(summary.length,7);
   assert.match(summary[0][0],/汇总统计表/);
-  assert.match(summary[1][0],/2026-11-11 .*第1节（08:00—08:45）/);
+  assert.match(summary[1][0],/^日汇总 · 2026-11-11 /);
   assert.ok(!/应到/.test(summary[2][0]),'汇总表标题不应再出现应到');
-  assert.deepEqual(summary[3],['序号','姓名','学科','坐班','上课','听课','教研','请假时长','综合状态']);
+  assert.deepEqual(summary[3],['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
   assert.equal(summary[4][1],'李老师');
 });
 

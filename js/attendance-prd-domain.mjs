@@ -1,3 +1,5 @@
+import { keeperForDailySlot } from './attendance-domain.mjs';
+
 export const DEFAULT_PERIODS = [
   { no: 1, label: '第1节', start: '08:00', end: '08:40' },
   { no: 2, label: '第2节', start: '08:50', end: '09:30' },
@@ -20,7 +22,7 @@ export const ATTENDANCE_COLUMNS = {
   class: TEACHER_COLUMNS,
   research: TEACHER_COLUMNS,
   leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
-  summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长', '综合状态'],
+  summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长'],
 };
 
 export function nextTriState(value) {
@@ -156,6 +158,7 @@ function calculateLegacyDailySummary({
       : hasSeatAbsence ? '未坐班' : registeredSeat.length ? '正常' : '未登记';
     return {
       serial: index + 1,
+      teacherId: teacher.id,
       name,
       subject: teacher.subject || '',
       seatPresent,
@@ -429,6 +432,75 @@ export function attendanceSummaryTotals(rows) {
   };
 }
 
+export function attendanceSummaryMonthBounds(month) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('请选择有效月份');
+  const [year, monthNumber] = month.split('-').map(Number);
+  const count = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return { start: month + '-01', end: month + '-' + count, count };
+}
+
+export function summarizeAttendanceMonth({ month, grade, teachers, tables, leaveRecords }) {
+  const { start, end, count } = attendanceSummaryMonthBounds(month);
+  const dates = new Map();
+  for (const table of tables) {
+    const date = table.sheet_date;
+    if (!date || date < start || date > end || table.grade !== grade || table.deleted_at) continue;
+    if (!dates.has(date)) dates.set(date, []);
+    dates.get(date).push(table);
+  }
+  const personKey = row => String(row.name || '').trim() + '\u0000' + String(row.subject || '').trim();
+  const rosterIds = new Map(teachers.map(teacher => [personKey(teacher), teacher.id]));
+  const keyOf = row => {
+    const id = row.teacherId ?? rosterIds.get(personKey(row));
+    return id == null ? personKey(row) : 'id:' + id;
+  };
+  const totals = new Map(teachers.map((teacher, index) => [keyOf(teacher), {
+    serial: index + 1, teacherId: teacher.id, name: teacher.name, subject: teacher.subject || '',
+    seatPresent: 0, classes: 0, listens: 0, research: 0, leaveDays: 0, leaveHours: 0,
+  }]));
+  const duration = (record, key) => Number(record[key]) || 0;
+  for (let day = 1; day <= count; day++) {
+    const date = month + '-' + String(day).padStart(2, '0');
+    const list = dates.get(date) || [];
+    const leaves = activeLeavesFor(leaveRecords, date, grade);
+    if (!list.length && !leaves.length) continue;
+    const slot = type => keeperForDailySlot(list, date, grade, type);
+    const seat = slot('seat');
+    const saved = seat?.meta?.workspace_results?.summary?.rows;
+    const rows = saved || calculateDailySummary({
+      teachers, date, leaveRecords: leaves, seatRows: seat?.rows || [],
+      classRows: slot('class')?.rows || [], researchRows: slot('research')?.rows || [],
+    }).rows;
+    for (const row of rows) {
+      const key = keyOf(row);
+      if (!totals.has(key)) totals.set(key, {
+        serial: totals.size + 1, teacherId: row.teacherId, name: row.name, subject: row.subject,
+        seatPresent: 0, classes: 0, listens: 0, research: 0, leaveDays: 0, leaveHours: 0,
+      });
+      const total = totals.get(key);
+      for (const [field] of SUMMARY_COUNT_FIELDS) total[field] += Number(row[field]) || 0;
+      const ownLeaves = leaves.filter(leave => String(leave.name || leave.teacher || '').trim() === row.name
+        && (!leave.subject || !row.subject || leave.subject === row.subject));
+      for (const [field, unit] of [['leaveDays', 'days'], ['leaveHours', 'hours']]) {
+        const full = ownLeaves.reduce((sum, leave) => sum + duration(leave, unit), 0);
+        // The daily sheet displays the whole duration of overlapping leave records.
+        // Count each recorded duration once across its calendar days, except a reviewed daily adjustment.
+        total[field] += saved && Math.abs(duration(row, field) - full) > 1e-8
+          ? duration(row, field)
+          : ownLeaves.reduce((sum, leave) => {
+            const first = leave.start_date || leave.from;
+            const last = leave.end_date || leave.to || first;
+            const days = (Date.parse(last) - Date.parse(first)) / 86400000 + 1;
+            return sum + duration(leave, unit) / (days > 0 ? days : 1);
+          }, 0);
+      }
+    }
+  }
+  return [...totals.values()].map(row => ({
+    ...row, leaveDays: Number(row.leaveDays.toFixed(2)), leaveHours: Number(row.leaveHours.toFixed(2)),
+  }));
+}
+
 export function updateAttendanceSummaryRow(row, values) {
   const next = { ...row };
   for (const [key, label] of SUMMARY_COUNT_FIELDS) {
@@ -449,12 +521,11 @@ export function updateAttendanceSummaryRow(row, values) {
     next.leaveHours = Number(match[2] || 0);
     if (!Number.isFinite(next.leaveDays + next.leaveHours)) throw new Error('请假时长超出范围');
   }
-  if ('overall' in values) next.overall = String(values.overall ?? '').trim();
   return next;
 }
 
 export function importAttendanceSummary(grid, rows) {
-  const columns = [...SUMMARY_COUNT_FIELDS, ['leaveDuration', '请假时长'], ['overall', '综合状态']];
+  const columns = [...SUMMARY_COUNT_FIELDS, ['leaveDuration', '请假时长']];
   const clean = cell => String(cell ?? '').trim();
   const headerIndex = grid.findIndex(line => line.map(clean).includes('姓名'));
   if (headerIndex < 0) throw new Error('找不到「姓名」列，请使用汇总统计表的导出文件');
@@ -548,6 +619,7 @@ export function buildAttendanceExportGrid({
   type = 'seat', grade = '', date = '', period = 1, teachers = [],
   seatRows = [], classRows = [], researchRows = [], leaveRecords = [],
   teacherMeta = {}, resolvePeriodRange = () => [], includeUnlisted = true, worksheetEntries = null, summaryRows = null,
+  summaryMonth = '',
 } = {}) {
   const people = (Array.isArray(teachers) ? teachers : [])
     .filter(teacher => teacher && Number(teacher.active ?? 1) !== 0);
@@ -607,8 +679,11 @@ export function buildAttendanceExportGrid({
      以前只给坐班表、花名册这么排，其余表是「教研表 · 高一年级」，
      同一批导出表抬头顺序不一致，打印出来看着像两套东西（用户 11-15 要求）。 */
   const titleHead = (grade || '全部年级') + '教师' + baseTitle;
-  const subtitle = date + (weekdayText ? ' ' + weekdayText : '')
-    + ' · ' + periodLabel(period) + '（' + rangeText(period) + '）';
+  const summaryRange = type === 'summary' && summaryMonth ? attendanceSummaryMonthBounds(summaryMonth) : null;
+  const datedTitle = date + (weekdayText ? ' ' + weekdayText : '');
+  const subtitle = summaryRange ? '月汇总 · ' + summaryRange.start + ' 至 ' + summaryRange.end
+    : type === 'summary' ? '日汇总 · ' + datedTitle
+    : datedTitle + ' · ' + periodLabel(period) + '（' + rangeText(period) + '）';
   const heading = statsLine => [[titleHead], [subtitle], [statsLine]];
 
   if (worksheetEntries && (type === 'class' || type === 'research')) {
@@ -792,14 +867,12 @@ export function buildAttendanceExportGrid({
   }
 
   if (type === 'summary') {
-    /* 汇总统计表按「一天」的口径统计，与页面上的汇总页签一致；
-       三级标题写应到、坐班次数、上课次数、听课人次和请假人数。 */
     const summary = Array.isArray(summaryRows)
       ? attendanceSummaryTotals(summaryRows)
       : calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
     const rows = summary.rows.map((row, index) => [
       index + 1, row.name, row.subject, row.seatPresent, row.classes, row.listens,
-      row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }), row.overall,
+      row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }),
     ]);
     /* 用户 11-15 需求：导出统一去掉「应到人数」 */
     const statsLine = '坐班 ' + summary.seatPresent
