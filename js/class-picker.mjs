@@ -59,7 +59,6 @@ export function setClassSuggestions(input, rows, { gradeInput, qualified } = {})
     arrow.setAttribute('role', 'button');
     arrow.setAttribute('tabindex', '-1');
     arrow.setAttribute('aria-label', '选择班级');
-    arrow.title = '展开课表班级（也可以直接输入）';
     arrow.append(chevron());
     wrapper.append(arrow);
 
@@ -69,22 +68,19 @@ export function setClassSuggestions(input, rows, { gradeInput, qualified } = {})
       /* 面板正给自己用 → 再点一次收起；在别的字段上 → 直接换成自己的候选。 */
       if (isChoicesFor(input)) { closeChoices(); return; }
       if (input.readOnly || input.disabled) return;
-      show(input.value.trim());
+      show('');
     });
 
     input.addEventListener('input', (event) => {
-      if (!event.isTrusted) return;
-      if (input.readOnly || input.disabled) return;
-      const list = wrapper.__classPanelItems || [];
-      if (!input.value.trim() || !list.length) { closeChoices(); return; }
+      if (!event.isTrusted || !isChoicesFor(input) || input.readOnly || input.disabled) return;
       show(input.value);
     });
 
     input.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowDown' || isChoicesFor(input)) return;
-      if (input.readOnly || input.disabled) return;
+      if (input.readOnly || input.disabled || !wrapper.__classPanelItems?.length) return;
       event.preventDefault();
-      show(input.value.trim());
+      show('');
     });
   }
 
@@ -102,7 +98,6 @@ export function setClassSuggestions(input, rows, { gradeInput, qualified } = {})
       input,
       filter,
       selected: input.value.trim(),
-      emptyHint: filter ? '没找到「' + filter + '」的班级，直接输入也能保存' : '',
       minWidth: Math.max(220, wrapper.offsetWidth),
       maxWidth: 380,
       onPick: (item) => {

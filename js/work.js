@@ -1526,24 +1526,14 @@ function printTimetableHTML(courses, periods, maxP) {
 }
 function courseEditor(row, reload) {
   const isNew = !row?.id;
-  /* 【历史值联想】
-     全站不再预填「语文 / 高二」这类默认值 —— 预填的东西如果不符实际，
-     用户还得先删掉才能填，反而更慢。所以默认留空，直接手填。
-     但又不想让用户每次都从头打字：把已存课程里出现过的科目/年级/班级
-     按最近更新时间优先去重，每个字段只保留最近 5 个候选，挂在 datalist 上。
-     这叫「手填为主，联想为辅」：没有强制默认值，只是给个快捷入口。
-
-     注意：这里必须保持同步函数。弹层要立刻出现，不能等接口；
-     历史值晚一步到达也没关系，反正用户点开下拉是在之后。 */
-
   const body = el(`<div class="sheet-body"><div class="form-grid">
     <div class="field"><label class="field-label">星期</label><select class="input" id="weekday">${[1,2,3,4,5,6,0].map((d) => `<option value="${d}" ${Number(row?.weekday) === d ? 'selected' : ''}>周${WD_SHORT[d]}</option>`).join('')}</select></div>
     <div class="field"><label class="field-label">节次</label><input class="input" type="number" id="period_no" value="${row?.period_no || 1}"></div>
     <div class="field"><label class="field-label">开始时间</label><input class="input" type="time" id="st" value="${esc(row?.start_time || '')}"></div>
     <div class="field"><label class="field-label">结束时间</label><input class="input" type="time" id="et" value="${esc(row?.end_time || '')}"></div>
-    <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(row?.grade || '')}" data-hist="grade"></div>
-    <div class="field"><label class="field-label">班级</label><input class="input" id="class_name" value="${esc(row?.class_name || '')}" data-hist="class_name"></div>
-    <div class="field"><label class="field-label">科目</label><input class="input" id="subject" value="${esc(row?.subject || '')}" data-hist="subject"></div>
+    <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(row?.grade || '')}"></div>
+    <div class="field"><label class="field-label">班级</label><input class="input" id="class_name" value="${esc(row?.class_name || '')}"></div>
+    <div class="field"><label class="field-label">科目</label><input class="input" id="subject" value="${esc(row?.subject || '')}"></div>
     <div class="field"><label class="field-label">地点</label><input class="input" id="room" value="${esc(row?.room || '')}" placeholder="例如：教学楼A栋101、大操场、机房" autocomplete="off"></div>
     <div class="field"><label class="field-label">生效开始日</label><input class="input" type="date" id="sd" value="${esc(row?.start_date || '')}"></div>
     <div class="field"><label class="field-label">生效结束日</label><input class="input" type="date" id="ed" value="${esc(row?.end_date || '')}"></div>
@@ -1552,44 +1542,6 @@ function courseEditor(row, reload) {
   <div class="confirm-actions">${isNew ? '' : '<button class="btn ghost" id="del" style="margin-right:auto;color:var(--red)">删除</button>'}
   <button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="save">保存</button></div></div>`);
 
-  /* 历史值异步补上：失败就静默，手填照常可用 */
-  api.get('/courses').then((all) => {
-    // 最近使用的课程优先；优先按更新时间，其次创建时间，最后用 ID 稳定排序。
-    const timestampOf = (course) => {
-      const updatedAt = Date.parse(course?.updated_at || '');
-      if (Number.isFinite(updatedAt)) return updatedAt;
-      const createdAt = Date.parse(course?.created_at || '');
-      return Number.isFinite(createdAt) ? createdAt : Number(course?.id) || 0;
-    };
-    const recent = [...(Array.isArray(all) ? all : [])].sort((a, b) =>
-      timestampOf(b) - timestampOf(a) || (Number(b?.id) || 0) - (Number(a?.id) || 0)
-    );
-    for (const k of ['grade', 'class_name', 'subject']) {
-      const seen = new Set();
-      const vals = [];
-      for (const course of recent) {
-        const value = String(course?.[k] || '').trim();
-        const normalized = value.toLocaleLowerCase();
-        if (!value || seen.has(normalized)) continue;
-        seen.add(normalized);
-        vals.push(value);
-        if (vals.length === 5) break;
-      }
-      if (!vals.length) continue;
-      const input = body.querySelector(`[data-hist="${k}"]`);
-      if (!input) continue;
-      const id = 'dl-' + k;
-      document.getElementById(id)?.remove();
-      // 用 createElement 而不是 el()：el() 走 template.firstElementChild，
-      // 只保证返回「第一个元素」，这里要的就是 datalist 本身，直接建更清楚。
-      const list = document.createElement('datalist');
-      list.id = id;
-      list.innerHTML = vals.map((v) => `<option value="${esc(v)}">`).join('');
-      body.appendChild(list);
-      input.setAttribute('list', id);
-      input.setAttribute('autocomplete', 'off');
-    }
-  }).catch(() => {});
   const s = sheet({ title: isNew ? '添加课程' : '修改课程', body });
   /* 班级候选来自课表与班级名单；选完顺手把年级补上，仍可手填。 */
   classPickerAuto(body.querySelector('#class_name'), { gradeInput: body.querySelector('#grade') });

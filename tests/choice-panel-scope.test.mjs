@@ -15,14 +15,11 @@ test('updateChoices 只接受面板当前属主输入框的更新', () => {
   assert.match(source, /export function isChoicesFor\(input\)/);
 });
 
-test('可编辑输入框只在面板属于自己时就地刷新，否则另开面板', () => {
+test('可编辑输入框使用单个候选面板，只有主动打开后才筛选候选', () => {
   const source = read('js/editable-choices.js');
-  assert.match(source, /if \(isChoicesFor\(input\)\) updateChoices\(/);
-  assert.ok(
-    !/if \(isChoicesOpen\(\)\) updateChoices\(/.test(source),
-    '不能再看「有没有面板」就 update，必须确认面板是自己的',
-  );
-  assert.match(source, /else show\(input\.value\);/);
+  assert.match(source, /input\.removeAttribute\('list'\)/);
+  assert.match(source, /!event\.isTrusted \|\| !isChoicesFor\(input\)/);
+  assert.doesNotMatch(source, /wb_input_recent|else show\(input\.value\)/);
 });
 
 test('班级选择器同样按属主判断，箭头点击可切到自己的面板', () => {

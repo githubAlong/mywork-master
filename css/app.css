@@ -5076,3 +5076,10 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .class-picker > .class-picker-arrow:hover { color: var(--text); }
 .class-picker > .class-picker-arrow[hidden] { display: none; }
 .class-picker:has(> input:focus) > .class-picker-arrow { color: var(--text-2); }
+
+/* 普通录入框留空时保持简洁，保留字段名和无障碍读法。 */
+input:not(.auth-input input)::placeholder,
+textarea::placeholder {
+  color: transparent !important;
+  opacity: 0 !important;
+}
