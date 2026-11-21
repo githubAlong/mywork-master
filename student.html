@@ -1152,7 +1152,8 @@ function paintBulletin() {
     </div>
     <div id="bl-replies" aria-live="polite"></div>
   </section>`;
-  const tip = (msg, bad) => { const t = $('#bl-tip'); t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  const status = $('#bl-tip');
+  const tip = (msg, bad) => { status.textContent = msg; status.style.color = bad ? 'var(--red)' : 'var(--green)'; };
   const repliesBox = $('#bl-replies');
   const paintReplies = (entries) => {
     const replies = (Array.isArray(entries) ? entries : []).filter((item) => item.reply)
