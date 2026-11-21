@@ -175,7 +175,7 @@ registerView(async function materials(main, { tab }) {
     pick: ['点名', '学生端「点名」：按号码或按名单，点过的不重复'],
     mystery: ['盲盒', '学生端「盲盒」：点一下随机弹一个任务，这一轮不重复'],
     misconduct: ['违纪', '学生端「违纪」：学生提交的违纪情况，这里查看与编辑'],
-    bulletin: ['留言板', '学生端「留言板」：学生提交的留言，这里查看与编辑'],
+    bulletin: ['留言板', '查看学生留言并回复，学生可在留言板查看教师回复'],
   }[t] || ['小助手', '学生端互动工具统一管理：自习、教材、点名、盲盒'];
 
   main.innerHTML = '<div id="materials-body"></div>';
@@ -2548,7 +2548,7 @@ const STUDENT_MOD = {
   },
   bulletin: {
     name: '留言板', icon: 'chat', tab: 'bulletin',
-    desc: '学生在学生端留言，这里查看、编辑和删除。',
+    desc: '学生在学生端留言，教师在这里查看和回复。',
   },
 };
 
@@ -2881,7 +2881,7 @@ async function renderStudentModule(box, key) {
       renderStudentModule(box, key);
     });
   } else if (key === 'bulletin') {
-    /* —— 留言板：学生提交，老师这里查看与编辑 —— */
+    /* —— 留言板：教师可回复学生留言 —— */
     const bToday = bulletins.filter((b) => (b.created_at || '').slice(0, 10) === ymd(new Date()));
     inner.innerHTML = `
       <div class="rp-stats mod-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
@@ -2904,10 +2904,46 @@ async function renderStudentModule(box, key) {
           <span class="chip blue">${esc(clsName(b.grade, b.class_name) || '未指定班级')}</span>
           <span class="pb-text">${esc(b.content)}</span>
           <span class="tiny muted">${esc(fmtTime(b.created_at))}</span>
+          <button class="btn ghost sm" data-bl-reply="${esc(b.id)}">${b.reply ? '编辑回复' : '回复'}</button>
           <button class="icon-btn sm" data-bl-edit="${b.id}" title="编辑">${icon('edit', 13)}</button>
           <button class="icon-btn sm" data-bl-del="${b.id}" title="删除">${icon('close', 13)}</button>
-        </div>`).join('')}</div>`
+        </div>${b.reply ? `<div class="tiny" style="padding:6px 12px 12px;white-space:pre-wrap;overflow-wrap:anywhere"><b>教师回复</b>　${esc(b.reply)}</div>` : ''}`).join('')}</div>`
         : '<div class="empty" style="padding:16px">还没有学生留言</div>';
+      listBox.querySelectorAll('[data-bl-reply]').forEach((btn) => {
+        btn.onclick = () => {
+          const b = bulletins.find((row) => String(row.id) === btn.dataset.blReply);
+          if (!b) return;
+          const body = el(`<div class="sheet-body">
+            <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(b.content)}</p>
+            <div class="field">
+              <label class="field-label" for="bl-reply-text">教师回复</label>
+              <textarea class="input" id="bl-reply-text" rows="4" maxlength="500">${esc(b.reply || '')}</textarea>
+              <p class="tiny muted">回复会显示给打开学生端留言板的学生。</p>
+            </div>
+            <div class="row" style="justify-content:flex-end;gap:8px">
+              <button class="btn ghost" data-cancel>取消</button>
+              <button class="btn primary" data-save>发布回复</button>
+            </div>
+          </div>`);
+          const dialog = sheet({ title: b.reply ? '编辑回复' : '回复留言', body });
+          body.querySelector('[data-cancel]').onclick = () => dialog.close();
+          saving(body.querySelector('[data-save]'), async () => {
+            const reply = body.querySelector('#bl-reply-text').value.trim();
+            if (!reply) { toast('请填写回复内容', 'err'); return; }
+            const changes = { reply, replied_at: new Date().toISOString() };
+            await api.patch('/bulletin_records/' + encodeURIComponent(b.id), changes);
+            Object.assign(b, changes);
+            dialog.close();
+            paintBlList();
+            try {
+              await syncMaterialSharing();
+              toast(navigator.onLine === false ? '已保存，联网后同步学生端' : '回复已保存');
+            } catch (error) {
+              toast('回复已保存到本机，云端同步失败：' + error.message, 'err');
+            }
+          });
+        };
+      });
       listBox.querySelectorAll('[data-bl-edit]').forEach((btn) => {
         btn.onclick = () => {
           const b = bulletins.find((x) => String(x.id) === btn.dataset.blEdit);

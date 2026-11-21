@@ -4049,9 +4049,10 @@ on('GET', '/public/link/:code', ({ params, query }) => {
   const misconduct = rowsOf('misconduct_records')
     .filter((m) => !grades.length || !m.grade || grades.includes(m.grade))
     .map((m) => ({ id: m.id, grade: m.grade, class_name: m.class_name, student_name: m.student_name, student_no: m.student_no, content: m.content, created_at: m.created_at }));
-  const bulletin = rowsOf('bulletin_records')
+  const bulletin = !linkModules(l).bulletin ? [] : rowsOf('bulletin_records')
     .filter((b) => !grades.length || !b.grade || grades.includes(b.grade))
-    .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, content: b.content, created_at: b.created_at }));
+    .filter((b) => String(b.reply || '').trim())
+    .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, reply: b.reply, replied_at: b.replied_at }));
   return {
     link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },

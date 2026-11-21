@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v363-attendance-sheet-confirmations';
+const CACHE = 'wb-v364-bulletin-replies-tai';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -42,6 +42,7 @@ const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
+  './icons/favicon-tai.svg',
   './css/app.css',
   './css/design-refresh.css',
   './css/teacher-ui.css',

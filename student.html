@@ -1116,7 +1116,7 @@ function paintBulletin() {
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="card-title">${ICON.chat} 留言板</div>
-    <div class="tiny muted" style="margin:4px 0 12px">写下想说的话，老师会在教师端的留言板里看到。</div>
+    <div class="tiny muted" style="margin:4px 0 12px">留言提交后，可在下方查看教师回复。</div>
     <div class="row wrap" style="gap:8px">
       <div class="field" style="flex:1;min-width:140px">
         <label class="field-label">年级</label>
@@ -1145,8 +1145,37 @@ function paintBulletin() {
       <span class="tiny" id="bl-tip" style="color:var(--green)"></span>
       <button class="btn primary" id="bl-send">提交</button>
     </div>
-  </div>`;
+  </div><section class="card card-pad" style="margin-top:12px">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+      <div class="card-title">教师回复</div>
+      <button type="button" class="btn" id="bl-refresh-replies">刷新回复</button>
+    </div>
+    <div id="bl-replies" aria-live="polite"></div>
+  </section>`;
   const tip = (msg, bad) => { const t = $('#bl-tip'); t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  const repliesBox = $('#bl-replies');
+  const paintReplies = (entries) => {
+    const replies = (Array.isArray(entries) ? entries : []).filter((item) => item.reply)
+      .sort((a, b) => String(b.replied_at || '').localeCompare(String(a.replied_at || '')));
+    repliesBox.innerHTML = replies.length ? replies.map((item) => `
+      <article style="padding:12px 0;border-top:1px solid var(--line)">
+        <div class="tiny muted">${esc(clsName(item.grade, item.class_name))} ${esc(item.replied_at ? new Date(item.replied_at).toLocaleString('zh-CN', { hour12: false }) : '')}</div>
+        <div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(item.reply)}</div>
+      </article>`).join('') : '<div class="tiny muted" style="padding:12px 0">暂无教师回复</div>';
+  };
+  paintReplies(data?.bulletin);
+  const refreshReplies = $('#bl-refresh-replies');
+  refreshReplies.onclick = async () => {
+    refreshReplies.disabled = true;
+    try {
+      const latest = await api(`/public/link/${code}`);
+      data.bulletin = latest.bulletin;
+      paintReplies(latest.bulletin);
+      tip('');
+    } catch (error) {
+      tip(error.message || '回复加载失败，请稍后再试', true);
+    } finally { refreshReplies.disabled = false; }
+  };
   const gradeSelect = $('#bl-grade');
   const gradeCustom = $('#bl-grade-custom');
   const clsSelect = $('#bl-class');

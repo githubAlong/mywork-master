@@ -167,9 +167,10 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
     const misconduct = (payload.misconduct_records || [])
       .filter((m) => live(m) && (!grades.length || !m.grade || grades.includes(m.grade)))
       .map((m) => ({ id: m.id, grade: m.grade, class_name: m.class_name, student_name: m.student_name, student_no: m.student_no, content: m.content, created_at: m.created_at }));
-    const bulletin = (payload.bulletin_records || [])
+    const bulletin = !modules.bulletin ? [] : (payload.bulletin_records || [])
       .filter((b) => live(b) && (!grades.length || !b.grade || grades.includes(b.grade)))
-      .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, content: b.content, created_at: b.created_at }));
+      .filter((b) => String(b.reply || '').trim())
+      .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, reply: b.reply, replied_at: b.replied_at }));
 
     /* 学生端「年级 / 班级」下拉：以老师课表里的班级为准，课表为空时退回花名册 */
     const classPairs = new Map();
