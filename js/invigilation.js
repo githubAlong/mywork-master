@@ -520,7 +520,7 @@ export async function renderInvigilation(box, profileName) {
       + '<datalist id="iv-peer-list"></datalist></div></div>'
       + '<div class="iv-form-section"><div class="iv-form-section-title">05 · 备注</div><div class="field"><textarea class="input" id="iv-remark" rows="3" placeholder="记录考场要求、试卷领取地点等">' + esc(row && row.remark || '') + '</textarea></div></div>'
       + (row ? '<div class="iv-edit-settlement">当前收付：已收 / 已付 ¥' + money(paidState.paid) + '，剩余 ¥' + money(paidState.remaining) + '。<button type="button" class="iv-action" id="iv-edit-history">查看收付明细</button></div>' : '')
-      + '<div class="confirm-actions"><button class="btn ghost" id="iv-edit-cancel">取消</button><button class="btn primary" id="iv-edit-save">保存监考记录</button></div>'
+      + '<div class="confirm-actions"><button class="btn ghost" id="iv-edit-cancel">取消</button><button class="btn primary" id="iv-edit-save">保存</button></div>'
       + '</div>');
     const modal = sheet({ title: isNew ? '新增监考记录' : '编辑监考记录', body, wide: true });
     const q = (id) => body.querySelector('#' + id);
