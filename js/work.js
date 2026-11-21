@@ -3714,19 +3714,39 @@ async function renderNotes(box) {
       '<button class="btn primary sm" data-note-save>保存</button></div>';
     const s = sheet({ title: isNew ? '新增笔记' : '编辑笔记', body, footer, wide: true });
     s.wrap.querySelector('[data-note-cancel]').onclick = () => s.close();
-    saving(s.wrap.querySelector('[data-note-save]'), async () => {
-      let categoryId = s.wrap.querySelector('#note-cat').value;
-      if (categoryId === '__new') {
-        const name = await promptDialog({ title: '新建分类', label: '分类名称', placeholder: '如：课文解读' });
+    const categorySelect = s.wrap.querySelector('#note-cat');
+    const saveButton = s.wrap.querySelector('[data-note-save]');
+    let selectedCategory = categorySelect.value;
+    categorySelect.onchange = async () => {
+      if (categorySelect.value !== '__new') {
+        selectedCategory = categorySelect.value;
+        return;
+      }
+      categorySelect.value = selectedCategory;
+      if (saveButton.disabled) return;
+      categorySelect.disabled = true;
+      saveButton.disabled = true;
+      try {
+        const name = (await promptDialog({ title: '新建分类', label: '分类名称', okText: '新建' }))?.trim();
         if (!name) return;
         const created = await api.post('/categories', { scope: 'note', name });
-        cats = await api.get('/categories', { scope: 'note' }) || cats;
-        categoryId = String(created?.id || cats.find((c) => c.name === name)?.id || '');
+        selectedCategory = String(created.id);
+        cats = [...cats, created];
+        categorySelect.add(new Option(created.name, selectedCategory), categorySelect.options.length - 1);
+        categorySelect.value = selectedCategory;
+        paint();
+      } catch (error) {
+        toast(error?.message || '新建分类失败，请重试', 'err');
+      } finally {
+        categorySelect.disabled = false;
+        saveButton.disabled = false;
       }
+    };
+    saving(saveButton, async () => {
       const payload = {
         title: s.wrap.querySelector('#note-title').value.trim() || '未命名笔记',
         content: s.wrap.querySelector('#note-body').value,
-        category_id: Number(categoryId) || null,
+        category_id: Number(selectedCategory) || null,
         tags: readTags({ tags: s.wrap.querySelector('#kb-tags').value }),
         pinned: s.wrap.querySelector('#kb-pin').checked ? 1 : 0,
       };
