@@ -75,7 +75,7 @@ async function setup() {
       if(path==='/attendance') return Object.values(saved).map(table=>({id:table.id,sheet_type:table.id}));
       return structuredClone(saved[path.split('/').pop()]);
     },
-    async post(path,{rows,workspace_snapshot,expected_updated_at}) {
+    async post(path,{rows,workspace_snapshot,workspace_result,expected_updated_at}) {
       const [, ,type, action]=path.split('/');
       if(action==='confirm'){
         const table=saved[type];
@@ -85,7 +85,12 @@ async function setup() {
           table.meta.workspace_confirmed ||= {};
           table.meta.workspace_confirmed[workspace_snapshot.period]=structuredClone(workspace_snapshot.rows);
         }
-        table.confirm_state='confirmed';
+        if(workspace_result){
+          table.meta ||= {};
+          table.meta.workspace_results ||= {};
+          table.meta.workspace_results[workspace_result.key]=structuredClone(workspace_result);
+        }
+        if(!/^(?:leave:|summary$)/.test(workspace_result?.key))table.confirm_state='confirmed';
         table.updated_at=nextVersion();
         return {id:table.id,meta:structuredClone(table.meta||{}),updated_at:table.updated_at};
       }
@@ -177,14 +182,16 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.equal(root.querySelectorAll('[aria-disabled]').length,0);
 });
 
-test('生成请假表按所选日期汇总请假记录并切到请假页',async()=>{
-  const {root,toasts,calls}=await setup();
-  const leaveOption=root.querySelector('[data-generate-type="leave"]');
-  assert.ok(leaveOption,'生成菜单里要有请假表');
-  await leaveOption.click();
+test('请假表在自己的工具栏确认，空结果也会保存',async()=>{
+  const {root,toasts,calls,saved}=await setup();
+  await root.querySelector('[data-tab="leave"]').click();
+  assert.match(root.innerHTML,/data-tab="leave" class="on">请假表</);
+  assert.ok(root.querySelector('[data-edit-sheet]'));
   await root.querySelector('[data-generate]').click();
   assert.match(root.querySelector('[data-tab="leave"]').attributes.class,/on/,'生成后应切到请假页');
-  assert.ok(toasts.some(item=>/请假表已生成/.test(item.message)),'要有生成成功提示');
+  assert.ok(toasts.some(item=>/请假表已确认生成/.test(item.message)),'要有生成成功提示');
+  assert.deepEqual(saved.seat.meta.workspace_results['leave:0'].rows,[]);
+  assert.equal(saved.seat.confirm_state,undefined);
   /* 请假表只汇总请假记录，不该凭空写入坐班/上课/教研工作表 */
   assert.deepEqual(calls,[]);
 });
@@ -206,6 +213,7 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   assert.match(control(root,'class').attributes.class,/ y$/);
   await control(root,'remark').change('补充记录');
   await select('seat');
+  await root.querySelector('[data-edit-sheet]').click();
   await control(root,'research','2').click();
   await select('research');
   assert.equal(control(root,'research','2'),undefined);
@@ -220,6 +228,7 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   await root.querySelector('[data-delete-work-record="1"]').click();
   assert.equal(control(root,'class'),undefined);
   await select('seat');
+  await root.querySelector('[data-edit-sheet]').click();
   assert.match(control(root,'class').attributes.class,/ y$/,'删除子表记录保留坐班表和教师');
 });
 
@@ -236,6 +245,7 @@ test('确认后才生成当节请假记录，重新确认更新同一条',async(
   assert.equal(root.querySelectorAll('[data-edit-leave]').length,1);
   assert.match(root.innerHTML,/<td>事假<\/td>/);
   await select('seat');
+  await root.querySelector('[data-edit-sheet]').click();
   await control(root,'leave').change('病假');
   await root.querySelector('[data-generate]').click();
   await select('leave');
@@ -330,10 +340,9 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
   await root.querySelector('[data-tab="seat"]').click();
   await control(root,'class').click();
   await control(root,'listen','2').click();
-  /* 「生成班表」改下拉菜单（11-15 设计稿）：先选上课表，确认生成按它走 */
-  assert.equal(root.querySelector('[data-generate-menu]').attributes.hidden,'');
-  await root.querySelector('[data-generate-type="class"]').click();
+  await root.querySelector('[data-tab="class"]').click();
   await root.querySelector('[data-generate]').click();
+  assert.match(root.innerHTML,/已确认/);
   await root.querySelector('[data-roster-export="xlsx"]').click();
   const grid=exportedGrids[0];
   /* 三级标题（表名 / 日期节次时段 / 人数统计）占前 3 行，表头在第 4 行 */

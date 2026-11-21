@@ -2482,9 +2482,16 @@ on('PATCH', '/attendance/:id', ({ params, body }) => {
    确认之后仍然可以改，改完再点一次「重新确认」覆盖（FR-TABLE-5）。 */
 function workspaceConfirmation(meta, body) {
   const snapshot = body?.workspace_snapshot;
-  if (!snapshot || !/^\d+$/.test(String(snapshot.period)) || !Array.isArray(snapshot.rows)) return meta;
-  return { ...meta, workspace_confirmed: {
-    ...meta.workspace_confirmed, [String(snapshot.period)]: snapshot.rows,
+  if (snapshot && /^\d+$/.test(String(snapshot.period)) && Array.isArray(snapshot.rows)) {
+    meta = { ...meta, workspace_confirmed: {
+      ...meta.workspace_confirmed, [String(snapshot.period)]: snapshot.rows,
+    } };
+  }
+  const result = body?.workspace_result;
+  if (!result || !/^(?:(seat|class|research|leave):\d+|summary)$/.test(result.key)
+    || !Array.isArray(result.rows)) return meta;
+  return { ...meta, workspace_results: {
+    ...meta.workspace_results, [result.key]: { rows: result.rows, grid: result.grid, confirmed_at: nowISO() },
   } };
 }
 on('POST', '/attendance/:id/confirm', ({ params, body }) => {
@@ -2493,7 +2500,13 @@ on('POST', '/attendance/:id/confirm', ({ params, body }) => {
   if (body?.expected_updated_at !== undefined && String(t.updated_at || '') !== String(body.expected_updated_at || '')) {
     fail(409, 'WB_ATTENDANCE_CONFLICT: 表头已被另一台设备修改');
   }
-  const meta = safeJSON(t.meta, {});
+  const meta = workspaceConfirmation(safeJSON(t.meta, {}), body);
+  if (/^(?:leave:\d+|summary)$/.test(body?.workspace_result?.key)) {
+    t.meta = JSON.stringify(meta);
+    t.updated_at = nowISO();
+    save();
+    return t;
+  }
   /* 留痕：确认过几次、每次是不是在改完以后重认的。
      老师最常问的就是「这张表什么时候认的、认完又动没动」，
      以前只有最新一个时间戳，问起来只能靠回忆。 */
@@ -2501,7 +2514,7 @@ on('POST', '/attendance/:id/confirm', ({ params, body }) => {
   audit.push({ at: nowISO(), action: t.confirmed_at ? 'reconfirm' : 'confirm', dirty: num(t.confirm_dirty) ? 1 : 0 });
   t.confirmed_at = nowISO();
   t.confirm_dirty = 0;
-  t.meta = JSON.stringify({ ...workspaceConfirmation(meta, body), audit });
+  t.meta = JSON.stringify({ ...meta, audit });
   t.updated_at = nowISO();
   save();
   return t;
@@ -4950,6 +4963,11 @@ async function cloudRoute(method, clean, query, body) {
       const t = await m.getRow('attendance_tables', id);
       if (!t) throw new Error('考勤表不存在');
       const prevM = safeJSON(t.meta, {});
+      if (/^(?:leave:\d+|summary)$/.test(body?.workspace_result?.key)) {
+        const meta = workspaceConfirmation(prevM, body);
+        const row = await m.updateAttendanceTable(id, { meta }, body.expected_updated_at);
+        return { ...row, columns: attCols(row), meta };
+      }
       /* 留痕，跟本地版一致：确认/重新确认各记一条，最多留 20 条 */
       const audit = Array.isArray(prevM.audit) ? prevM.audit.slice(-19) : [];
       audit.push({ at: nowISO(), action: prevM.confirmed_at ? 'reconfirm' : 'confirm', dirty: num(prevM.confirm_dirty) ? 1 : 0 });

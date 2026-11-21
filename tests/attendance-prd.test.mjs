@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
   deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration, buildAttendanceExportGrid,
-  deriveTableGridState, paginateExportGrid, splitAttendanceExportGrid,
+  deriveTableGridState, paginateExportGrid, splitAttendanceExportGrid, importAttendanceSummary, attendanceSummaryTotals,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -20,6 +20,26 @@ test('三态循环保持未登记、在岗、未在岗语义', () => {
   assert.equal(nextTriState('u'),'y');
   assert.equal(nextTriState('y'),'n');
   assert.equal(nextTriState('n'),'u');
+});
+
+test('批量导入汇总按姓名和学科匹配，验证整批数据并保留未导入的值', () => {
+  const rows = [
+    { name:'李老师', subject:'语文', seatPresent:1, classes:2, listens:0, research:0, leaveDays:0, leaveHours:0 },
+    { name:'李老师', subject:'数学', seatPresent:0, classes:0, listens:1, research:0, leaveDays:0, leaveHours:0 },
+  ];
+  const headers = ['姓名','学科','上课','听课','请假时长'];
+  const valid = ['李老师','数学','3','','0.5天 / 2小时'];
+  const imported = importAttendanceSummary([['汇总统计表'],headers,valid,['','','','','导出时间：2026-11-21']],rows);
+  assert.equal(imported.count,1);
+  assert.deepEqual(imported.rows[0],rows[0]);
+  assert.equal(imported.rows[1].listens,1);
+  assert.equal(imported.rows[1].leaveDays,0.5);
+  assert.equal(imported.rows[1].leaveHours,2);
+  assert.equal(attendanceSummaryTotals(imported.rows).classes,5);
+  assert.equal(attendanceSummaryTotals(imported.rows).leavePeople,1);
+  assert.throws(()=>importAttendanceSummary([headers,valid,['李老师','语文','-1']],rows),/第 3 行.*非负整数/);
+  assert.throws(()=>importAttendanceSummary([headers,['李老师','','1']],rows),/无法唯一匹配/);
+  assert.equal(rows[1].classes,0);
 });
 
 test('请假区间按开始与结束日期覆盖当前日期', () => {

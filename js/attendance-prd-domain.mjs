@@ -417,6 +417,71 @@ export function formatLeaveDuration(record) {
   return parts.join(' / ') || '0天';
 }
 
+export const SUMMARY_COUNT_FIELDS = [
+  ['seatPresent', '坐班'], ['classes', '上课'], ['listens', '听课'], ['research', '教研'],
+];
+
+export function attendanceSummaryTotals(rows) {
+  return {
+    rows, expectedTeachers: rows.length,
+    ...Object.fromEntries(SUMMARY_COUNT_FIELDS.map(([key]) => [key, rows.reduce((sum, row) => sum + row[key], 0)])),
+    leavePeople: rows.filter(row => row.leaveDays > 0 || row.leaveHours > 0).length,
+  };
+}
+
+export function updateAttendanceSummaryRow(row, values) {
+  const next = { ...row };
+  for (const [key, label] of SUMMARY_COUNT_FIELDS) {
+    if (!(key in values)) continue;
+    const value = String(values[key] ?? '').trim();
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+      throw new Error(label + '次数须为非负整数');
+    }
+    next[key] = Number(value);
+  }
+  if ('leaveDuration' in values) {
+    const value = String(values.leaveDuration ?? '').trim();
+    const match = /^(?:(\d+(?:\.\d+)?)\s*天(?:\s*[/／]\s*)?)?\s*(?:(\d+(?:\.\d+)?)\s*小时)?$/.exec(value);
+    if (!match || /[/／]$/.test(value) || (value && !match[1] && !match[2])) {
+      throw new Error('请假时长请填写 0天、0.5天、2小时或 1天 / 2小时');
+    }
+    next.leaveDays = Number(match[1] || 0);
+    next.leaveHours = Number(match[2] || 0);
+    if (!Number.isFinite(next.leaveDays + next.leaveHours)) throw new Error('请假时长超出范围');
+  }
+  if ('overall' in values) next.overall = String(values.overall ?? '').trim();
+  return next;
+}
+
+export function importAttendanceSummary(grid, rows) {
+  const columns = [...SUMMARY_COUNT_FIELDS, ['leaveDuration', '请假时长'], ['overall', '综合状态']];
+  const clean = cell => String(cell ?? '').trim();
+  const headerIndex = grid.findIndex(line => line.map(clean).includes('姓名'));
+  if (headerIndex < 0) throw new Error('找不到「姓名」列，请使用汇总统计表的导出文件');
+  const header = grid[headerIndex].map(clean);
+  const nameIndex = header.indexOf('姓名'), subjectIndex = header.indexOf('学科');
+  const fields = columns.map(([key, label]) => [key, header.indexOf(label)]).filter(([, index]) => index >= 0);
+  if (!fields.length) throw new Error('找不到可导入的统计列');
+  const result = rows.slice(), seen = new Set();
+  for (const [offset, line] of grid.slice(headerIndex + 1).entries()) {
+    if (line.every(cell => !clean(cell)) || line.some(cell => clean(cell).startsWith('导出时间：'))) continue;
+    const name = clean(line[nameIndex]), subject = clean(line[subjectIndex]);
+    const matches = rows.map((row, index) => ({row, index})).filter(({row}) =>
+      row.name === name && (!subject || row.subject === subject));
+    const label = '第 ' + (headerIndex + offset + 2) + ' 行';
+    if (matches.length !== 1) throw new Error(label + '无法唯一匹配教师，请核对姓名和学科');
+    const [{row, index}] = matches;
+    if (seen.has(index)) throw new Error(label + '教师重复，请核对导入文件');
+    const values = Object.fromEntries(fields.filter(([, col]) => clean(line[col]) !== '').map(([key, col]) => [key, line[col]]));
+    if (!Object.keys(values).length) continue;
+    try { result[index] = updateAttendanceSummaryRow(row, values); }
+    catch (error) { throw new Error(label + ' · ' + error.message); }
+    seen.add(index);
+  }
+  if (!seen.size) throw new Error('没有可导入的统计记录');
+  return { rows: result, count: seen.size };
+}
+
 /**
  * 导出网格由「三级标题 + 表头 + 数据」组成（用户 11-15 要求）：
  * 第一行一级标题（谁的哪张表），第二行日期星期 · 节次（起—止时段），
@@ -482,7 +547,7 @@ const exportLeaveDuration = record => {
 export function buildAttendanceExportGrid({
   type = 'seat', grade = '', date = '', period = 1, teachers = [],
   seatRows = [], classRows = [], researchRows = [], leaveRecords = [],
-  teacherMeta = {}, resolvePeriodRange = () => [], includeUnlisted = true, worksheetEntries = null,
+  teacherMeta = {}, resolvePeriodRange = () => [], includeUnlisted = true, worksheetEntries = null, summaryRows = null,
 } = {}) {
   const people = (Array.isArray(teachers) ? teachers : [])
     .filter(teacher => teacher && Number(teacher.active ?? 1) !== 0);
@@ -525,7 +590,7 @@ export function buildAttendanceExportGrid({
     return { touched, value: '' };
   };
   const baseTitle = type === 'roster' ? '花名册' : ({
-    seat: '坐班表', class: '上课表', research: '教研表', leave: '请假总表', summary: '汇总统计表',
+    seat: '坐班表', class: '上课表', research: '教研表', leave: '请假表', summary: '汇总统计表',
   }[type] || '考勤表');
   /* 导出抬头要能独立看懂：谁的哪张表、哪一天星期几、哪一节、几点到几点（用户 11-15 要求）。 */
   const weekdayText = (() => {
@@ -729,7 +794,9 @@ export function buildAttendanceExportGrid({
   if (type === 'summary') {
     /* 汇总统计表按「一天」的口径统计，与页面上的汇总页签一致；
        三级标题写应到、坐班次数、上课次数、听课人次和请假人数。 */
-    const summary = calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
+    const summary = Array.isArray(summaryRows)
+      ? attendanceSummaryTotals(summaryRows)
+      : calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
     const rows = summary.rows.map((row, index) => [
       index + 1, row.name, row.subject, row.seatPresent, row.classes, row.listens,
       row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }), row.overall,
