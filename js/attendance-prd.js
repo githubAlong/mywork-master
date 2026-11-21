@@ -1400,8 +1400,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const dayChip = leaveOnlyDate
       ? '<span class="aprd-filter-count">仅显示 '+esc(leaveOnlyDate)+' 请假 · '+shown.length+' 条 <button type="button" class="aprd-op" data-leave-show-all>查看全部</button></span>'
       : '<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+matchedTeachers.length+' 位教师 / '+shown.length+' 条请假</span>';
+    const rows = shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td><td><input type="text" class="aprd-note-input" data-leave-note="'+x.id+'" value="'+escAttr(x.remark||'')+'" placeholder="备注" aria-label="'+escAttr(x.name+' 备注')+'"></td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('');
+    const emptyMessage = scope.length ? '暂无符合筛选条件的请假记录'
+      : leaveOnlyDate ? '所选日期暂无请假记录，可点击「新增请假」登记'
+        : '暂无请假记录，可点击「新增请假」登记';
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button>'+exportMenuHtml(teachers.length)+'</div>'+dayChip+'</div>'
-      +'<div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+shown.map((x)=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td><td><input type="text" class="aprd-note-input" data-leave-note="'+x.id+'" value="'+escAttr(x.remark||'')+'" placeholder="备注" aria-label="'+escAttr(x.name+' 备注')+'"></td><td><button data-edit-leave="'+x.id+'">编辑</button> <button data-delete-leave="'+x.id+'">删除</button></td></tr>').join('')+'</tbody></table></div>';
+      +'<div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+(rows||'<tr><td class="aprd-empty" colspan="'+(ATTENDANCE_COLUMNS.leave.length+1)+'">'+emptyMessage+'</td></tr>')+'</tbody></table></div>';
   };
   const summaryHtml = () => {
     const filteredTeachers=visibleTeachers();
