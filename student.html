@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>学生工作台</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#007aff">
+<meta name="theme-color" content="#2563eb">
 <!-- 标签页图标用「课」，配色和页内 .s-logo 那条蓝紫渐变一致。
      学生页原本没有 favicon 声明，浏览器会去请求仓库里不存在的 /favicon.ico，
      标签上只剩一个通用地球图标。内联 SVG 不用新增二进制文件，也不用进 sw 清单。 -->
@@ -153,15 +153,16 @@
   }
 </style>
 <link rel="stylesheet" href="css/design-refresh.css">
+<link rel="stylesheet" href="css/student-workbench.css">
 </head>
-<body>
-<div class="stu-headwrap">
+<body class="stu-workbench">
+<header class="stu-headwrap">
   <div class="stu-top">
-    <div class="stu-logo">学</div>
-    <div class="stu-title">学生工作台</div>
+    <div class="stu-logo" aria-hidden="true">学</div>
+    <h1 class="stu-title">学生工作台</h1>
   </div>
-</div>
-<div class="s-wrap" id="s-app"><div class="empty">加载中…</div></div>
+</header>
+<main class="s-wrap" id="s-app"><div class="empty" role="status">加载中…</div></main>
 <script type="module">
 import './js/editable-choices.js';
 /* 短链编码：有服务端时是 /s/<code>，从路径第二段取。
@@ -336,12 +337,12 @@ function paint() {
   }
   if (!availTabs.includes(tab)) tab = availTabs[0];
   $('#s-app').innerHTML = `
-    <div class="s-tabs">
+    <nav class="s-tabs" aria-label="学生工作台功能">
       ${availTabs.map((t) => {
         const d = TAB_DEF[t];
-        return `<button data-t="${t}" class="${tab === t ? 'on' : ''}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
+        return `<button type="button" data-t="${t}" class="${tab === t ? 'on' : ''}" aria-pressed="${tab === t}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
       }).join('')}
-    </div>
+    </nav>
     <div id="s-body"></div>`;
   document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; cur = null; paint(); }; });
   if (tab === 'selfstudy') paintSelfstudy();
@@ -366,9 +367,11 @@ function studentCardHtml(t) {
   const img = t.task_image || t.generated_image;
   const day = t.date === todayStr() ? '今日' : (t.date || '');
   const deadline = [day, t.deadline_time || t.end_time || t.period].filter(Boolean).join(' ');
-  return `<div class="card card-pad">
-    <div class="card-title" style="text-align:center">${esc(t.title || '今日任务')}</div>
-    <div class="st-card-body" style="padding:20px 0 12px;font-size:16px">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
+  return `<div class="card card-pad stu-task-card">
+    <div class="stu-section-head">
+      <div class="card-title">${esc(t.title || '今日任务')}</div>
+    </div>
+    <div class="st-card-body">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
     <div class="row wrap tiny muted" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
       <span>教师：${esc(t.creator || '老师')}</span>
       <span>任务类型：课堂自习</span>
@@ -386,10 +389,12 @@ function paintSelfstudy() {
   const t = mine[0];
   if (!t) {
     /* 和教材 / 点名 / 盲盒保持一致：都放在一张普通卡片里，不再用整页居中的空白块 */
-    $('#s-body').innerHTML = `<div class="card card-pad">
-      <div class="card-title">${ICON.clock} 今日任务</div>
-      <div class="tiny muted" style="margin-top:4px">${myClass() ? `当前设备班级：${esc(myClass())} · ` : ''}老师发布后会自动出现在这里</div>
-      <div class="stu-empty" style="margin:26px auto 6px">
+    $('#s-body').innerHTML = `<div class="card card-pad stu-task-card">
+      <div class="stu-section-head">
+        <div class="card-title">${ICON.clock} 今日任务</div>
+        <div class="tiny muted" style="margin-top:4px">${myClass() ? `当前设备班级：${esc(myClass())} · ` : ''}老师发布后会自动出现在这里</div>
+      </div>
+      <div class="stu-empty stu-task-empty">
         <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5M8 16h3"/></svg>
         <b>暂无任务</b>
       </div>
@@ -520,16 +525,16 @@ function openMaterial() {
 function paintMaterials() {
   if (cur) return openMaterial();
   const mats = data.materials;
-  $('#s-body').innerHTML = `<div class="card">
-    <div class="card-pad" style="padding-bottom:6px"><div class="card-title">全部资料 <span class="chip blue">${mats.length}</span></div>
+  $('#s-body').innerHTML = `<div class="card stu-materials">
+    <div class="stu-section-head"><div class="card-title">全部资料 <span class="chip blue">${mats.length}</span></div>
       <div class="tiny muted" style="margin-top:4px">点开即可查看和下载；标了「需要口令」的，要输入老师给的班级口令</div></div>
     ${mats.length ? mats.map((m) => {
     const locked = m.locked && !passcodeFor(m.id);
-    return `<div class="mat-card" data-m="${m.id}" style="cursor:pointer">
-      <div class="doc-ico">${locked ? ICON.lockSm : ICON.mat}</div>
-      <div style="flex:1;min-width:0"><div class="bold small">${esc(m.title)}</div>
-        <div class="tiny muted">${esc([clsName(m.grade, m.class_name), m.descr || ''].filter(Boolean).join(' · '))}${locked ? ' · 需要口令' : ''}</div></div>
-      <span class="tiny muted">${locked ? '输口令' : '查看'} ${ICON.more}</span></div>`;
+    return `<button type="button" class="mat-card" data-m="${esc(m.id)}">
+      <span class="doc-ico">${locked ? ICON.lockSm : ICON.mat}</span>
+      <span class="stu-material-details"><span class="bold small stu-material-title">${esc(m.title)} ${locked ? '<span class="chip amber">需要口令</span>' : ''}</span>
+        <span class="tiny muted stu-material-meta">${esc([clsName(m.grade, m.class_name), m.descr || ''].filter(Boolean).join(' · '))}</span></span>
+      <span class="tiny muted stu-material-action">${locked ? '输口令' : '查看'} ${ICON.more}</span></button>`;
   }).join('') : `<div class="empty">老师还没有上传资料</div>`}
   </div>`;
   document.querySelectorAll('[data-m]').forEach((d) => { d.onclick = () => { cur = Number(d.dataset.m); openMaterial(); }; });
@@ -885,8 +890,10 @@ function paintPunish() {
   const list = data.punishments || [];
   const me = recall();
   $('#s-body').innerHTML = `<div class="card card-pad" style="text-align:center">
-    <div class="card-title" style="justify-content:center">${ICON.target} 惩罚盲盒</div>
-    <div class="tiny muted">点一下开箱，点到什么就做什么</div>
+    <div class="stu-section-head">
+      <div class="card-title" style="justify-content:center">${ICON.target} 惩罚盲盒</div>
+      <div class="tiny muted">点一下开箱，点到什么就做什么</div>
+    </div>
     <div class="box-stage" id="box">
       <div>
         <div class="box-icon" id="bico">${BOX_ICO.closed}</div>
@@ -1016,28 +1023,32 @@ function paintMisconduct() {
   const initialClasses = curGrade ? classesOf(curGrade) : [];
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
-    <div class="card-title">${ICON.alert} 违纪登记</div>
-    <div class="tiny muted" style="margin:4px 0 12px">选择你所在的年级班级，填写违纪情况后提交，老师会在教师端看到。</div>
-    <div class="field">
-      <label class="field-label">年级</label>
-      <select class="input" id="mc-grade">
-        <option value="">请选择年级</option>
-        ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
-        <option value="__other__"${otherGrade ? ' selected' : ''}>其他（手动填写）</option>
-      </select>
-      <input class="input" id="mc-grade-custom" placeholder="例如：高一" value="${otherGrade ? esc(curGrade) : ''}" style="display:none;margin-top:8px">
+    <div class="stu-section-head">
+      <div class="card-title">${ICON.alert} 违纪登记</div>
+      <div class="tiny muted">选择你所在的年级班级，填写违纪情况后提交，老师会在教师端看到。</div>
+    </div>
+    <div class="stu-form-grid">
+      <div class="field">
+        <label class="field-label" for="mc-grade">年级</label>
+        <select class="input" id="mc-grade">
+          <option value="">请选择年级</option>
+          ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
+          <option value="__other__"${otherGrade ? ' selected' : ''}>其他（手动填写）</option>
+        </select>
+        <input class="input" id="mc-grade-custom" placeholder="例如：高一" value="${otherGrade ? esc(curGrade) : ''}" style="display:none;margin-top:8px">
+      </div>
+      <div class="field">
+        <label class="field-label" for="mc-cls">班级</label>
+        <select class="input" id="mc-cls">
+          <option value="">请选择班级</option>
+          ${initialClasses.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+          <option value="__other__"${otherClass ? ' selected' : ''}>其他（手动填写）</option>
+        </select>
+        <input class="input" id="mc-cls-custom" placeholder="例如：1 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
+      </div>
     </div>
     <div class="field">
-      <label class="field-label">班级</label>
-      <select class="input" id="mc-cls">
-        <option value="">请选择班级</option>
-        ${initialClasses.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
-        <option value="__other__"${otherClass ? ' selected' : ''}>其他（手动填写）</option>
-      </select>
-      <input class="input" id="mc-cls-custom" placeholder="例如：1 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
-    </div>
-    <div class="field">
-      <label class="field-label">违纪情况</label>
+      <label class="field-label" for="mc-text">违纪情况</label>
       <textarea class="input" id="mc-text" rows="4" placeholder="写清楚时间、地点和具体情节"></textarea>
     </div>
     <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
@@ -1115,11 +1126,13 @@ function paintBulletin() {
   const initialClasses = curGrade ? classesOf(curGrade) : [];
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
-    <div class="card-title">${ICON.chat} 留言板</div>
-    <div class="tiny muted" style="margin:4px 0 12px">留言提交后，可在下方查看教师回复。</div>
-    <div class="row wrap" style="gap:8px">
+    <div class="stu-section-head">
+      <div class="card-title">${ICON.chat} 留言板</div>
+      <div class="tiny muted">留言提交后，可在下方查看教师回复。</div>
+    </div>
+    <div class="stu-form-grid">
       <div class="field" style="flex:1;min-width:140px">
-        <label class="field-label">年级</label>
+        <label class="field-label" for="bl-grade">年级</label>
         <select class="input" id="bl-grade">
           <option value="">请选择年级</option>
           ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
@@ -1128,7 +1141,7 @@ function paintBulletin() {
         <input class="input" id="bl-grade-custom" placeholder="例如：高一" value="${otherGrade ? esc(curGrade) : ''}" style="display:none;margin-top:8px">
       </div>
       <div class="field" style="flex:1;min-width:140px">
-        <label class="field-label">班级</label>
+        <label class="field-label" for="bl-class">班级</label>
         <select class="input" id="bl-class">
           <option value="">请选择班级</option>
           ${initialClasses.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
@@ -1138,15 +1151,15 @@ function paintBulletin() {
       </div>
     </div>
     <div class="field">
-      <label class="field-label">留言内容</label>
+      <label class="field-label" for="bl-text">留言内容</label>
       <textarea class="input" id="bl-text" rows="4" placeholder="想对老师说的话"></textarea>
     </div>
     <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
       <span class="tiny" id="bl-tip" style="color:var(--green)"></span>
       <button class="btn primary" id="bl-send">提交</button>
     </div>
-  </div><section class="card card-pad" style="margin-top:12px">
-    <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+  </div><section class="card card-pad stu-replies">
+    <div class="row stu-section-head" style="justify-content:space-between;align-items:center;gap:8px">
       <div class="card-title">教师回复</div>
       <button type="button" class="btn" id="bl-refresh-replies">刷新回复</button>
     </div>
@@ -1159,9 +1172,9 @@ function paintBulletin() {
     const replies = (Array.isArray(entries) ? entries : []).filter((item) => item.reply)
       .sort((a, b) => String(b.replied_at || '').localeCompare(String(a.replied_at || '')));
     repliesBox.innerHTML = replies.length ? replies.map((item) => `
-      <article style="padding:12px 0;border-top:1px solid var(--line)">
+      <article class="stu-reply">
         <div class="tiny muted">${esc(clsName(item.grade, item.class_name))} ${esc(item.replied_at ? new Date(item.replied_at).toLocaleString('zh-CN', { hour12: false }) : '')}</div>
-        <div style="margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(item.reply)}</div>
+        <p>${esc(item.reply)}</p>
       </article>`).join('') : '<div class="tiny muted" style="padding:12px 0">暂无教师回复</div>';
   };
   paintReplies(data?.bulletin);
