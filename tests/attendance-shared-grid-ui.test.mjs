@@ -182,6 +182,23 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.equal(root.querySelectorAll('[aria-disabled]').length,0);
 });
 
+test('确认坐班表后保留工具栏及行操作，重新打开仍然可见',async()=>{
+  const {root,reopen}=await setup();
+  await root.querySelector('[data-generate]').click();
+  const checkActions=()=>{
+    assert.match(root.innerHTML,/已确认/);
+    for(const selector of ['[data-add]','[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
+      assert.ok(root.querySelector(selector),selector);
+    }
+  };
+  checkActions();
+  await reopen();
+  checkActions();
+  await root.querySelector('[data-tab="summary"]').click();
+  await root.querySelector('[data-generate]').click();
+  assert.ok(root.querySelector('[data-summary-edit-row="0"]'));
+});
+
 test('请假表在自己的工具栏确认，空结果也会保存',async()=>{
   const {root,toasts,calls,saved}=await setup();
   await root.querySelector('[data-tab="leave"]').click();
@@ -190,6 +207,7 @@ test('请假表在自己的工具栏确认，空结果也会保存',async()=>{
   await root.querySelector('[data-generate]').click();
   assert.match(root.querySelector('[data-tab="leave"]').attributes.class,/on/,'生成后应切到请假页');
   assert.ok(toasts.some(item=>/请假表已确认生成/.test(item.message)),'要有生成成功提示');
+  assert.ok(root.querySelector('[data-add-leave]'),'确认后依然可以新增请假');
   assert.deepEqual(saved.seat.meta.workspace_results['leave:0'].rows,[]);
   assert.equal(saved.seat.confirm_state,undefined);
   /* 请假表只汇总请假记录，不该凭空写入坐班/上课/教研工作表 */
@@ -343,6 +361,8 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
   await root.querySelector('[data-tab="class"]').click();
   await root.querySelector('[data-generate]').click();
   assert.match(root.innerHTML,/已确认/);
+  assert.ok(root.querySelector('[data-edit-work-record="1"]'));
+  assert.ok(root.querySelector('[data-delete-work-record="1"]'));
   await root.querySelector('[data-roster-export="xlsx"]').click();
   const grid=exportedGrids[0];
   /* 三级标题（表名 / 日期节次时段 / 人数统计）占前 3 行，表头在第 4 行 */
