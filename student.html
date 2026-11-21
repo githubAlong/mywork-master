@@ -767,21 +767,21 @@ function paintRoll() {
 
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="pk-grid">
-      <div class="field"><label class="field-label">人数</label>
+      <div class="field"><label class="field-label" for="pk-total">总人数</label>
         <input class="input" id="pk-total" type="number" inputmode="numeric" min="1" max="200" value="${cnt0}"></div>
-      <div class="field"><label class="field-label">点几个</label>
+      <div class="field"><label class="field-label" for="pk-num">抽取人数</label>
         <input class="input" id="pk-num" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
     </div>
     <div class="field" style="margin-top:4px">
-      <label class="field-label">怎么点</label>
-      <div class="seg pk-mode">
+      <div class="field-label" id="pk-mode-label">抽取方式</div>
+      <div class="seg pk-mode" role="group" aria-labelledby="pk-mode-label">
         <button class="on" data-mode="no">按号码</button>
         <button data-mode="name" ${hasNames ? '' : 'disabled title="还没有名单，导入名单后才能按名字点"'}>按名单名字</button>
       </div>
     </div>
     <label class="pk-nr"><input type="checkbox" id="pk-norepeat"><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
     <button class="btn primary block" id="go" style="height:56px;font-size:17px;margin-top:14px">${ICON.dice} 开始点名</button>
-    <div class="pick-stage"><div class="pick-roll" id="stage">填好人数和点几个，点「开始点名」</div></div>
+    <div class="pick-stage"><div class="pick-roll" id="stage"></div></div>
     <div id="history" class="tiny muted" style="text-align:center;min-height:18px"></div>
   </div>`;
 
