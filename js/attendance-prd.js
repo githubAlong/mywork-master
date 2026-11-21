@@ -1344,12 +1344,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const matchesSheetFilter = row => (!search || (row.name+' '+row.subject).toLowerCase().includes(search.toLowerCase()))
     && (!subject || (row.subject||'未填学科')===subject);
+  const voiceButtonHtml = () => '<button type="button" class="aprd-voice" data-workspace-voice>'+icon('speak',15)+'语音登记</button>';
   const sheetButtonsHtml = type => {
     const confirmed=confirmedResult(type), editing=isEditing(type);
     const draft=type==='summary' && summaryDrafts.has(summaryDraftKey());
+    const status=editing?'编辑中 · 修改后请确认生成':draft||!confirmed?'待确认':'';
     return '<button type="button" class="aprd-op" data-edit-sheet'+(editing?' disabled':'')+'>编辑</button>'
       +'<button type="button" class="primary" data-generate>确认生成</button>'
-      +'<span class="aprd-filter-count" role="status">'+(editing?'编辑中 · 修改后请确认生成':draft?'待确认':confirmed?'已确认':'待确认')+'</span>';
+      +(status?'<span class="aprd-filter-count" role="status">'+status+'</span>':'');
   };
   const rosterHtml = (type = 'roster') => {
     const result = isEditing(type) ? null : confirmedResult(type);
@@ -1412,7 +1414,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         +stateCells+'<td>'+remark+'</td>'
         +'<td>'+actionsOf(teacher)+'</td></tr>';
     }).join('');
-    const tools = '<button class="primary aprd-add-btn" data-add>'+(showAddTeacher?'收起表单':'＋ 新增教师')+'</button>'
+    const tools = voiceButtonHtml()+'<button class="primary aprd-add-btn" data-add>'+(showAddTeacher?'收起表单':'＋ 新增教师')+'</button>'
       +'<button type="button" class="aprd-op" data-roster-import>批量导入</button>'
       +exportMenuHtml(listedTeachers.length)+(type==='roster'?'':sheetButtonsHtml(type));
     const currentStates = entries.map(({state})=>state);
@@ -1457,7 +1459,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const emptyMessage = scope.length ? '暂无符合筛选条件的请假记录'
       : leaveOnlyDate ? '所选日期暂无请假记录，可点击「新增请假」登记'
         : '暂无请假记录，可点击「新增请假」登记';
-    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()+'<button class="primary" data-add-leave>新增请假</button>'+exportMenuHtml(teachers.length)+sheetButtonsHtml('leave')+'</div>'+dayChip+'</div>'
+    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()+voiceButtonHtml()+'<button class="primary" data-add-leave>新增请假</button>'+exportMenuHtml(teachers.length)+sheetButtonsHtml('leave')+'</div>'+dayChip+'</div>'
       +'<div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+(rows||'<tr><td class="aprd-empty" colspan="'+(ATTENDANCE_COLUMNS.leave.length+1)+'">'+emptyMessage+'</td></tr>')+'</tbody></table></div>';
   };
   const calculateSummaryRows = () => calculateDailySummary({teachers,seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],
@@ -1471,7 +1473,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<option value="month"'+(byMonth?' selected':'')+'>按月</option></select></label>';
     if(byMonth && (monthly?.key!==monthKey() || monthly.loading || monthly.error)){
       const message=monthly?.key===monthKey() ? monthly.error : '';
-      return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+'</div></div>'
+      return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+voiceButtonHtml()+'</div></div>'
         +'<div class="aprd-empty" role="status">'+(message?esc(message)+' <button type="button" class="aprd-op" data-summary-retry>重新加载</button>':'正在加载月汇总…')+'</div>';
     }
     const editing=isEditing('summary');
@@ -1484,7 +1486,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<td>'+esc(summaryDuration(r))+'</td>'
       +(showActions?'<td><button type="button" class="aprd-op" data-summary-edit-row="'+index+'">编辑</button></td>':'')+'</tr>').join('');
     const range = byMonth ? attendanceSummaryMonthBounds(summaryMonth) : null;
-    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+teacherFiltersHtml()
+    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+teacherFiltersHtml()+voiceButtonHtml()
       +'<button type="button" class="aprd-op" data-summary-import>批量导入</button>'+exportMenuHtml(summaryRows().length)
       +sheetButtonsHtml('summary')+(editing?'<button type="button" class="aprd-op" data-summary-recalculate>按考勤重新统计</button>':'')
       +'<span class="aprd-filter-count">'+(range?range.start+' 至 '+range.end:date)+'</span>'
@@ -1537,8 +1539,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       :'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
       +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label>'
       +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>')
-      +'</div><div class="aprd-filter-actions">'
-      +'<button type="button" class="aprd-voice" data-workspace-voice>'+icon('speak',15)+'语音登记</button></div></div>'
+      +'</div></div>'
       +'<section class="aprd-card"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
       +'<div class="aprd-panel">'+content+'</div></section></div>';
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=async()=>{

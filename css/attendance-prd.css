@@ -188,7 +188,7 @@
 .attendance-prd .aprd-filter-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;padding:0 16px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#354965;font-size:13px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
 .attendance-prd .aprd-filter-actions button.primary{background:#165dff;border-color:#165dff;color:#fff;font-weight:600}
 .attendance-prd .aprd-filter-actions button.primary:hover{background:#0e4fe0}
-.attendance-prd .aprd-filter-actions button.aprd-voice:hover{color:#165dff;border-color:#b9d2ff;background:#f7faff}
+.attendance-prd .aprd-toolbar-main button.aprd-voice:hover{color:#165dff;border-color:#b9d2ff;background:#f7faff}
 
 /* 子页签独立一行，选中下划线高亮 */
 .attendance-prd .aprd-tabs{display:flex;gap:26px;overflow-x:auto;margin:6px 0 12px;padding:0;border-bottom:1px solid #e4ebf5;scrollbar-width:none}
@@ -340,7 +340,7 @@
 /* 生成班表：下拉按钮，选项里标出当前选择 */
 .attendance-prd .aprd-filter-actions .aprd-generate-btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#354965;font-size:13px;cursor:pointer}
 .attendance-prd .aprd-filter-actions .aprd-generate-btn:hover{border-color:#b9d2ff;color:#165dff}
-.attendance-prd .aprd-filter-actions .aprd-voice{color:#165dff;border-color:#cfe0ff;background:#f7faff}
+.attendance-prd .aprd-toolbar-main .aprd-voice{display:inline-flex;align-items:center;gap:6px;color:#165dff;border-color:#cfe0ff;background:#f7faff}
 .attendance-prd .aprd-filter-actions .aprd-export-menu{left:0;right:auto;min-width:150px}
 .attendance-prd .aprd-filter-actions .aprd-export-menu button{display:block;width:100%;height:auto;padding:8px 10px;border:0;border-radius:7px;background:#fff;color:#3f526d;font-size:12px;font-weight:400;text-align:left}
 .attendance-prd .aprd-filter-actions .aprd-export-menu button:hover{background:#f2f6fd;color:#165dff}

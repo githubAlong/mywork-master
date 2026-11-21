@@ -182,11 +182,13 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.equal(root.querySelectorAll('[aria-disabled]').length,0);
 });
 
-test('确认坐班表后保留工具栏及行操作，重新打开仍然可见',async()=>{
-  const {root,reopen}=await setup();
+test('确认坐班表后语音登记紧邻新增教师，保留行操作并隐藏确认状态字样',async()=>{
+  const {root,reopen,saved}=await setup();
   await root.querySelector('[data-generate]').click();
+  assert.equal(saved.seat.confirm_state,'confirmed');
   const checkActions=()=>{
-    assert.match(root.innerHTML,/已确认/);
+    assert.doesNotMatch(root.innerHTML,/已确认/);
+    assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音登记<\/button><button[^>]* data-add>/);
     for(const selector of ['[data-add]','[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
       assert.ok(root.querySelector(selector),selector);
     }
@@ -353,14 +355,14 @@ test('教师搜索支持中文输入法组合输入，组合期间不重绘，�
 });
 
 test('工作表导出和生成操作针对当前页签，导出的列及勾选与页面一致',async()=>{
-  const {root,exportedGrids}=await setup();
+  const {root,exportedGrids,saved}=await setup();
   /* 上课表只出上课/听课的人：先在坐班表勾上上课，再切到上课表 */
   await root.querySelector('[data-tab="seat"]').click();
   await control(root,'class').click();
   await control(root,'listen','2').click();
   await root.querySelector('[data-tab="class"]').click();
   await root.querySelector('[data-generate]').click();
-  assert.match(root.innerHTML,/已确认/);
+  assert.equal(saved.class.confirm_state,'confirmed');
   assert.ok(root.querySelector('[data-edit-work-record="1"]'));
   assert.ok(root.querySelector('[data-delete-work-record="1"]'));
   await root.querySelector('[data-roster-export="xlsx"]').click();
