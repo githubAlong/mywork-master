@@ -261,6 +261,64 @@ img,svg{display:block;max-width:100%}
   pointer-events:none;max-width:78%;padding:11px 18px;border-radius:var(--r-pill);background:rgba(15,35,34,.88);
   color:#fff;font-size:13.5px;transition:opacity .28s var(--ease),transform .28s var(--ease)}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+/* ══ PC 桌面布局（≥1024px）：左侧栏 + 多列内容；760–1023 仍为手机壳预览 ══ */
+@media(min-width:1024px){
+  .stage{background:radial-gradient(130% 90% at 50% 8%,var(--stage-1),var(--stage-2) 72%)}
+  .stage::before{display:none}
+  .notch,.statusbar{display:none}
+  #app{width:100%;height:100%;border-radius:0;box-shadow:none;background:var(--page);
+    display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr}
+
+  /* 侧栏导航 */
+  .tabbar{position:static;grid-column:1;grid-row:1/-1;height:auto;flex-direction:column;gap:4px;
+    background:var(--bg);border-right:1px solid var(--border);border-top:0;padding:26px 14px 20px;align-items:stretch}
+  .tabbar::before{content:"我的教师工作台";font-size:15.5px;font-weight:800;color:var(--ink-1);
+    padding:0 14px 20px;display:flex;align-items:center;gap:10px}
+  .tabbar button{flex:none;flex-direction:row;gap:12px;justify-content:flex-start;align-items:center;
+    padding:12px 14px;border-radius:12px;font-size:14.5px;color:var(--ink-2)}
+  .tabbar button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+  .tabbar button .ic{width:20px;height:20px}
+
+  /* 顶栏改为内容区页眉 */
+  .topbar{position:static;grid-column:2;grid-row:1;padding:26px 38px 4px;gap:14px}
+  .topbar .avatar{width:46px;height:46px}
+  .topbar .greet .hi{font-size:20px}
+
+  /* 内容流 */
+  #flow{position:static;grid-column:2;grid-row:2;height:100%;padding:16px 38px 40px;scrollbar-width:thin}
+  #flow::-webkit-scrollbar{width:8px}
+  #flow::-webkit-scrollbar-thumb{background:var(--panel-3);border-radius:4px}
+
+  /* 首页：左课程右事项，统计 4 列，课表通栏 */
+  [data-panel=home]{display:grid;grid-template-columns:1.28fr 1fr;gap:18px;align-items:start}
+  [data-panel=home] .search{grid-column:1/-1}
+  .hero-card{grid-column:1}
+  .home-todo{grid-column:2}
+  .stats{grid-column:1/-1;grid-template-columns:repeat(4,1fr)}
+  [data-panel=home] > .card:last-of-type{grid-column:1/-1}
+
+  /* 工作中心：两组一行，宫格加大 */
+  [data-panel=work]{display:grid;grid-template-columns:1fr 1fr;column-gap:24px}
+  .group{margin-bottom:24px}
+  .grid{gap:14px}
+  .tile{padding:18px 10px 15px}
+  .tile .ti{width:48px;height:48px}
+
+  /* 任务页限宽 */
+  [data-panel=task]{max-width:900px}
+  .task{padding:18px 20px}
+
+  /* 我的：左名片右菜单 */
+  [data-panel=me]{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start;max-width:1100px}
+  .me-hero{margin-bottom:0}
+
+  /* 弹层居中对话框 */
+  .modal{left:50%;top:50%;right:auto;bottom:auto;width:500px;max-width:92vw;
+    transform:translate(-50%,140%);visibility:hidden;border-radius:22px;padding:26px 26px 24px;max-height:84%}
+  .modal.on{transform:translate(-50%,-50%);visibility:visible}
+  .modal .grab{display:none}
+  .toast{bottom:28px}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -300,7 +358,7 @@ img,svg{display:block;max-width:100%}
         <div class="more" data-expand-more></div>
       </article>
 
-      <article class="card">
+      <article class="card home-todo">
         <div class="card-hd"><span data-ic="clipboard" class="ic"></span><h3>今日事项</h3>
           <button class="link" id="quick-add-btn">＋ 新增</button>
         </div>
