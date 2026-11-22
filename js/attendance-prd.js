@@ -4,7 +4,7 @@ import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
 import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
-import { daySchooledPeriods, dayTimeRange, orderPeriods, weekdayLabel } from './attendance-day-periods.mjs';
+import { daySchooledPeriods, dayTimeRange, orderPeriods, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
@@ -133,13 +133,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       Number(getCanonicalPeriodNumber(item,{periodTimes,scheduleType}) ?? item.period_no) === periodNo
     );
     const course = timetableCourses.find(item => {
-      const itemGrade = String(item.grade || '').trim();
       const active = (!item.start_date || date >= String(item.start_date).slice(0,10))
         && (!item.end_date || date <= String(item.end_date).slice(0,10));
       const itemType = courseTypes[String(item.id)] || SUMMER_SCHEDULE;
       const itemPeriod = getCanonicalPeriodNumber(item,{periodTimes,scheduleType});
       return active && itemType === scheduleType
-        && (!itemGrade || itemGrade === '全部' || itemGrade === '全体' || itemGrade === grade)
+        && sameGrade(item.grade, grade)
         && Number(itemPeriod) === periodNo
         && cleanPeriodTime(item.start_time) && cleanPeriodTime(item.end_time);
     });
@@ -159,9 +158,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const resolvePeriodRange = (number) => {
     const periodNo = Number(number);
     if (periodNo !== 0) return periodTimeOf(periodNo);
-    /* 全天不再写死 00:00—23:59：取当天课表实际有课节次的最早开始到最晚结束；
+    /* 全天不再写死 00:00—23:59：当天有课取有课节次的最早开始—最晚结束；
+       当天没排课（周末、节假日、这个年级今天没课）退到作息表全部节次的区间，
        手改过全天的话以手改为准（以前写死时手改根本不生效）。 */
-    const times = daySchooledPeriodsOf().map(item => {
+    const schooled = daySchooledPeriodsOf();
+    const times = (schooled.length ? schooled : DEFAULT_PERIODS).map(item => {
       const [start,end] = periodTimeOf(item.no);
       return { no:item.no, start, end };
     });
@@ -177,7 +178,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       /* 当天完全没有排课（周末、节假日、这个年级没课）时不假装是课表口径。 */
       note: schooled.length
         ? '时段取自当天课表 · ' + schooled.length + ' 个有课节次'
-        : '当日课表无排课，时段按默认节次',
+        : '当日课表无排课，时段取作息表 ' + DEFAULT_PERIODS.length + ' 个节次',
     };
   };
   let busy = false;

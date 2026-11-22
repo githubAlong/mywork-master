@@ -21,6 +21,16 @@ export function weekdayLabel(date) {
   return index >= 0 ? WEEKDAY_LABELS[index] : '';
 }
 
+/* 课表里的年级写「高一」，考勤年级名常写成「高一年级」，去掉后缀再比，
+   否则同一天明明有课却判成无排课。空值和「全部/全体」仍按通配处理。 */
+export function sameGrade(a, b) {
+  const norm = (value) => String(value || '').trim().replace(/年级$/, '');
+  const left = norm(a);
+  const right = norm(b);
+  if (!left || !right || ['全部', '全体'].includes(left) || ['全部', '全体'].includes(right)) return true;
+  return left === right;
+}
+
 /* 排课生效判定与考勤页原有的节次时间链保持同一口径：星期 + 生效日期 + 作息类型 + 年级。 */
 export function isCourseOnDate(course, options = {}) {
   if (!course) return false;
@@ -32,9 +42,8 @@ export function isCourseOnDate(course, options = {}) {
   const scheduleType = String(options.scheduleType || '');
   const courseType = (options.courseTypes || {})[String(course.id)] ?? options.defaultCourseType ?? '';
   if (scheduleType && courseType && courseType !== scheduleType) return false;
-  const grade = String(options.grade || '').trim();
   const courseGrade = String(course.grade || '').trim();
-  if (grade && courseGrade && !['全部', '全体'].includes(courseGrade) && courseGrade !== grade) return false;
+  if (courseGrade && !['全部', '全体'].includes(courseGrade) && !sameGrade(courseGrade, options.grade)) return false;
   return true;
 }
 

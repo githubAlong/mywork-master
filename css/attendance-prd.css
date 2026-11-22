@@ -180,7 +180,8 @@
 .attendance-prd .aprd-filter input,.attendance-prd .aprd-filter select{height:32px;border:1px solid #dce5f1;border-radius:8px;padding:0 9px;background:#fff;color:#263650;font:inherit;font-size:12px}
 .attendance-prd .aprd-filter input:focus,.attendance-prd .aprd-filter select:focus{outline:none;border-color:#6b9cff;box-shadow:0 0 0 3px rgba(22,93,255,.09)}
 .attendance-prd .aprd-filter input[type=date]{width:132px}
-.attendance-prd .aprd-filter input[type=time]{width:96px}
+/* 中文环境 time 输入框渲染成「上午 12:00」+ 时钟图标，96px 会把分钟压掉 */
+.attendance-prd .aprd-filter input[type=time]{width:138px;padding-right:2px}
 .attendance-prd .aprd-time-range{display:inline-flex;align-items:center;gap:6px}
 .attendance-prd .aprd-time-sep{color:#98a6ba}
 .attendance-prd .aprd-filter-actions{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}

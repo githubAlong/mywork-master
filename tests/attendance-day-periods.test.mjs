@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  weekdayOf, weekdayLabel, isCourseOnDate, daySchooledPeriods, dayTimeRange, orderPeriods,
+  weekdayOf, weekdayLabel, isCourseOnDate, daySchooledPeriods, dayTimeRange, orderPeriods, sameGrade,
 } from '../js/attendance-day-periods.mjs';
 
 const SUMMER = '夏令时课表';
@@ -84,4 +84,18 @@ test('orderPeriods 把当天有课的节次排前面，无课节次保留并打�
   assert.deepEqual(ordered.map((item) => item.schooled), [true, true, false, false]);
   assert.deepEqual(ordered[0].label, '第1节');
   assert.deepEqual(orderPeriods(periods, []).map((item) => item.schooled), [false, false, false, false]);
+});
+
+test('年级名「高一年级」和课表里的「高一」算同一个年级', () => {
+  assert.equal(sameGrade('高一', '高一年级'), true);
+  assert.equal(sameGrade('高一年级', '高一'), true);
+  assert.equal(sameGrade('高一年级', '高二年级'), false);
+  assert.equal(sameGrade('', '高一'), true);
+  assert.equal(sameGrade('全部', '高一'), true);
+  const date = '2026-11-24';
+  const weekday = weekdayOf(date);
+  const options = { date, grade: '高一年级', scheduleType: SUMMER, defaultCourseType: SUMMER };
+  assert.equal(isCourseOnDate({ id: 1, weekday, grade: '高一' }, options), true);
+  assert.equal(isCourseOnDate({ id: 2, weekday, grade: '高一年级' }, options), true);
+  assert.equal(isCourseOnDate({ id: 3, weekday, grade: '高二年级' }, options), false);
 });

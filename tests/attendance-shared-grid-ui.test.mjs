@@ -66,7 +66,7 @@ async function setup(options={}) {
   const teachers=[{id:'1',name:'李老师',subject:'语文',grade:'高一',active:1},
     {id:'2',name:'王老师',subject:'数学',grade:'高一',active:1}];
   /* 课表 fixture 供「时段取自当天课表」的用例使用，默认不给课表数据。 */
-  const courses=options.courses||[], periods=options.periods||[];
+  const courses=options.courses||[], periods=options.periods||[], grade=options.grade||'高一';
   const calls=[],exportedGrids=[],toasts=[],patchCalls=[];
   let version=0, settings=options.settings?structuredClone(options.settings):{};
   const nextVersion=()=>String(++version);
@@ -125,8 +125,8 @@ async function setup(options={}) {
   const dependencies={...domain,...timetablePeriods,...dayPeriods,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
-  await render(root,{grade:'高一'});
-  return {root,saved,calls,exportedGrids,toasts,patchCalls,reopen:()=>render(root,{grade:'高一'})};
+  await render(root,{grade});
+  return {root,saved,calls,exportedGrids,toasts,patchCalls,reopen:()=>render(root,{grade})};
 }
 const control=(root,key,id='1')=>root.querySelectorAll('[data-grid-person]').find(element=>element.dataset.gridPerson===id&&element.dataset.gridKey===key);
 
@@ -413,12 +413,26 @@ test('节次与时段取自当天课表：有课节次排前、无课节次标�
   assert.match(root.innerHTML,/全天 08:00—10:40/);
 });
 
-test('当天完全没排课时不逐条标注无课，批次条说明用的是默认节次',async()=>{
+test('当天完全没排课时不逐条标注无课，全天时段退到作息表节次而不是 00:00—23:59',async()=>{
   const {root}=await setup();
   assert.doesNotMatch(root.innerHTML,/当日无课/);
-  assert.match(root.innerHTML,/当日课表无排课，时段按默认节次/);
-  assert.match(root.innerHTML,/id="aprd-start" value="00:00"/);
-  assert.match(root.innerHTML,/id="aprd-end" value="23:59"/);
+  assert.match(root.innerHTML,/当日课表无排课，时段取作息表 9 个节次/);
+  /* 第1节 08:00 起、第9节 18:35 止（作息表缺失时的夏令时兜底口径） */
+  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end" value="18:35"/);
+  assert.doesNotMatch(root.innerHTML,/value="00:00"/);
+  assert.doesNotMatch(root.innerHTML,/value="23:59"/);
+});
+
+test('课表年级写「高一」、考勤年级名「高一年级」时仍算同一天有课',async()=>{
+  const weekday=dayPeriods.weekdayOf(todayYmd());
+  const {root}=await setup({grade:'高一年级',courses:[
+    {id:'c1',weekday,period_no:2,grade:'高一',start_time:'08:50',end_time:'09:30'},
+    {id:'c2',weekday,period_no:7,grade:'高一年级',start_time:'16:00',end_time:'16:45'},
+    {id:'c3',weekday,period_no:4,grade:'高二年级',start_time:'10:50',end_time:'11:30'},
+  ]});
+  assert.match(root.innerHTML,/时段取自当天课表 · 2 个有课节次/);
+  assert.match(root.innerHTML,/全天 08:50—16:45/);
 });
 
 test('时段：课表给默认值，手改后以手改为准，非法区间被拦下不写脏',async()=>{
