@@ -336,7 +336,8 @@
 .attendance-prd .aprd-table-wrap thead th{background:#f7f9fc;color:#74839a;font-weight:600;font-size:12px;padding:12px 10px;border-bottom:1px solid #e6ecf5;white-space:nowrap}
 .attendance-prd .aprd-table-wrap tbody td{padding:10px}
 .attendance-prd .aprd-table-wrap tbody tr:nth-child(even){background:#fff}
-.attendance-prd .aprd-table-wrap tbody td:first-child{color:#94a1b4}
+/* 序号列淡色：用类而不是 td:first-child，因为请假表没有序号列，首列是归属部门。 */
+.attendance-prd .aprd-table-wrap tbody td.aprd-serial{color:#94a1b4}
 
 /* 生成班表：下拉按钮，选项里标出当前选择 */
 .attendance-prd .aprd-filter-actions .aprd-generate-btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#354965;font-size:13px;cursor:pointer}

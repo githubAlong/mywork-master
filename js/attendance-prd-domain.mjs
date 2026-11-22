@@ -21,8 +21,10 @@ export const ATTENDANCE_COLUMNS = {
   seat: TEACHER_COLUMNS,
   class: TEACHER_COLUMNS,
   research: TEACHER_COLUMNS,
-  leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
-  summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长'],
+  /* 2026-11-22：请假表与汇总统计表补上归属部门/归属年级，和花名册四表口径一致。
+     summary 同时是导出表头，改这里要一起改 buildAttendanceExportGrid 的 summary 行。 */
+  leave: ['归属部门', '归属年级', '姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
+  summary: ['序号', '归属部门', '归属年级', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长'],
 };
 
 export function nextTriState(value) {
@@ -870,8 +872,13 @@ export function buildAttendanceExportGrid({
     const summary = Array.isArray(summaryRows)
       ? attendanceSummaryTotals(summaryRows)
       : calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
+    /* 汇总行不一定带 teacherId（历史确认结果里没有这个字段），所以 id 优先、姓名兜底。 */
+    const teacherById = new Map((Array.isArray(teachers) ? teachers : [])
+      .filter(Boolean).map(teacher => [String(teacher.id), teacher]));
+    const rowTeacher = row => teacherById.get(String(row.teacherId)) || teacherByName.get(String(row.name || '').trim());
     const rows = summary.rows.map((row, index) => [
-      index + 1, row.name, row.subject, row.seatPresent, row.classes, row.listens,
+      index + 1, departmentOf(rowTeacher(row)), gradeOf(rowTeacher(row), row),
+      row.name, row.subject, row.seatPresent, row.classes, row.listens,
       row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }),
     ]);
     /* 用户 11-15 需求：导出统一去掉「应到人数」 */

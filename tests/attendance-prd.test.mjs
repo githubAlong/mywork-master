@@ -13,8 +13,8 @@ test('PRD 固定六页签字段顺序', () => {
   for (const type of ['seat','class','research']) {
     assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
   }
-  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['归属部门','归属年级','姓名','学科','类型','开始','结束','请假时长','备注']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假时长']);
 });
 
 test('三态循环保持未登记、在岗、未在岗语义', () => {
@@ -67,7 +67,7 @@ test('月汇总按日期和年级累计，优先取确认过的日表，跨月�
   assert.equal(attendanceSummaryMonthBounds('2024-02').end,'2024-02-29');
   const grid=buildAttendanceExportGrid({type:'summary',grade:'高一',summaryMonth:'2026-11',summaryRows});
   assert.equal(grid[1][0],'月汇总 · 2026-11-01 至 2026-11-30');
-  assert.deepEqual(grid[4],[1,'李老师','语文',2,4,0,0,'2天']);
+  assert.deepEqual(grid[4],[1,'高中部','高一','李老师','语文',2,4,0,0,'2天']);
 });
 
 test('请假区间按开始与结束日期覆盖当前日期', () => {
@@ -234,8 +234,8 @@ test('四类导出都保留全量名单并显示对应状态（11-12 新裁决�
   assert.match(summary[0][0],/汇总统计表/);
   assert.match(summary[1][0],/^日汇总 · 2026-11-11 /);
   assert.ok(!/应到/.test(summary[2][0]),'汇总表标题不应再出现应到');
-  assert.deepEqual(summary[3],['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
-  assert.equal(summary[4][1],'李老师');
+  assert.deepEqual(summary[3],['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假时长']);
+  assert.deepEqual(summary[4].slice(0,4),[1,'高中部','高一','李老师']);
 });
 
 test('上课表统计：有人听课才展示听课人数', () => {

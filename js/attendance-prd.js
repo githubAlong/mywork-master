@@ -1447,7 +1447,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<button type="button" class="aprd-op danger" data-disable="'+esc(teacher.id)+'">删除</button></div>';
     const rows = entries.map(({teacher,state,department,remark:savedRemark},index) => {
       if (type === 'roster') {
-        return '<tr><td>'+(index+1)+'</td><td>'+esc(deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
+        return '<tr><td class="aprd-serial">'+(index+1)+'</td><td>'+esc(deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
           +'<td class="aprd-name">'+esc(teacher.name)+'</td><td>'+esc(teacher.subject||'')+'</td>'
           +'<td><input type="text" class="aprd-note-input" data-roster-note="'+esc(teacher.id)+'" value="'+escAttr(noteOf(teacher))+'" placeholder="备注" aria-label="'+escAttr(teacher.name+' 备注')+'"></td>'
           +'<td>'+actionsOf(teacher)+'</td></tr>';
@@ -1484,7 +1484,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         if (key === 'research') return '<td>'+mark('research',research)+'</td>';
         return '<td>'+mark(key,shown[key])+'</td>';
       }).join('');
-      return '<tr><td>'+(index+1)+'</td><td>'+esc(department||deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
+      return '<tr><td class="aprd-serial">'+(index+1)+'</td><td>'+esc(department||deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
         +'<td class="aprd-name">'+esc(teacher.name)+(dirtyKeys.has(sheetRowKey({teacher}))?'<span class="aprd-dirty">已修改</span>':'')+'</td><td>'+esc(teacher.subject||'')+'</td>'
         +stateCells+'<td>'+remark+'</td>'
         +'<td>'+actionsOf(teacher)+'</td></tr>';
@@ -1527,10 +1527,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const dayChip = leaveOnlyDate
       ? '<span class="aprd-filter-count">仅显示 '+esc(leaveOnlyDate)+' 请假 · '+shown.length+' 条 <button type="button" class="aprd-op" data-leave-show-all>查看全部</button></span>'
       : '<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+matchedTeachers.length+' 位教师 / '+shown.length+' 条请假</span>';
-    const rows = shown.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td>'
+    /* 请假记录只存姓名，部门和年级要回查花名册；取值口径与请假表导出一致，
+       不然屏幕上两列和导出的两列会不一样。 */
+    const teacherByName = new Map(teachers.map(t=>[String(t.name||'').trim(),t]));
+    const rows = shown.map(x=>{const t=teacherByName.get(String(x.name||'').trim());
+      return '<tr><td>'+esc(t?deptOf(t):x.department||'高中部')+'</td><td>'+esc(t?.grade||x.grade||grade)+'</td>'
+      +'<td>'+esc(x.name)+'</td><td>'+esc(x.subject)+'</td><td>'+esc(x.type)+'</td><td>'+esc(x.start_date)+'</td><td>'+esc(x.end_date)+'</td><td>'+esc(formatLeaveDuration(x))+'</td>'
       +(result?'<td>'+esc(x.remark||'')+'</td>'
         : '<td><input type="text" class="aprd-note-input" data-leave-note="'+esc(x.id)+'" value="'+escAttr(x.remark||'')+'" aria-label="'+escAttr(x.name+' 备注')+'"></td>')
-      +'<td><button data-edit-leave="'+esc(x.id)+'">编辑</button> <button data-delete-leave="'+esc(x.id)+'">删除</button></td></tr>').join('');
+      +'<td><button data-edit-leave="'+esc(x.id)+'">编辑</button> <button data-delete-leave="'+esc(x.id)+'">删除</button></td></tr>';
+    }).join('');
     const emptyMessage = scope.length ? '暂无符合筛选条件的请假记录'
       : leaveOnlyDate ? '所选日期暂无请假记录，可点击「新增请假」登记'
         : '暂无请假记录，可点击「新增请假」登记';
@@ -1557,10 +1563,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const visible=summaryRows().map((row,index)=>({row,index})).filter(({row})=>matchesSheetFilter(row));
     const s=attendanceSummaryTotals(visible.map(({row})=>row));
     const kpis=[['应到教师',s.expectedTeachers+'人'],['坐班次数',s.seatPresent],['上课次数',s.classes],['听课人次',s.listens],['请假人数',s.leavePeople+'人']];
-    const rows=visible.map(({row:r,index})=>'<tr><td>'+r.serial+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.subject)+'</td>'
+    /* 汇总表补部门/年级：新行带 teacherId，历史确认结果里的行只有姓名，所以 id 优先、姓名兜底。 */
+    const rowTeacher = r => teachers.find(t=>String(t.id)===String(r.teacherId))
+      || teachers.find(t=>String(t.name||'').trim()===String(r.name||'').trim());
+    const rows=visible.map(({row:r,index})=>{const t=rowTeacher(r);
+      return '<tr><td class="aprd-serial">'+r.serial+'</td><td>'+esc(t?deptOf(t):r.department||'高中部')+'</td><td>'+esc(t?.grade||r.grade||grade)+'</td>'
+      +'<td>'+esc(r.name)+'</td><td>'+esc(r.subject)+'</td>'
       +SUMMARY_COUNT_FIELDS.map(([key])=>'<td>'+esc(r[key])+'</td>').join('')
       +'<td>'+esc(summaryDuration(r))+'</td>'
-      +(showActions?'<td><button type="button" class="aprd-op" data-summary-edit-row="'+index+'">编辑</button></td>':'')+'</tr>').join('');
+      +(showActions?'<td><button type="button" class="aprd-op" data-summary-edit-row="'+index+'">编辑</button></td>':'')+'</tr>';
+    }).join('');
     const range = byMonth ? attendanceSummaryMonthBounds(summaryMonth) : null;
     tabCorner = tabCornerHtml('data-summary-import', summaryRows().length);
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+teacherFiltersHtml()+voiceButtonHtml()
