@@ -527,3 +527,27 @@
  .attendance-prd .aprd-batch{align-items:flex-start;flex-direction:column;gap:7px}
  .attendance-prd .aprd-batch-side{width:100%;justify-content:space-between}
 }
+
+/* ============================================================
+   2026-11-22 批量导入 / 批量导出上移到卡片右上角（与页签同一行）：
+   操作不能直接塞进 .aprd-tabs —— 那是 overflow-x:auto 的横滚容器，
+   导出面板向下展开会被裁掉，所以外面套一行、只让页签自己滚。
+   ============================================================ */
+.attendance-prd .aprd-tabs-row{display:flex;align-items:center;gap:14px;margin:0 0 14px;border-bottom:1px solid #e4ebf5}
+.attendance-prd .aprd-tabs-row .aprd-tabs{flex:1 1 auto;min-width:0;margin:0;padding:0;border-bottom:0}
+.attendance-prd .aprd-card .aprd-tabs-row{margin:0 -16px 14px;padding:0 16px}
+.attendance-prd .aprd-card .aprd-tabs-row .aprd-tabs{margin:0;padding:0}
+.attendance-prd .aprd-tab-actions{margin-left:auto}
+.attendance-prd .aprd-tab-actions button{height:34px;padding:0 13px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#3f526d;font-size:12px;cursor:pointer;white-space:nowrap}
+.attendance-prd .aprd-tab-actions button:hover{border-color:#b9d2ff;color:#165dff}
+.attendance-prd .aprd-tab-actions .aprd-export-toggle{display:inline-flex;align-items:center;gap:6px}
+@media(max-width:760px){
+ /* 装得下就和页签同一行，放不下才让操作整组换到第二行（页签自己横滚）。 */
+ .attendance-prd .aprd-tabs-row{flex-wrap:wrap}
+ .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -16px 12px;padding:0 16px}
+ /* 窄屏上这一组贴右缘，导出面板必须跟着向右对齐展开，否则会顶出视口。 */
+ .attendance-prd .aprd-tab-actions .aprd-export-menu{right:0;left:auto;max-width:calc(100vw - 32px)}
+}
+@media(max-width:600px){
+ .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -12px 12px;padding:0 12px}
+}

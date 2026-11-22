@@ -1422,6 +1422,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       + (dirtyCount ? '<button type="button" class="aprd-dirty-badge" data-scroll-dirty>有 ' + dirtyCount + ' 条未确认变更</button>' : '')
       + '<span class="aprd-batch-note">' + esc(info.note) + '</span></div></div>';
   };
+  /* 批量导入/批量导出挂在卡片右上角的页签行上，可导出条数只有各张表自己算得出来，
+     所以由各页签的 builder 往 tabCorner 交一份，renderPage 拼页签行时取用。 */
+  let tabCorner = '';
+  const tabCornerHtml = (importAction, count) => (importAction
+    ? '<button type="button" class="aprd-op" '+importAction+'>批量导入</button>' : '') + exportMenuHtml(count);
   const rosterHtml = (type = 'roster') => {
     const result = isEditing(type) ? null : confirmedResult(type);
     const editable = type !== 'roster' && !result;
@@ -1485,8 +1490,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         +'<td>'+actionsOf(teacher)+'</td></tr>';
     }).join('');
     const tools = voiceButtonHtml()+'<button class="primary aprd-add-btn" data-add>'+(showAddTeacher?'收起表单':'＋ 新增教师')+'</button>'
-      +'<button type="button" class="aprd-op" data-roster-import>批量导入</button>'
-      +exportMenuHtml(listedTeachers.length)+(type==='roster'?'':sheetButtonsHtml(type));
+      +(type==='roster'?'':sheetButtonsHtml(type));
+    tabCorner = tabCornerHtml('data-roster-import', listedTeachers.length);
     const currentStates = entries.map(({state})=>state);
     /* 设计稿的统计条：数字在上、文字在下，整条一个圆角边框，格子之间用竖线分隔。
        统计条跟着本表显示的列走：坐班表全量，上课表看上课/听课，教研表看教研/请假。 */
@@ -1529,7 +1534,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const emptyMessage = scope.length ? '暂无符合筛选条件的请假记录'
       : leaveOnlyDate ? '所选日期暂无请假记录，可点击「新增请假」登记'
         : '暂无请假记录，可点击「新增请假」登记';
-    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()+voiceButtonHtml()+'<button class="primary" data-add-leave>新增请假</button>'+exportMenuHtml(teachers.length)+sheetButtonsHtml('leave')+'</div>'+dayChip+'</div>'
+    tabCorner = tabCornerHtml('', teachers.length);
+    return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+teacherFiltersHtml()+voiceButtonHtml()+'<button class="primary" data-add-leave>新增请假</button>'+sheetButtonsHtml('leave')+'</div>'+dayChip+'</div>'
       +'<div class="aprd-table-wrap"><table><thead><tr>'+ATTENDANCE_COLUMNS.leave.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+(rows||'<tr><td class="aprd-empty" colspan="'+(ATTENDANCE_COLUMNS.leave.length+1)+'">'+emptyMessage+'</td></tr>')+'</tbody></table></div>';
   };
   const calculateSummaryRows = () => calculateDailySummary({teachers,seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],
@@ -1556,8 +1562,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<td>'+esc(summaryDuration(r))+'</td>'
       +(showActions?'<td><button type="button" class="aprd-op" data-summary-edit-row="'+index+'">编辑</button></td>':'')+'</tr>').join('');
     const range = byMonth ? attendanceSummaryMonthBounds(summaryMonth) : null;
+    tabCorner = tabCornerHtml('data-summary-import', summaryRows().length);
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+rangeSelect+teacherFiltersHtml()+voiceButtonHtml()
-      +'<button type="button" class="aprd-op" data-summary-import>批量导入</button>'+exportMenuHtml(summaryRows().length)
       +sheetButtonsHtml('summary')+(editing?'<button type="button" class="aprd-op" data-summary-recalculate>按考勤重新统计</button>':'')
       +'<span class="aprd-filter-count">'+(range?range.start+' 至 '+range.end:date)+'</span>'
       +'</div></div><div class="aprd-kpis">'+kpis.map(([label,value])=>'<div class="aprd-kpi"><span>'+label+'</span><b>'+value+'</b></div>').join('')+'</div>'
@@ -1601,6 +1607,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const periodItems = dayPeriodInfo().items;
     /* 整天一节课都没有（周末、还没录课表）就不给每个节次挂「当日无课」，那样只会吵。 */
     const dayHasClasses = periodItems.some(item => item.schooled);
+    /* 月汇总还在加载时 builder 会提前返回，不会交右上角的操作，所以每次重新渲染先清空。 */
+    tabCorner = '';
     const content = ['roster','seat','class','research'].includes(tab)?rosterHtml(tab):tab==='leave'?leaveHtml():summaryHtml();
     const periodRange = resolvePeriodRange(period);
     const byMonth=isMonthlySummary(tab);
@@ -1614,7 +1622,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+periodItems.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+((p.schooled||!dayHasClasses)?'':' class="aprd-period-off"')+'>'+esc(p.label+(p.schooled||!dayHasClasses?'':'（当日无课）'))+'</option>').join('')+'</select></label>'
       +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>')
       +'</div></div>'
-      +'<section class="aprd-card"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
+      +'<section class="aprd-card"><div class="aprd-tabs-row"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
+      +(tabCorner?'<div class="aprd-tab-actions">'+tabCorner+'</div>':'')+'</div>'
       +'<div class="aprd-panel">'+batch+content+'</div></section></div>';
     root.querySelector('[data-scroll-dirty]')?.addEventListener('click',()=>{
       const row=root.querySelector('.aprd-dirty')?.closest('tr');
