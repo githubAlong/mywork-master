@@ -5,9 +5,9 @@ async function open(page){
  await page.goto('/?e2e=1#/attendance/高一');await expect(page.locator('#aprd-roster-add-form')).toBeVisible();
 }
 test('新增归属年级支持手输与下拉，编辑可迁移，删除保留回收站',async({page})=>{
- await open(page);const add=page.locator('#aprd-roster-add-form');await expect(add.locator('[name="grade"]')).toHaveAttribute('data-choice-list','aprd-add-grades');
+ await open(page);const add=page.locator('#aprd-roster-add-form');await expect(add.locator('[name="grade"]')).toHaveAttribute('list','aprd-add-grades');
  await add.locator('[name="name"]').fill('王老师');await add.locator('[name="subject"]').fill('数学');await add.locator('[name="grade"]').fill('高三实验年级');await add.locator('[type="submit"]').click();await expect(page.locator('.aprd-grade .on')).toHaveText('高三实验年级');
- const row=page.locator('.aprd-table-wrap tbody tr').filter({hasText:'王老师'});await expect(row).toContainText('高三实验年级');await row.locator('[data-edit]').click();const editor=page.locator('.aprd-dialog form');await expect(editor.locator('[name="grade"]')).toHaveValue('高三实验年级');await expect(editor.locator('[name="grade"]')).toHaveAttribute('data-choice-list','aprd-editor-grade-options');await editor.locator('[name="grade"]').fill('高二');await editor.locator('[type="submit"]').click();await expect(page.locator('.aprd-grade .on')).toHaveText('高二');
+ const row=page.locator('.aprd-table-wrap tbody tr').filter({hasText:'王老师'});await expect(row).toContainText('高三实验年级');await row.locator('[data-edit]').click();const editor=page.locator('.aprd-dialog form');await expect(editor.locator('[name="grade"]')).toHaveValue('高三实验年级');await expect(editor.locator('[name="grade"]')).toHaveAttribute('list','aprd-editor-grade-options');await editor.locator('[name="grade"]').fill('高二');await editor.locator('[type="submit"]').click();await expect(page.locator('.aprd-grade .on')).toHaveText('高二');
  await expect(row.locator('[data-disable]')).toHaveText('删除');await row.locator('[data-disable]').click();await page.locator('[data-a="ok"]').click();await expect(row).toHaveCount(0);
  const deleted=await page.evaluate(async()=>{const {load}=await import('/js/localdb.js');return load().teachers.find(t=>t.name==='王老师')?.deleted_at});expect(deleted).toBeTruthy();
 });

@@ -111,7 +111,7 @@ export const NAV = [
       { id: 'notes', label: '笔记', icon: 'edit' },
   { id: 'daily', label: '便签', icon: 'daily' },
   { id: 'study', label: '学习', icon: 'study' },
-  { id: 'selfstudy', label: '任务', icon: 'clock' },
+  { id: 'selfstudy', label: '自习', icon: 'clock' },
   { id: 'textbook', label: '教材', icon: 'book' },
   { id: 'pick', label: '点名', icon: 'dice' },
   { id: 'mystery', label: '盲盒', icon: 'gift' },
@@ -719,11 +719,34 @@ function sheetRaw(title, bodyEl) {
   requestAnimationFrame(() => mask.classList.add('in'));
   const h = { onClose: null };
   let closed = false;
+  let onKey = null;
   const close = () => {
     if (closed) return; closed = true;
+    if (onKey) document.removeEventListener('keydown', onKey);
     mask.classList.remove('in'); setTimeout(() => mask.remove(), 220); h.onClose?.();
   };
+  onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    const masks = document.querySelectorAll('.sheet-mask');
+    if (masks[masks.length - 1] !== mask) return;
+    e.stopPropagation(); close();
+  };
+  document.addEventListener('keydown', onKey);
   mask.querySelector('.sheet-close').onclick = close;
+  /* 【点遮罩关闭 —— 必须「按下和松开都在遮罩上」才算】
+     原来的写法只判断 click 的 e.target === mask，有两个致命副作用：
+       1) 在输入框里拖选文字，鼠标/手指滑出弹层再松开，浏览器把这次点击归到
+          mask 上（按下和松开不在同一元素时，click 派发到共同祖先），弹层直接关掉。
+          用户视角就是「我点科目想全选/想改字，页面自己关了，白填了」。
+       2) 手机上手指稍微滑出弹层就被关，比电脑更容易误触。
+     现在记录 pointerdown 的落点，只有落点也在遮罩空白处才关，
+     从输入框里拖出去的松手一律不关。 */
+  let downOnMask = false;
+  mask.addEventListener('pointerdown', (e) => { downOnMask = e.target === mask; });
+  mask.addEventListener('click', (e) => {
+    if (e.target === mask && downOnMask) close();
+    downOnMask = false;
+  });
   return { mask, close, set onClose(fn) { h.onClose = fn; } };
 }
 

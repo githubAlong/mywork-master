@@ -4728,7 +4728,7 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .ssm-btn.danger { border-color:rgba(239,68,68,.4); color:#ef4444; }
 .ssm-btn:disabled { opacity:.5; cursor:not-allowed; }
 .ssm-list { display:flex; flex-direction:column; gap:12px; }
-.ssm-item { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; min-height:64px; padding:12px 14px;
+.ssm-item { display:flex; align-items:center; gap:12px; min-height:64px; padding:12px 14px;
   border:1px solid var(--line); border-radius:10px; background:var(--card); cursor:pointer; transition:background .15s; }
 .ssm-item:hover { background:var(--bg-sunken); }
 .ssm-item.on { border-color:#1677ff; background:rgba(22,119,255,.06); }
@@ -4736,12 +4736,9 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .ssm-item-no { flex:0 0 auto; width:22px; color:#98a2b3; font-size:12px; text-align:center; font-variant-numeric:tabular-nums; }
 .ssm-item-ico { flex:0 0 auto; display:grid; place-items:center; width:30px; height:30px;
   border-radius:8px; background:rgba(22,119,255,.1); color:#1677ff; }
-.ssm-item-copy { flex:1 1 100px; min-width:0; }
-.ssm-item-t { color:var(--text); font-size:14px; font-weight:650; overflow-wrap:anywhere; }
+.ssm-item-t { color:var(--text); font-size:14px; font-weight:650; }
 .ssm-item-d { margin-top:2px; color:#9ca3af; font-size:12.5px; }
-.ssm-item-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-left:auto; }
-.ssm-item-actions .ssm-btn { height:32px; padding:0 10px; font-size:12px; }
-.ssm-tag { padding:4px 10px; border-radius:6px; font-size:12px; font-weight:650; }
+.ssm-tag { margin-left:auto; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:650; }
 .ssm-tag.pub { background:rgba(22,119,255,.12); color:#1677ff; }
 .ssm-tag.draft { background:rgba(54,198,107,.12); color:#36c66b; }
 .ssm-pc-row { display:flex; align-items:center; gap:12px; }
@@ -4766,6 +4763,7 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .st-card-head { padding:26px 36px 24px; text-align:center; color:#fff;
   background:linear-gradient(90deg,#1677ff 0%,#2f9dfb 45%,#36c66b 100%); }
 .st-card-title { font-size:24px; font-weight:700; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.st-card-sub { margin-top:8px; font-size:14px; opacity:.92; }
 .st-card-body { padding:34px 48px 12px; font-size:18px; line-height:1.8; }
 .st-list { margin:0; padding-left:26px; }
 .st-list li { margin-bottom:14px; font-weight:650; }
@@ -5054,8 +5052,6 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
   .lp-footer-actions { width: 100%; }
   .lp-footer-actions .btn { flex: 1 1 0; }
 }
-
-/* 班级输入框候选下拉（class-picker.mjs）：箭头展开自绘面板，输入框主体始终可打字 */
 .class-picker {
   position: relative;
   display: flex;
@@ -5065,26 +5061,35 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .class-picker > input {
   flex: 1;
   min-width: 0;
+}
+.class-picker:has(> .class-picker-options:not([hidden])) > input {
   padding-inline-end: 34px;
 }
-.class-picker > .class-picker-arrow {
+.class-picker > select.class-picker-options {
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  width: 34px;
-  display: grid;
-  place-items: center;
-  color: var(--text-3);
+  inset: 1px 1px 1px auto;
+  width: 32px;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  opacity: 0;
   cursor: pointer;
-  border-radius: 0 9px 9px 0;
 }
-.class-picker > .class-picker-arrow:hover { color: var(--text); }
-.class-picker > .class-picker-arrow[hidden] { display: none; }
-.class-picker:has(> input:focus) > .class-picker-arrow { color: var(--text-2); }
-
-/* 普通录入框留空时保持简洁，保留字段名和无障碍读法。 */
-input:not(.auth-input input)::placeholder,
-textarea::placeholder {
-  color: transparent !important;
-  opacity: 0 !important;
+.class-picker:has(> .class-picker-options:not([hidden]))::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 13px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-inline-end: 1px solid currentColor;
+  border-block-end: 1px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.class-picker:has(> .class-picker-options:focus-visible) {
+  outline: 2px solid var(--blue, #2563eb);
+  outline-offset: 2px;
+  border-radius: 6px;
 }

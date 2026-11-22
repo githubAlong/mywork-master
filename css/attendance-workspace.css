@@ -143,133 +143,92 @@
 .ad-slot.locked b{color:#8b95a6}
 
 
-/* ===== 考勤管理首页 ===== */
-.main:has(.agd-dashboard) { width: 100%; max-width: none; margin: 0; }
-.agd-dashboard {
-  --agd-bg: #edf3fa;
-  --agd-surface: #fff;
-  --agd-ink: #14243b;
-  --agd-muted: #52647c;
-  --agd-line: #cfdbeb;
-  --agd-blue: #1755d7;
-  --agd-blue-soft: #dce8ff;
-  --agd-panel: #ebf2fd;
-  --agd-green: #087547;
-  --agd-green-soft: #e3f7eb;
-  width: 100%;
-  padding: clamp(12px, 2vw, 30px);
-  border-radius: 20px;
-  background: var(--agd-bg);
-  color: var(--agd-ink);
+/* ===== 考勤管理首页 · 2026 视觉确认稿 ===== */
+.agd-dashboard{width:100%;max-width:none;color:#172b4d}
+.agd-header{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:2px 0 24px}
+.agd-heading{display:flex;align-items:center;gap:15px;min-width:0}
+.agd-heading-icon{width:54px;height:54px;display:grid;place-items:center;flex:0 0 auto;border-radius:16px;background:linear-gradient(145deg,#e5efff,#d7e7ff);color:#1764f5}
+.agd-heading h2{margin:0 0 5px;color:#142744;font-size:27px;line-height:1.2;font-weight:820;letter-spacing:-.5px}
+.agd-heading p{margin:0;color:#7285a3;font-size:13px;line-height:1.5}
+.agd-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:0 0 auto}
+.agd-live{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;border-radius:999px;background:#e9f8ef;color:#159451;font-size:12px;font-weight:700;white-space:nowrap}
+.agd-live i{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;box-shadow:0 0 0 4px rgba(22,163,74,.11)}
+.agd-manage,.agd-add{height:42px!important;padding:0 17px!important;border-radius:11px!important;font-size:13px!important;font-weight:700!important;white-space:nowrap}
+.agd-add{background:#1764f5!important;border-color:#1764f5!important;box-shadow:0 5px 13px rgba(23,100,245,.18)}
+.agd-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0 0 30px}
+.agd-stat{min-width:0;min-height:102px;display:flex;align-items:center;gap:16px;padding:18px 20px;border:1px solid #e7edf7;border-radius:17px;background:#fff;box-shadow:0 7px 22px rgba(39,79,140,.055)}
+.agd-stat>i{width:62px;height:62px;display:grid;place-items:center;flex:0 0 auto;border-radius:17px;background:#e9f1ff;color:#1764f5;font-size:30px;font-style:normal;font-weight:800}
+.agd-stat>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.agd-stat b{color:#142744;font-size:29px;line-height:1;font-weight:820;font-variant-numeric:tabular-nums}
+.agd-stat span{color:#7285a3;font-size:12px;white-space:nowrap}
+.agd-stat.purple>i{background:#f1eaff;color:#8654ed}
+.agd-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 16px}
+.agd-section-head h3{display:flex;align-items:center;gap:9px;margin:0 0 5px;color:#172b4d;font-size:19px;font-weight:800}
+.agd-section-head h3 svg{color:#2768c9}
+.agd-section-head p{margin:0;color:#7c8eaa;font-size:12px}
+.agd-date{padding:9px 13px;border:1px solid #e4ebf6;border-radius:11px;background:#fff;color:#637895;font-size:12px;white-space:nowrap}
+.agd-grade-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:stretch}
+.agd-grade-card{display:flex;flex-direction:column;min-width:0;min-height:184px;padding:0;overflow:hidden;border:1px solid #e2eaf6;border-radius:18px;background:#fff;text-align:left;box-shadow:0 7px 22px rgba(39,79,140,.06);cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.agd-grade-card:hover{transform:translateY(-3px);border-color:#b9d0fa;box-shadow:0 13px 28px rgba(37,99,235,.11)}
+.agd-grade-banner{display:flex;align-items:center;gap:8px;min-height:62px;padding:13px 17px;background:linear-gradient(115deg,#2874f7,#1463e8 68%,#0e9b9a);color:#fff}
+.agd-grade-card:nth-child(2) .agd-grade-banner{background:linear-gradient(115deg,#8b70f6,#6555e9)}
+.agd-grade-card:nth-child(3) .agd-grade-banner{background:linear-gradient(115deg,#22b6c6,#1c9db7)}
+.agd-grade-name{display:flex;align-items:center;gap:9px;color:#fff;font-size:21px;font-weight:800;white-space:nowrap}
+.agd-grade-name i{display:grid;place-items:center;color:rgba(255,255,255,.88);font-style:normal}
+.agd-grade-content{display:flex;flex:1;flex-direction:column;padding:15px 16px 14px}
+.agd-grade-count{display:flex;align-items:baseline;gap:7px}
+.agd-grade-count>b{color:#142744;font-size:32px;line-height:1;font-weight:820;font-variant-numeric:tabular-nums}
+.agd-grade-count>span{color:#7285a3;font-size:12px}
+.agd-grade-count.is-empty>b{color:#9fadbf;font-size:26px}
+.agd-grade-scope{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;color:#61769a;font-size:12px}
+.agd-grade-scope i{color:#b6c3d6;font-style:normal}
+.agd-grade-foot{display:flex;align-items:center;justify-content:space-between;gap:7px;margin-top:auto;padding-top:14px;border-top:1px solid #edf1f7}
+.agd-grade-foot>span{overflow:hidden;color:#8999b0;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.agd-grade-foot>b{display:inline-flex;align-items:center;gap:3px;color:#1764ed;font-size:10px;font-weight:750;white-space:nowrap}
+.agd-new-card{display:flex;min-height:184px;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px 16px;border:1.5px dashed #b9d0fa;border-radius:18px;background:linear-gradient(180deg,#fff,#f8fbff);color:#25456e;cursor:pointer;transition:background .18s ease,border-color .18s ease}
+.agd-new-card:hover{border-color:#5f97fa;background:#f4f8ff}
+.agd-new-plus{width:58px;height:58px;display:grid;place-items:center;border-radius:19px;background:#eaf2ff;color:#1764f5}
+.agd-new-card>b{color:#1d3558;font-size:17px;font-weight:800}
+.agd-new-card>span:not(.agd-new-plus){color:#8394ad;font-size:12px}
+.agd-school-scene{width:100%;margin-top:10px;color:#d5e4fb;font-size:68px;font-style:normal;line-height:.8;text-align:center}
+.agd-maintenance{margin-top:22px;padding-top:12px;border-top:1px solid #e7edf6;color:#8795aa;font-size:11px}
+.agd-maintenance summary{width:max-content;cursor:pointer;list-style:none}
+.agd-maintenance summary::-webkit-details-marker{display:none}
+.agd-maintenance summary:after{content:"＋";margin-left:6px}
+.agd-maintenance[open] summary:after{content:"－"}
+.agd-maintenance>div{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:12px;border:1px solid #f1dede;border-radius:10px;background:#fffafa}
+.agd-maintenance .agl-danger{color:#c64b4b;font-size:11px}
+@media(max-width:1180px){
+ .agd-header{align-items:flex-start;flex-direction:column}
+ .agd-actions{width:100%;justify-content:flex-start}
+ .agd-grade-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
-html[data-theme="dark"] .agd-dashboard {
-  --agd-bg: #172132;
-  --agd-surface: #202d41;
-  --agd-ink: #f2f6ff;
-  --agd-muted: #b9c8dc;
-  --agd-line: #394b65;
-  --agd-blue: #a4c3ff;
-  --agd-blue-soft: #2a4270;
-  --agd-panel: #263752;
-  --agd-green: #8ce4b5;
-  --agd-green-soft: #214635;
-}
-.agd-header, .agd-stats, .agd-grade-card {
-  border: 1px solid var(--agd-line);
-  border-radius: 16px;
-  background: var(--agd-surface);
-}
-.agd-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px 24px;
-  padding: clamp(14px, 2vw, 24px);
-  margin-bottom: 18px;
-}
-.agd-heading, .agd-actions { display: flex; align-items: center; gap: 12px; }
-.agd-heading { min-width: 0; gap: clamp(12px, 1.5vw, 20px); }
-.agd-actions { flex-wrap: wrap; }
-.agd-heading-icon, .agd-stat > i, .agd-grade-name > i {
-  display: grid;
-  flex: none;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--agd-blue-soft);
-  color: var(--agd-blue);
-  font-style: normal;
-}
-.agd-heading-icon { width: 56px; height: 56px; }
-.agd-heading h2, .agd-section-head h3 { margin: 0; color: var(--agd-ink); font-weight: 800; line-height: 1.2; }
-.agd-heading h2 { font-size: clamp(24px, 2.55vw, 37px); }
-.agd-section-head h3 { font-size: clamp(20px, 2vw, 29px); }
-.agd-heading p, .agd-section-head p { margin: 6px 0 0; color: var(--agd-muted); font-size: clamp(12px, 1.15vw, 16px); line-height: 1.5; }
-.agd-live, .agd-date { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.agd-live { padding: 8px 12px; border-radius: 999px; background: var(--agd-green-soft); color: var(--agd-green); font-size: 12px; font-weight: 650; }
-.agd-live i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.agd-dashboard .agd-manage, .agd-dashboard .agd-add { min-height: 42px; padding: 8px 15px; border-radius: 10px; white-space: nowrap; }
-.agd-dashboard .agd-manage { border-color: var(--agd-line); color: var(--agd-muted); }
-.agd-dashboard .agd-add { background: #265ceb; border-color: #265ceb; color: #fff; box-shadow: none; }
-.agd-dashboard .agd-add:hover { background: #194bd0; }
-.agd-stats{
-  display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
-  padding-block: 16px;
-  margin-bottom: clamp(20px, 2.2vw, 34px);
-}
-.agd-stat { display: flex; min-width: 0; align-items: center; gap: clamp(10px, 1.65vw, 24px); padding: 5px clamp(12px, 2.8vw, 44px); }
-.agd-stat + .agd-stat { border-inline-start: 1px solid var(--agd-line); }
-.agd-stat > i { width: 56px; height: 56px; }
-.agd-stat > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
-.agd-stat span { color: var(--agd-muted); font-size: 13px; }
-.agd-stat b { font-size: clamp(28px, 3.2vw, 48px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-.agd-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; margin-bottom: 16px; }
-.agd-date { padding: 9px 12px; border: 1px solid var(--agd-line); border-radius: 10px; background: var(--agd-surface); color: var(--agd-muted); font-size: 13px; }
-.agd-date svg { color: var(--agd-blue); }
-.agd-grade-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.agd-grade-grid[hidden] { display: none; }
-.agd-grade-card { display: flex; flex-direction: column; min-width: 0; padding: 0; overflow: hidden; color: var(--agd-ink); font: inherit; text-align: start; cursor: pointer; transition: border-color .15s ease; }
-.agd-grade-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 13px clamp(14px, 1.6vw, 23px); border-bottom: 1px solid var(--agd-line); background: var(--agd-panel); }
-.agd-grade-name { display: flex; min-width: 0; align-items: center; gap: 12px; overflow-wrap: anywhere; font-size: clamp(19px, 1.8vw, 28px); font-weight: 800; }
-.agd-grade-name > i { width: 44px; height: 44px; }
-.agd-grade-content { display: flex; flex: 1; flex-direction: column; gap: 12px; padding: clamp(14px, 1.6vw, 23px); }
-.agd-grade-count { display: flex; min-height: clamp(35px, 3.3vw, 51px); align-items: baseline; gap: 8px; color: var(--agd-muted); font-size: 14px; }
-.agd-grade-count>b{ color: var(--agd-ink); font-size: clamp(31px, 3vw, 46px); line-height: 1.1; font-weight: 800; font-variant-numeric: tabular-nums; }
-.agd-grade-count.is-empty > b { font-size: clamp(25px, 2.6vw, 40px); }
-.agd-grade-scope { display: flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 10px; border-top: 1px solid var(--agd-line); color: var(--agd-muted); font-size: 14px; line-height: 1.5; }
-.agd-grade-scope i{ font-style: normal; }
-.agd-grade-foot { display: block; margin-top: auto; padding-top: 4px; }
-.agd-grade-foot > b, .agd-new-card { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--agd-blue); font-weight: 750; }
-.agd-grade-foot > b { min-height: 44px; padding: 8px; border-radius: 10px; background: var(--agd-blue-soft); font-size: 15px; text-align: center; }
-.agd-grade-card:hover, .agd-new-card:hover { border-color: var(--agd-blue); }
-.agd-grade-card:hover .agd-grade-foot > b, .agd-new-card:hover { background: var(--agd-panel); }
-.agd-grade-card:focus-visible, .agd-new-card:focus-visible, .agd-maintenance summary:focus-visible { outline: 2px solid var(--agd-blue); outline-offset: 3px; }
-.agd-new-card { width: 100%; min-height: 52px; margin-top: 16px; padding: 8px 14px; border: 1px dashed #7199eb; border-radius: 12px; background: transparent; font-size: 16px; cursor: pointer; }
-.agd-maintenance { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--agd-line); color: var(--agd-muted); font-size: 13px; }
-.agd-maintenance summary { width: fit-content; padding: 4px 2px; cursor: pointer; list-style: none; }
-.agd-maintenance summary::-webkit-details-marker { display: none; }
-.agd-maintenance summary::after { content: "＋"; margin-left: 6px; }
-.agd-maintenance[open] summary::after { content: "－"; }
-.agd-maintenance > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 10px; padding: 12px; border: 1px solid var(--agd-line); border-radius: 10px; background: var(--agd-surface); }
-.agd-maintenance .agl-danger { color: var(--red, #ba4242); }
-
-@media (max-width: 1100px) {
-  .agd-grade-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 680px) {
-  .agd-header, .agd-section-head { align-items: flex-start; }
-  .agd-header { padding: 12px; }
-  .agd-heading-icon, .agd-stat > i { width: 38px; height: 38px; border-radius: 9px; }
-  .agd-heading-icon svg, .agd-stat > i svg { width: 21px; height: 21px; }
-  .agd-actions { gap: 7px; }
-  .agd-live, .agd-dashboard .agd-manage, .agd-dashboard .agd-add { font-size: 12px; }
-  .agd-dashboard .agd-manage, .agd-dashboard .agd-add { padding-inline: 9px; }
-  .agd-stats { padding-block: 9px; }
-  .agd-stat { padding-inline: 8px; gap: 6px; }
-  .agd-stat span { font-size: 11px; }
-  .agd-grade-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .agd-grade-name > i { width: 36px; height: 36px; }
+@media(max-width:680px){
+ .agd-header{gap:14px;margin-bottom:17px}
+ .agd-heading{align-items:flex-start;gap:11px}
+ .agd-heading-icon{width:44px;height:44px;border-radius:13px}
+ .agd-heading h2{font-size:22px}
+ .agd-heading p{font-size:11px}
+ .agd-actions{gap:7px;flex-wrap:wrap}
+ .agd-live{padding:8px 10px;font-size:10px}
+ .agd-manage,.agd-add{height:36px!important;padding:0 11px!important;font-size:11px!important}
+ .agd-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:22px}
+ .agd-stat{min-height:76px;gap:10px;padding:11px;border-radius:13px}
+ .agd-stat>i{width:42px;height:42px;border-radius:12px;font-size:22px}
+ .agd-stat b{font-size:22px}
+ .agd-stat span{font-size:10px}
+ .agd-section-head{align-items:flex-start;flex-direction:column;gap:8px;margin-bottom:12px}
+ .agd-section-head h3{font-size:16px}
+ .agd-date{padding:7px 10px;font-size:10px}
+ .agd-grade-grid{grid-template-columns:1fr;gap:11px}
+ .agd-grade-card,.agd-new-card{min-height:0}
+ .agd-grade-banner{min-height:58px;padding:12px 14px}
+ .agd-grade-name{font-size:18px}
+ .agd-grade-content{padding:13px}
+ .agd-grade-foot{padding-top:11px}
+ .agd-new-card{min-height:170px}
+ .agd-school-scene{display:none}
+ .agd-maintenance>div{align-items:flex-start;flex-direction:column}
 }
 
 /* 全屏表格工作台：进入年级后以表格为主，不再用管理卡片占据空间 */
@@ -503,6 +462,117 @@ html[data-theme="dark"] .agd-dashboard {
  .att-work-sheet-table td{height:48px}
  .aw-mark.aw-big-mark{width:36px;height:36px;min-width:36px}
  .att-work-foot{align-items:stretch}
+}
+
+
+/* ===== 考勤管理首页：按最终确认稿精修 ===== */
+/* 考勤管理首页单独铺满可用工作区，不受全站舒适宽度限制。 */
+.main:has(.agd-dashboard){width:100%;max-width:none;margin:0}
+.agd-dashboard{
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:4px 0 26px;
+}
+.agd-header{margin:0 0 24px}
+.agd-actions{gap:12px}
+.agd-manage,.agd-add{height:48px!important;padding:0 19px!important}
+.agd-stats{gap:18px;margin-bottom:26px}
+.agd-stat{min-height:112px;padding:20px 22px;border-radius:18px}
+.agd-stat>i{width:64px;height:64px;border-radius:18px}
+.agd-section-head{margin-bottom:18px}
+.agd-grade-grid{grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}
+.agd-grade-grid.is-empty{grid-template-columns:minmax(280px,420px)}
+.agd-grade-grid.is-empty .agd-new-card{min-height:176px;padding:20px}
+.agd-grade-grid.is-empty .agd-school-scene{display:none}
+.agd-grade-card,.agd-new-card{min-height:236px;border-radius:20px}
+.agd-grade-grid.is-empty .agd-new-card{min-height:176px}
+.agd-grade-banner{min-height:74px;padding:16px 20px}
+.agd-grade-name{font-size:23px}
+.agd-grade-content{padding:20px 18px 17px}
+.agd-grade-count>b{font-size:36px}
+.agd-grade-count>span{font-size:13px}
+.agd-grade-count.is-empty>b{font-size:28px}
+.agd-grade-scope{margin-top:12px;font-size:13px}
+.agd-grade-foot{padding-top:16px}
+.agd-new-card{gap:14px}
+.agd-new-plus{width:64px;height:64px}
+
+@media(max-width:680px){
+  .agd-dashboard{padding:8px 0 18px}
+  .agd-crumb{gap:7px;margin-bottom:18px;font-size:11px}
+  .agd-header{gap:14px;margin-bottom:18px}
+  .agd-actions{gap:7px}
+  .agd-manage,.agd-add{height:38px!important;padding:0 11px!important}
+  .agd-stats{gap:8px;margin-bottom:22px}
+  .agd-stat{min-height:78px;padding:11px}
+  .agd-stat>i{width:42px;height:42px}
+  .agd-section-head{margin-bottom:12px}
+  .agd-grade-grid{grid-template-columns:1fr;gap:11px}
+  .agd-grade-grid.is-empty{grid-template-columns:minmax(0,1fr)}
+  .agd-grade-card,.agd-new-card{min-height:0}
+  .agd-grade-banner{min-height:60px;padding:12px 14px}
+  .agd-grade-content{padding:14px}
+  .agd-new-card{min-height:185px}
+}
+
+
+/* ===== 年级考勤卡片：强化「进入考勤工作台」主入口 ===== */
+.agd-grade-foot {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+  margin-top:auto;
+  padding-top:16px;
+  border-top:1px solid #edf1f7;
+}
+.agd-grade-foot>span {
+  color:#8798b0;
+  font-size:11px;
+  line-height:1.45;
+  text-align:center;
+  white-space:normal;
+}
+.agd-grade-foot>b {
+  display:flex;
+  width:100%;
+  min-height:50px;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:0 18px;
+  border-radius:12px;
+  background:linear-gradient(110deg,#2874f7,#155fe6);
+  color:#fff;
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:.2px;
+  box-shadow:0 7px 16px rgba(37,99,235,.20);
+  transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;
+}
+.agd-grade-card:nth-child(2) .agd-grade-foot>b {
+  background:linear-gradient(110deg,#8b70f6,#6555e9);
+  box-shadow:0 7px 16px rgba(111,86,231,.20);
+}
+.agd-grade-card:nth-child(3) .agd-grade-foot>b {
+  background:linear-gradient(110deg,#22b6c6,#168cae);
+  box-shadow:0 7px 16px rgba(22,156,178,.18);
+}
+.agd-grade-card:hover .agd-grade-foot>b {
+  transform:translateY(-1px);
+  filter:saturate(1.08);
+  box-shadow:0 10px 21px rgba(37,99,235,.24);
+}
+.agd-grade-card:focus-visible {
+  outline:3px solid rgba(37,99,235,.30);
+  outline-offset:3px;
+}
+.agd-grade-foot>b svg { flex:0 0 auto; }
+@media(max-width:680px) {
+  .agd-grade-foot { gap:8px;padding-top:13px; }
+  .agd-grade-foot>span { font-size:10px; }
+  .agd-grade-foot>b { min-height:48px;font-size:14px;border-radius:11px; }
 }
 
 

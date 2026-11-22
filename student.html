@@ -1,376 +1,1200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
-<meta name="theme-color" content="#eef3f1">
-<title>学生端 · 今日任务</title>
+<meta charset="utf-8">
+<title>学生工作台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#007aff">
+<!-- 标签页图标用「课」，配色和页内 .s-logo 那条蓝紫渐变一致。
+     学生页原本没有 favicon 声明，浏览器会去请求仓库里不存在的 /favicon.ico，
+     标签上只剩一个通用地球图标。内联 SVG 不用新增二进制文件，也不用进 sw 清单。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23007aff'/%3E%3Cstop offset='1' stop-color='%23af52de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ctext x='32' y='45' font-size='34' font-weight='700' font-family='PingFang SC,Microsoft YaHei,sans-serif' text-anchor='middle' fill='%23fff'%3E%E8%AF%BE%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="css/app.css">
 <style>
-:root{
-  --page:#f0eef7; --bg:#ffffff; --panel-2:#f4f2fa; --panel-3:#eae7f4;
-  --border:rgba(30,26,60,.08); --border-strong:rgba(30,26,60,.16);
-  --ink-1:#14122b; --ink-2:#3d3a55; --ink-3:#6f6b88;
-  --accent:#6d5ae0; --accent-deep:#5743c7; --accent-soft:rgba(109,90,224,.10); --accent-line:rgba(109,90,224,.28);
-  --accent-2:#d98324; --accent-2-soft:rgba(217,131,36,.14);
-  --grad-1:#6d5ae0; --grad-2:#5743c7;
-  --on-accent:#fff; --up:#2C7A62; --down:#C0453C; --warn:#B77A16;
-  --r-shell:24px; --r-card:16px; --r-ctl:10px; --r-pill:999px;
-  --ease:cubic-bezier(.22,.75,.3,1); --tab:64px;
-  --shadow-card:0 1px 2px rgba(20,18,43,.05),0 8px 20px -6px rgba(20,18,43,.08),0 28px 60px -24px rgba(20,18,43,.12);
-}
-html[data-theme="teal"]{
-  --page:#e9eeed; --panel-2:#f1f5f4; --panel-3:#e7eeec; --border:rgba(16,38,38,.08); --border-strong:rgba(16,38,38,.16);
-  --ink-1:#0f2322; --ink-2:#3a4b4a; --ink-3:#6b7d7c;
-  --accent:#176C6B; --accent-deep:#0f5251; --accent-soft:rgba(23,108,107,.10); --accent-line:rgba(23,108,107,.28);
-  --accent-2:#C4633F; --accent-2-soft:rgba(196,99,63,.12); --grad-1:#176C6B; --grad-2:#0f5251;
-}
-html[data-theme="blue"]{
-  --page:#f2f6fd; --panel-2:#eef3fb; --panel-3:#e4ecf7; --border:rgba(18,38,66,.08); --border-strong:rgba(18,38,66,.16);
-  --ink-1:#101d2e; --ink-2:#3a4a5e; --ink-3:#6b7a8c;
-  --accent:#0A84FF; --accent-deep:#0066D6; --accent-soft:rgba(10,132,255,.10); --accent-line:rgba(10,132,255,.28);
-  --accent-2:#FF9F0A; --accent-2-soft:rgba(255,159,10,.14); --grad-1:#0A84FF; --grad-2:#0066D6;
-}
-html[data-theme="forest"]{
-  --page:#ecf3f0; --panel-2:#f1f6f4; --panel-3:#e6eeea; --border:rgba(18,42,34,.08); --border-strong:rgba(18,42,34,.16);
-  --ink-1:#0f211a; --ink-2:#384b43; --ink-3:#6b7d74;
-  --accent:#2C7A62; --accent-deep:#1f5e4b; --accent-soft:rgba(44,122,98,.10); --accent-line:rgba(44,122,98,.28);
-  --accent-2:#D2693E; --accent-2-soft:rgba(210,105,62,.13); --grad-1:#2C7A62; --grad-2:#1f5e4b;
-}
-html[data-theme="dark"]{
-  --page:#17171d; --bg:#202028; --panel-2:#26262f; --panel-3:#2c2c36;
-  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
-  --ink-1:#f2f0f8; --ink-2:#c9c5d6; --ink-3:#9490a6;
-  --accent:#8b7cff; --accent-deep:#6d5ae0; --accent-soft:rgba(139,124,255,.14); --accent-line:rgba(139,124,255,.3);
-  --accent-2:#e8a25c; --accent-2-soft:rgba(232,162,92,.16); --grad-1:#5a48c9; --grad-2:#3f328f;
-}
-html[data-theme="cream"]{
-  --page:#f3eee2; --bg:#fbf8f0; --panel-2:#efe9da; --panel-3:#e8e0cd;
-  --border:rgba(90,74,48,.10); --border-strong:rgba(90,74,48,.18);
-  --ink-1:#3a3226; --ink-2:#5c5344; --ink-3:#8a8071;
-  --accent:#6b8f6f; --accent-deep:#557559; --accent-soft:rgba(107,143,111,.12); --accent-line:rgba(107,143,111,.3);
-  --accent-2:#c08a4e; --accent-2-soft:rgba(192,138,78,.15); --grad-1:#6b8f6f; --grad-2:#557559;
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
-body{background:var(--page);color:var(--ink-1);overflow:hidden;
-  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;font-size:16px;line-height:1.5}
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-height:24px}
-.ic{width:22px;height:22px;flex:0 0 auto}
-.ic.sm{width:17px;height:17px}
-.ic.xs{width:14px;height:14px}
-.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
-  background:radial-gradient(130% 90% at 50% 8%,#eef3f1,#d8e2e0 72%)}
-#app{position:relative;z-index:1;width:100%;height:100%;overflow:hidden;background:var(--page)}
-@media(min-width:760px){
-  #app{width:390px;height:min(844px,88vh);border-radius:44px;
-    box-shadow:0 0 0 11px #fff,0 0 0 13px #dfe6e4,0 44px 100px rgba(15,35,34,.22)}
-  .notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:112px;height:26px;border-radius:15px;background:#fff;z-index:60}
-}
-@media(max-width:759px){.notch{display:none}}
-.statusbar{position:absolute;top:0;left:0;right:0;z-index:55;height:44px;padding:0 22px;display:flex;
-  align-items:center;justify-content:space-between;pointer-events:none;font-size:13px;font-weight:600}
-.sb-r{display:flex;align-items:center;gap:5px}
-.sb-r i{display:block;background:currentColor;border-radius:1px}
-.sb-r .sig{width:15px;height:10px;clip-path:polygon(0 72%,18% 72%,18% 100%,0 100%,27% 46%,45% 46%,45% 100%,27% 100%,54% 22%,72% 22%,72% 100%,54% 100%,54% 22%,82% 0,100% 0,100% 100%,82% 100%)}
-.sb-r .wifi{width:14px;height:10px;clip-path:polygon(50% 100%,32% 74%,68% 74%,50% 100%,50% 66%,20% 40%,28% 30%,72% 30%,80% 40%,50% 66%,50% 24%,8% 12%,14% 2%,86% 2%,92% 12%)}
-.sb-r .bat{width:22px;height:11px;border-radius:3px;box-shadow:inset 0 0 0 1px currentColor;position:relative}
-.sb-r .bat::before{content:"";position:absolute;inset:2px;width:64%;background:currentColor;border-radius:1px}
-.topbar{position:absolute;top:0;left:0;right:0;z-index:50;padding:calc(env(safe-area-inset-top) + 54px) 20px 10px;display:flex;align-items:center;gap:12px}
-.avatar{width:44px;height:44px;border-radius:var(--r-pill);background:var(--accent-2);color:#fff;
-  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:0 0 auto;box-shadow:0 0 0 3px var(--accent-2-soft)}
-.greet{flex:1;min-width:0}
-.greet .hi{font-size:17px;font-weight:700}
-.greet .sub{font-size:12.5px;color:var(--ink-3);margin-top:1px}
-#flow{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
-  padding:calc(env(safe-area-inset-top) + 112px) 16px calc(var(--tab) + env(safe-area-inset-bottom) + 22px)}
-#flow::-webkit-scrollbar{display:none}
-.panel[hidden]{display:none}
-.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-card);padding:16px;margin-bottom:14px;box-shadow:var(--shadow-card)}
-.card-hd{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-.card-hd .ic{color:var(--accent)}
-.card-hd h3{font-size:15.5px;font-weight:700}
-.card-hd .link{margin-left:auto;font-size:12.5px;color:var(--accent);display:flex;align-items:center;gap:2px;font-weight:600}
+  body { background: linear-gradient(170deg, #eef4ff 0%, #f7f9ff 42%, #f5f7fb 100%); min-height: 100vh; }
+  html[data-theme=dark] body { background: linear-gradient(170deg, #101a2c, #0f131c 50%); }
+  .s-wrap { max-width: 1180px; margin: 0 auto; padding: 22px 14px 48px; }
+  .s-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .s-logo { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg,#007aff,#af52de); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .s-tabs { display: flex; gap: 6px; background: rgba(255,255,255,.8); padding: 5px; border-radius: 14px; margin-bottom: 16px; box-shadow: var(--shadow-s); }
+  html[data-theme=dark] .s-tabs { background: rgba(255,255,255,.06); }
+  .s-tabs button { display: flex; align-items: center; justify-content: center; gap: 4px; flex: 1; min-width: 0;
+    height: 40px; border-radius: 10px; font-weight: 650; font-size: 14px; color: var(--text-2);
+    white-space: nowrap; overflow: hidden; }
+  .s-tabs button svg { flex: 0 0 auto; }
+  @media (max-width: 400px) { .s-tabs button { font-size: 13px; gap: 3px; } .s-tabs button svg { width: 15px; height: 15px; } }
+  .s-tabs button.on { background: var(--primary); color: #fff; box-shadow: 0 4px 12px rgba(60,123,246,.3); }
+  .big-num { font-family: var(--mono); font-size: 84px; font-weight: 700; line-height: 1; letter-spacing: -4px; }
+  .pick-num { display: inline-grid; place-items: center; min-width: 84px; height: 84px; border-radius: 22px; background: linear-gradient(135deg,#007aff,#af52de); color: #fff; font-size: 38px; font-weight: 700; font-family: var(--mono); margin: 6px; }
+  .mat-card { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+  .mat-card:last-child { border-bottom: 0; }
+  /* 口令资料：一把锁放在标题上方，一眼看出这份和别的不一样 */
+  .pc-em { display: grid; place-items: center; width: 62px; height: 62px; margin: 14px auto 8px;
+    border-radius: 20px; background: rgba(0, 122, 255, .09); color: var(--primary); }
+  /* 在线预览容器：PDF 用 iframe，图片/音视频用原生控件 */
+  .pv-wrap { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-sunken); }
+  .pv-wrap iframe { display: block; width: 100%; height: 72vh; border: 0; }
+  .pv-wrap img { display: block; width: 100%; height: auto; }
+  .pv-wrap video { display: block; width: 100%; max-height: 72vh; background: #000; }
+  .pv-wrap audio { display: block; width: 100%; padding: 18px; box-sizing: border-box; }
+  /* docx 用 mammoth 转成网页后的排版，尽量还原 Word 的阅读观感 */
+  .pv-doc { padding: 22px 24px; background: #fff; color: #1f2430; line-height: 1.85; font-size: 15px; }
+  .pv-doc h1 { font-size: 22px; margin: 18px 0 10px; }
+  .pv-doc h2 { font-size: 19px; margin: 16px 0 8px; }
+  .pv-doc h3, .pv-doc h4, .pv-doc h5, .pv-doc h6 { font-size: 16px; margin: 14px 0 8px; }
+  .pv-doc p { margin: 8px 0; }
+  .pv-doc table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  .pv-doc th, .pv-doc td { border: 1px solid #d8dde6; padding: 6px 8px; text-align: left; }
+  .pv-doc img { max-width: 100%; height: auto; }
+  /* 签到 */
+  .s-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff3b30; display: inline-block; margin-left: 2px; animation: sb 1.4s infinite; }
+  @keyframes sb { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  .ck-me { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 12px;
+    border-radius: 10px; background: rgba(0,122,255,.08); font-size: 13.5px; }
+  html[data-theme=dark] .ck-me { background: rgba(10,132,255,.15); }
+  .ck-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-top: 16px; }
+  .ck-b { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    height: 84px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--card);
+    font-size: 15px; font-weight: 650; color: var(--text); cursor: pointer; transition: .15s; font-family: inherit; }
+  .ck-b:active { transform: scale(.97); }
+  .ck-b:disabled { opacity: .55; }
+  .ck-b.ok { border-color: rgba(52,199,89,.5); color: #248a3d; background: rgba(52,199,89,.07); }
+  .ck-b.warn { border-color: rgba(255,159,10,.5); color: #b26b00; background: rgba(255,159,10,.07); }
+  .ck-b.mute { padding: 0 18px; font-size: 13.5px; color: var(--text-2); }
+  html[data-theme=dark] .ck-b.ok { color: #30d158; }
+  html[data-theme=dark] .ck-b.warn { color: #ff9f0a; }
+  .ck-done { padding: 11px 13px; border-radius: 10px; background: rgba(52,199,89,.1);
+    border: 1px solid rgba(52,199,89,.28); font-size: 13.5px; line-height: 1.5; }
+  @media (max-width: 380px) { .ck-grid { grid-template-columns: 1fr 1fr; } .ck-b.mute { grid-column: span 2; height: 44px; } }
+  .roll { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
 
-/* 今日任务大卡 */
-.task-hero{background:linear-gradient(160deg,var(--grad-1),var(--grad-2));color:#fff;border:0;overflow:hidden;position:relative}
-.task-hero .card-hd h3{color:#fff}
-.task-hero .card-hd .ic{color:rgba(255,255,255,.85)}
-.task-hero .hero-sub{font-size:12.5px;color:rgba(255,255,255,.72);margin:-6px 0 14px 30px}
-.task-hero .tt{font-size:18px;font-weight:700;margin-bottom:6px}
-.task-hero .dd{font-size:13.5px;color:rgba(255,255,255,.8);margin-bottom:14px}
-.progress{height:8px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden;margin-bottom:6px}
-.progress i{display:block;height:100%;width:66%;border-radius:4px;background:#fff}
-.pcount{font-size:12.5px;color:rgba(255,255,255,.78);display:flex;justify-content:space-between;margin-bottom:16px}
-.sign-btn{width:100%;height:52px;border-radius:var(--r-ctl);background:var(--accent-2);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px}
-.sign-btn.done{background:rgba(255,255,255,.18);color:#fff;font-weight:600}
-.pulse{width:9px;height:9px;border-radius:50%;background:#7ee0b2;box-shadow:0 0 0 0 rgba(126,224,178,.6);animation:pulse 1.8s infinite}
-@keyframes pulse{70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
-@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+  /* ---------- 点名：滚动轮播 + 揭晓 ---------- */
+  .pick-stage { position: relative; display: grid; place-items: center; min-height: 132px; margin: 16px 0 4px;
+    border-radius: 18px; background: rgba(0,122,255,.06); overflow: hidden; }
+  html[data-theme=dark] .pick-stage { background: rgba(10,132,255,.12); }
+  .pick-roll { font-size: 40px; font-weight: 700; line-height: 1.15; letter-spacing: -1px;
+    color: var(--text-2); transition: filter .12s; }
+  .pick-roll.blur { filter: blur(1.2px); opacity: .75; }
+  .pick-win { font-size: 46px; font-weight: 750; line-height: 1.12; letter-spacing: -1.5px;
+    color: var(--primary); animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes pop { 0% { transform: scale(.55); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+  .pick-names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+  .pick-win.sm { font-size: 26px; display: inline-block; padding: 8px 16px; border-radius: 14px;
+    background: var(--primary); color: #fff; letter-spacing: -.5px; animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
+  /* 点名（第 19 条）：人数/点几个 两个输入并排 */
+  .pk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pk-mode { display: flex; width: 100%; }
+  .pk-mode button { flex: 1; }
+  .pk-mode button[disabled] { opacity: .42; cursor: not-allowed; }
+  .pk-nr { display: flex; align-items: center; gap: 9px; margin-top: 12px; font-size: 14px; }
+  .pk-nr input { width: 18px; height: 18px; accent-color: var(--primary); }
+  .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 11px 13px; border-radius: 11px; background: var(--bg-sunken); margin-top: 10px; font-size: 14px; }
+  .sw { position: relative; flex: 0 0 auto; width: 44px; height: 26px; border-radius: 99px;
+    background: var(--line); border: 0; cursor: pointer; transition: .18s; }
+  .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: .18s; }
+  .sw.on { background: var(--green, #34c759); }
+  .sw.on::after { left: 21px; }
 
-/* 作业进度 */
-.hw{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
-.hw:last-of-type{border-bottom:0}
-.hw .n{flex:1;font-size:14.5px}
-.hw .d{font-size:12.5px;color:var(--ink-3)}
-.badge{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:var(--r-pill)}
-.badge.g{background:rgba(44,122,98,.12);color:var(--up)}
-.badge.o{background:var(--accent-2-soft);color:var(--accent-2)}
-.badge.teal{background:var(--accent-soft);color:var(--accent)}
+  /* ---------- 惩罚盲盒 ---------- */
+  .box-stage { position: relative; display: grid; place-items: center; min-height: 168px; margin: 14px 0;
+    border-radius: 20px; padding: 18px 14px; text-align: center;
+    background: linear-gradient(150deg, rgba(0,122,255,.1), rgba(175,82,222,.1));
+    border: 1.5px dashed rgba(0,122,255,.35); transition: .25s; }
+  html[data-theme=dark] .box-stage { background: linear-gradient(150deg, rgba(10,132,255,.16), rgba(191,90,242,.14));
+    border-color: rgba(10,132,255,.45); }
+  .box-stage.open { border-style: solid; border-color: transparent; animation: pop .4s cubic-bezier(.34,1.56,.64,1); }
+  .box-stage.open::after { content: ''; position: absolute; inset: 0; border-radius: 20px;
+    background: radial-gradient(circle at 50% 0%, rgba(255,214,10,.28), transparent 65%); pointer-events: none; }
+  .box-icon { font-size: 46px; line-height: 1; }
+  .box-shake { animation: shake .42s ease-in-out infinite; }
+  @keyframes shake { 0%,100% { transform: rotate(-7deg) } 50% { transform: rotate(7deg) } }
+  .box-text { font-size: 25px; font-weight: 750; line-height: 1.35; letter-spacing: -.5px; margin-top: 8px;
+    position: relative; z-index: 1; }
+  .box-lv { display: inline-block; margin-top: 10px; font-size: 12px; font-weight: 650; letter-spacing: .3px;
+    padding: 3px 10px; border-radius: 99px; position: relative; z-index: 1; }
+  .box-lv.l1 { background: rgba(52,199,89,.16); color: #248a3d; }
+  .box-lv.l2 { background: rgba(255,159,10,.18); color: #a86200; }
+  .box-lv.l3 { background: rgba(255,59,48,.15); color: #c22a22; }
+  html[data-theme=dark] .box-lv.l1 { color: #30d158; }
+  html[data-theme=dark] .box-lv.l2 { color: #ff9f0a; }
+  html[data-theme=dark] .box-lv.l3 { color: #ff453a; }
+  .box-who { font-size: 13px; color: var(--text-2); margin-top: 10px; position: relative; z-index: 1; }
 
-/* 通知/留言 */
-.msg{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.msg:last-of-type{border-bottom:0}
-.msg .av{width:38px;height:38px;border-radius:12px;background:var(--accent-soft);color:var(--accent);
-  display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
-.msg .b{flex:1;min-width:0}
-.msg .b .t{font-size:14.5px;font-weight:600}
-.msg .b .d{font-size:12.5px;color:var(--ink-3);margin-top:2px}
-.msg .time{font-size:11.5px;color:var(--ink-3)}
+  /* ---------- 学生工作台顶部条（按设计稿） ---------- */
+  .stu-headwrap { position: relative; }
+  .stu-top { display: flex; align-items: center; gap: 12px; padding: 15px 22px;
+    background: #1677ff; color: #fff; }
+  .stu-logo { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+    background: #fff; color: #1677ff; font-size: 18px; font-weight: 700; }
+  .stu-title { font-size: 19px; font-weight: 700; letter-spacing: .5px; }
+  .stu-empty { max-width: 640px; margin: 60px auto; text-align: center; color: #98a2b3; }
 
-/* 资料站 */
-.files{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
-.file{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-card);padding:14px;box-shadow:var(--shadow-card)}
-.file .fi{width:40px;height:40px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-.file .fn{font-size:14px;font-weight:600}
-.file .fm{font-size:12px;color:var(--ink-3);margin-top:2px}
-
-/* 我的 */
-.me-hero{background:linear-gradient(160deg,var(--grad-1),var(--grad-2));border-radius:var(--r-card);padding:20px;display:flex;align-items:center;gap:14px;color:#fff;margin-bottom:14px;box-shadow:var(--shadow-card)}
-.me-hero .avatar{width:56px;height:56px;font-size:22px;background:rgba(255,255,255,.18);box-shadow:none}
-.me-hero .n{font-size:19px;font-weight:700}
-.me-hero .r{font-size:12.5px;opacity:.8;margin-top:2px}
-.menu{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--shadow-card)}
-.menu .row{display:flex;align-items:center;gap:13px;padding:15px 16px;border-bottom:1px solid var(--border)}
-.menu .row:last-child{border-bottom:0}
-.menu .row .ic{color:var(--accent)}
-.menu .row .lbl{flex:1;font-size:15px}
-.menu .row .val{font-size:12.5px;color:var(--ink-3)}
-.menu .row .arrow{color:var(--ink-3)}
-
-.tabbar{position:absolute;left:0;right:0;bottom:0;z-index:50;height:var(--tab);padding-bottom:env(safe-area-inset-bottom);
-  display:flex;align-items:stretch;background:var(--bg);border-top:1px solid var(--border)}
-.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--ink-3)}
-.tabbar button.on{color:var(--accent);font-weight:600}
-
-.scrim{position:absolute;inset:0;z-index:88;background:rgba(15,35,34,.42);opacity:0;pointer-events:none;transition:opacity .26s var(--ease)}
-.scrim.on{opacity:1;pointer-events:auto}
-.modal{position:absolute;left:0;right:0;bottom:0;z-index:90;background:var(--bg);border-radius:22px 22px 0 0;
-  padding:18px 20px calc(env(safe-area-inset-bottom) + 24px);max-height:80%;overflow-y:auto;
-  transform:translateY(100%);transition:transform .3s var(--ease);text-align:center}
-.modal.on{transform:none}
-.modal .grab{width:38px;height:4px;border-radius:2px;background:var(--border-strong);margin:0 auto 18px}
-.modal .ok-ic{width:64px;height:64px;border-radius:50%;background:rgba(44,122,98,.12);color:var(--up);display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
-.modal h3{font-size:18px;font-weight:700;margin-bottom:6px}
-.modal .sub{font-size:13.5px;color:var(--ink-3);margin-bottom:18px}
-.modal .cta-row{display:flex;gap:10px}
-.btn-primary{flex:1;height:48px;border-radius:var(--r-ctl);background:var(--accent);color:#fff;font-weight:700;font-size:15.5px}
-.themes{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-top:6px}
-.theme-opt{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--border);border-radius:var(--r-ctl);text-align:left;background:var(--bg)}
-.theme-opt.on{border-color:var(--accent-line);background:var(--accent-soft)}
-.theme-opt .sw{width:30px;height:30px;border-radius:9px;flex:0 0 auto}
-.theme-opt .tn{font-size:14px;font-weight:700;color:var(--ink-1)}
-.theme-opt .td{font-size:11.5px;color:var(--ink-3)}
-.toast{position:absolute;left:50%;bottom:calc(var(--tab) + 24px);z-index:70;transform:translate(-50%,14px);opacity:0;
-  pointer-events:none;max-width:78%;padding:11px 18px;border-radius:var(--r-pill);background:rgba(15,35,34,.88);color:#fff;font-size:13.5px;transition:opacity .28s var(--ease),transform .28s var(--ease)}
-.toast.on{opacity:1;transform:translate(-50%,0)}
-
-/* ══ PC 桌面布局（≥1024px）：左侧栏 + 双列内容；760–1023 仍为手机壳预览 ══ */
-@media(min-width:1024px){
-  .stage{background:radial-gradient(130% 90% at 50% 8%,#eef3f1,#d8e2e0 72%)}
-  .notch,.statusbar{display:none}
-  #app{width:100%;height:100%;border-radius:0;box-shadow:none;background:var(--page);
-    display:grid;grid-template-columns:212px 1fr;grid-template-rows:auto 1fr}
-
-  /* 侧栏导航 */
-  .tabbar{position:static;grid-column:1;grid-row:1/-1;height:auto;flex-direction:column;gap:4px;
-    background:var(--bg);border-right:1px solid var(--border);border-top:0;padding:26px 14px 20px;align-items:stretch}
-  .tabbar::before{content:"学生端";font-size:15.5px;font-weight:800;color:var(--ink-1);
-    padding:0 14px 20px;display:flex;align-items:center;gap:10px}
-  .tabbar button{flex:none;flex-direction:row;gap:12px;justify-content:flex-start;align-items:center;
-    padding:12px 14px;border-radius:12px;font-size:14.5px;color:var(--ink-2)}
-  .tabbar button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
-  .tabbar button .ic{width:20px;height:20px}
-
-  /* 页眉 + 内容流 */
-  .topbar{position:static;grid-column:2;grid-row:1;padding:26px 38px 4px;gap:14px}
-  .topbar .avatar{width:46px;height:46px}
-  .topbar .greet .hi{font-size:20px}
-  #flow{position:static;grid-column:2;grid-row:2;height:100%;padding:16px 38px 40px;scrollbar-width:thin}
-  #flow::-webkit-scrollbar{width:8px}
-  #flow::-webkit-scrollbar-thumb{background:var(--panel-3);border-radius:4px}
-
-  /* 首页：签到大卡居左，作业/留言居右 */
-  [data-panel=home]{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start}
-  .task-hero{grid-column:1;grid-row:1 / span 2}
-  .home-hw{grid-column:2}
-  .home-msg{grid-column:2}
-
-  /* 资料站四列 */
-  [data-panel=files] .files{grid-template-columns:repeat(4,1fr)}
-
-  /* 我的：左名片右菜单 */
-  [data-panel=me]{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start;max-width:1000px}
-  .me-hero{margin-bottom:0}
-
-  /* 弹层居中 */
-  .modal{left:50%;top:50%;right:auto;bottom:auto;width:460px;max-width:92vw;
-    transform:translate(-50%,140%);visibility:hidden;border-radius:22px;padding:28px 26px 24px;max-height:84%;text-align:center}
-  .modal.on{transform:translate(-50%,-50%);visibility:visible}
-  .modal .grab{display:none}
-  .toast{bottom:28px}
-}
+  .stu-empty svg { opacity: .55; }
+  .stu-empty b { display: block; margin-top: 16px; color: #5b667a; font-size: 17px; font-weight: 650; }
+  .stu-lock { max-width: 560px; margin: 60px auto; padding: 34px 30px; border-radius: 16px;
+    background: var(--card); text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.06); }
+  .stu-lock b { display: block; margin-top: 14px; color: #5b667a; font-size: 17px; font-weight: 650; }
+  .stu-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+    padding: 20px; background: rgba(15,23,42,.45); }
+  .stu-modal-card { width: min(680px, 100%); max-height: 86vh; overflow: auto; border-radius: 16px;
+    background: #fff; color: #1f2937; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .stu-modal-head { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #eef1f6; }
+  .stu-modal-head b { flex: 1; font-size: 17px; }
+  .stu-modal-head button { border: 0; background: transparent; color: #98a2b3; cursor: pointer; font-size: 22px; line-height: 1; }
+  .stu-modal-body { padding: 20px 22px 24px; font-size: 15.5px; line-height: 1.85; white-space: pre-wrap; }
+  .stu-modal-body img { width: 100%; border-radius: 10px; margin-top: 14px; }
+  @media (max-width: 520px) {
+    .stu-top { padding: 12px 14px; }
+    .stu-title { font-size: 17px; }
+    .stu-logo { width: 34px; height: 34px; font-size: 16px; }
+  }
 </style>
+<link rel="stylesheet" href="css/design-refresh.css">
 </head>
 <body>
-<div class="stage"><div id="app">
-  <div class="notch"></div>
-  <div class="statusbar"><span>21:41</span><span class="sb-r"><i class="sig"></i><i class="wifi"></i><i class="bat"></i></span></div>
-  <div class="topbar">
-    <div class="avatar">李</div>
-    <div class="greet"><div class="hi">晚上好，李同学</div><div class="sub">高一(5)班 · 今天有 1 项自习任务待签到</div></div>
+<div class="stu-headwrap">
+  <div class="stu-top">
+    <div class="stu-logo">学</div>
+    <div class="stu-title">学生工作台</div>
   </div>
-
-  <div id="flow">
-    <!-- 首页 -->
-    <section class="panel" data-panel="home">
-      <article class="card task-hero">
-        <div class="card-hd"><span data-ic="timer" class="ic"></span><h3>今日自习任务</h3></div>
-        <div class="hero-sub">课堂自习 · 第 4 节 · 35 分钟</div>
-        <div class="tt">完成《表格数据处理》练习 1–5 题</div>
-        <div class="dd">10:10 发布 · 截止 10:45 · 王老师布置</div>
-        <div class="progress"><i></i></div>
-        <div class="pcount"><span><span class="pulse"></span> 28 / 42 人已签到</span><span>剩余 12 分钟</span></div>
-        <button class="sign-btn" id="sign-btn"><span data-ic="check-circle" class="ic sm"></span>立即签到</button>
-      </article>
-
-      <article class="card home-hw">
-        <div class="card-hd"><span data-ic="file-text" class="ic"></span><h3>我的作业</h3>
-          <button class="link">全部 <span data-ic="arrow-right" class="ic xs"></span></button></div>
-        <div class="hw"><div class="n">第 3 章课后练习<br><span class="d">信息技术 · 明天截止</span></div><span class="badge o">待提交</span></div>
-        <div class="hw"><div class="n">错题整理专项<br><span class="d">40 分钟 · 昨天发布</span></div><span class="badge g">已提交</span></div>
-        <div class="hw"><div class="n">上午默写任务<br><span class="d">20 分钟 · 今天 09:00</span></div><span class="badge g">已完成</span></div>
-      </article>
-
-      <article class="card home-msg">
-        <div class="card-hd"><span data-ic="chat" class="ic"></span><h3>班级留言</h3>
-          <button class="link">全部 <span data-ic="arrow-right" class="ic xs"></span></button></div>
-        <div class="msg"><div class="av">王</div><div class="b"><div class="t">王老师</div><div class="d">明天带笔记本电脑到机房，提前充好电。</div></div><span class="time">10:05</span></div>
-        <div class="msg"><div class="av">课</div><div class="b"><div class="t">课代表 · 张同学</div><div class="d">课件已上传到资料站，大家自行下载。</div></div><span class="time">昨天</span></div>
-      </article>
-    </section>
-
-    <!-- 资料站 -->
-    <section class="panel" data-panel="files" hidden>
-      <div class="card-hd" style="margin-bottom:12px"><span data-ic="folder" class="ic"></span><h3>班级资料站</h3></div>
-      <div class="files">
-        <div class="file"><div class="fi" data-ic="file-text"></div><div class="fn">表格数据处理课件.pptx</div><div class="fm">12.4 MB · 今天上传</div></div>
-        <div class="file"><div class="fi" data-ic="image"></div><div class="fn">练习任务图.png</div><div class="fm">2.1 MB · 今天上传</div></div>
-        <div class="file"><div class="fi" data-ic="file-text"></div><div class="fn">第3章课后练习.docx</div><div class="fm">380 KB · 昨天上传</div></div>
-        <div class="file"><div class="fi" data-ic="book"></div><div class="fn">教材电子档.pdf</div><div class="fm">28 MB · 本周更新</div></div>
-      </div>
-    </section>
-
-    <!-- 我的 -->
-    <section class="panel" data-panel="me" hidden>
-      <div class="me-hero">
-        <div class="avatar">李</div>
-        <div><div class="n">李同学</div><div class="r">高一(5)班 · 学号 20260512</div></div>
-      </div>
-      <div class="menu">
-        <div class="row"><span data-ic="user" class="ic"></span><span class="lbl">个人信息</span><span class="val">昵称 / 头像</span><span class="arrow" data-ic="arrow-right" class="ic xs"></span></div>
-        <div class="row"><span data-ic="file-text" class="ic"></span><span class="lbl">我的作业</span><span class="val">3 项待办</span><span class="arrow" data-ic="arrow-right" class="ic xs"></span></div>
-        <div class="row"><span data-ic="bell-simple" class="ic"></span><span class="lbl">通知提醒</span><span class="val">任务/留言推送</span><span class="arrow" data-ic="arrow-right" class="ic xs"></span></div>
-        <div class="row" id="theme-row"><span data-ic="gear" class="ic"></span><span class="lbl">主题配色</span><span class="val" id="theme-val">紫云</span><span class="arrow" data-ic="arrow-right" class="ic xs"></span></div>
-      </div>
-    </section>
-  </div>
-
-  <nav class="tabbar">
-    <button class="on" data-go="home"><span data-ic="house" class="ic sm"></span>首页</button>
-    <button data-go="files"><span data-ic="folder" class="ic sm"></span>资料站</button>
-    <button data-go="me"><span data-ic="user" class="ic sm"></span>我的</button>
-  </nav>
-
-  <div class="toast" id="toast"></div>
-  <div class="scrim" id="scrim"></div>
-  <div class="modal" id="theme-modal">
-    <div class="grab"></div>
-    <h3>主题配色</h3>
-    <div class="sub">与教师端同步，切换后自动保存</div>
-    <div class="themes">
-      <button class="theme-opt" data-t="purple"><span class="sw" style="background:linear-gradient(135deg,#6d5ae0,#5743c7)"></span><span><span class="tn">紫云</span><br><span class="td">默认 · 紫</span></span></button>
-      <button class="theme-opt" data-t="teal"><span class="sw" style="background:linear-gradient(135deg,#176C6B,#0f5251)"></span><span><span class="tn">青山</span><br><span class="td">青 · 沉稳</span></span></button>
-      <button class="theme-opt" data-t="blue"><span class="sw" style="background:linear-gradient(135deg,#0A84FF,#0066D6)"></span><span><span class="tn">晴蓝</span><br><span class="td">旧版蓝系</span></span></button>
-      <button class="theme-opt" data-t="forest"><span class="sw" style="background:linear-gradient(135deg,#2C7A62,#1f5e4b)"></span><span><span class="tn">墨绿</span><br><span class="td">护眼 · 深绿</span></span></button>
-      <button class="theme-opt" data-t="dark"><span class="sw" style="background:linear-gradient(135deg,#202028,#5a48c9)"></span><span><span class="tn">暗夜</span><br><span class="td">深色 · 夜间</span></span></button>
-      <button class="theme-opt" data-t="cream"><span class="sw" style="background:linear-gradient(135deg,#6b8f6f,#f3eee2)"></span><span><span class="tn">护眼米</span><br><span class="td">纸感 · 米色</span></span></button>
-    </div>
-  </div>
-  <div class="modal" id="modal">
-    <div class="grab"></div>
-    <div class="ok-ic" data-ic="check-circle"></div>
-    <h3>签到成功</h3>
-    <div class="sub">10:32 已签到 · 计入本次自习任务</div>
-    <div class="cta-row"><button class="btn-primary" id="modal-close">完成</button></div>
-  </div>
-</div></div>
-
-<script>
-const ICONS={
-house:'M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z',
-timer:'M128,40a96,96,0,1,0,96,96A96.11,96.11,0,0,0,128,40Zm0,176a80,80,0,1,1,80-80A80.09,80.09,0,0,1,128,216ZM173.66,90.34a8,8,0,0,1,0,11.32l-40,40a8,8,0,0,1-11.32-11.32l40-40A8,8,0,0,1,173.66,90.34ZM96,16a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,16Z',
-'check-circle':'M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z',
-'file-text':'M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-32-80a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,136Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,168Z',
-chat:'M216,48H40A16,16,0,0,0,24,64V224a15.84,15.84,0,0,0,9.25,14.5A16.05,16.05,0,0,0,40,240a15.89,15.89,0,0,0,10.25-3.78l.09-.07L83,208H216a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM40,224h0ZM216,192H80a8,8,0,0,0-5.23,1.95L40,224V64H216Z',
-folder:'M216,72H131.31L104,44.69A15.86,15.86,0,0,0,92.69,40H40A16,16,0,0,0,24,56V200.62A15.4,15.4,0,0,0,39.38,216H216.89A15.13,15.13,0,0,0,232,200.89V88A16,16,0,0,0,216,72ZM40,56H92.69l16,16H40ZM216,200H40V88H216Z',
-image:'M232,176V80a16,16,0,0,0-16-16H40A16,16,0,0,0,24,80v96a16,16,0,0,0,16,16H216A16,16,0,0,0,232,176ZM40,80H216v68.69l-28.69-28.7a16,16,0,0,0-22.62,0L86.63,178.63l-26-26A16,16,0,0,0,40,152.63ZM216,176H78.63l52-52,64,64H216Zm-68-92a20,20,0,1,0,20,20A20,20,0,0,0,148,84Z',
-book:'M208,24H72A32,32,0,0,0,40,56V224a8,8,0,0,0,8,8H192a8,8,0,0,0,0-16H56a16,16,0,0,1,16-16H208a8,8,0,0,0,8-8V32A8,8,0,0,0,208,24Zm-8,160H72a31.82,31.82,0,0,0-16,4.29V56A16,16,0,0,1,72,40H200Z',
-user:'M230.92,212c-15.23-26.33-38.7-45.21-66.09-54.16a72,72,0,1,0-73.66,0C63.78,166.78,40.31,185.66,25.08,212a8,8,0,1,0,13.85,8c18.84-32.56,52.14-52,89.07-52s70.23,19.44,89.07,52a8,8,0,1,0,13.85-8ZM72,96a56,56,0,1,1,56,56A56.06,56.06,0,0,1,72,96Z',
-'bell-simple':'M168,224a8,8,0,0,1-8,8H96a8,8,0,1,1,0-16h64A8,8,0,0,1,168,224Zm53.85-32A15.8,15.8,0,0,1,208,200H48a16,16,0,0,1-13.8-24.06C39.75,166.38,48,139.34,48,104a80,80,0,1,1,160,0c0,35.33,8.26,62.38,13.81,71.94A15.89,15.89,0,0,1,221.84,192ZM208,184c-7.73-13.27-16-43.95-16-80a64,64,0,1,0-128,0c0,36.06-8.28,66.74-16,80Z',
-gear:'M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z',
-'arrow-right':'M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z'
-};
-document.querySelectorAll('[data-ic]').forEach(el=>{const p=ICONS[el.dataset.ic];if(!p)return;
-  el.innerHTML='<svg class="ic'+(el.classList.contains('sm')?' sm':el.classList.contains('xs')?' xs':'')+'" viewBox="0 0 256 256" fill="currentColor"><path d="'+p+'"/></svg>';});
-
-const toastEl=document.getElementById('toast');let toastT;
-function toast(m){toastEl.textContent=m;toastEl.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>toastEl.classList.remove('on'),1600)}
-const panels=[...document.querySelectorAll('.panel')],tabs=[...document.querySelectorAll('.tabbar button')];
-tabs.forEach(b=>b.onclick=()=>{openModal(false);tabs.forEach(x=>x.classList.toggle('on',x===b));
-  panels.forEach(p=>p.hidden=p.dataset.panel!==b.dataset.go);document.getElementById('flow').scrollTop=0;});
-
-const scrim=document.getElementById('scrim'),modal=document.getElementById('modal'),themeModal=document.getElementById('theme-modal');
-function openModal(on){scrim.classList.toggle('on',on);modal.classList.toggle('on',on);themeModal.classList.remove('on')}
-function openTheme(on){scrim.classList.toggle('on',on);themeModal.classList.toggle('on',on);modal.classList.remove('on')}
-document.getElementById('sign-btn').onclick=()=>{
-  openModal(true);
-  const b=document.getElementById('sign-btn');
-  b.classList.add('done');b.innerHTML='<span data-ic="check-circle" class="ic sm"></span>已签到 · 10:32';
-};
-document.getElementById('modal-close').onclick=()=>openModal(false);
-scrim.onclick=()=>{openModal(false);openTheme(false)};
-
-/* 主题跟随教师端 localStorage */
-const THEME_NAMES={purple:'紫云',teal:'青山',blue:'晴蓝',forest:'墨绿',dark:'暗夜',cream:'护眼米'};
-function applyTheme(t){
-  document.documentElement.dataset.theme=t;
-  localStorage.setItem('wb-theme',t);
-  const v=document.getElementById('theme-val');if(v)v.textContent=THEME_NAMES[t]||'紫云';
-  document.querySelectorAll('.theme-opt').forEach(o=>o.classList.toggle('on',o.dataset.t===t));
+</div>
+<div class="s-wrap" id="s-app"><div class="empty">加载中…</div></div>
+<script type="module">
+/* 短链编码：有服务端时是 /s/<code>，从路径第二段取。
+   静态版在 GitHub Pages 上，/s/<code> 这种「服务端路由」不存在（会 404），
+   所以退一步：支持 ?code=xxx，以及 sessionStorage 记住上次的 code。
+   老师把 ?code=xxx 的链接发给学生，学生打开就能进。 */
+const code = (function () {
+  const fromPath = location.pathname.split('/').filter(Boolean)[1];
+  const fromQuery = new URLSearchParams(location.search).get('code');
+  if (fromQuery) { try { sessionStorage.setItem('wb_stu_code', fromQuery); } catch (e) {} return fromQuery; }
+  if (fromPath && fromPath !== 'student.html') { try { sessionStorage.setItem('wb_stu_code', fromPath); } catch (e) {} return fromPath; }
+  try { return sessionStorage.getItem('wb_stu_code') || ''; } catch (e) { return ''; }
+}());
+const $ = (s) => document.querySelector(s);
+const ICON = { mat: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h7l5 5v12H6z"/><path d="M13 3.5v5h5"/></svg>',
+  dl: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14"/></svg>',
+  dice: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/></svg>',
+  target: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  lock: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>',
+  lockSm: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/></svg>',
+  check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg>',
+  clock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  more: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9.5 6 6 6-6 6"/></svg>',
+  alert: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  chat: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' };
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/* 静态版：优先调 localapi（同一个浏览器里演示时学生端能读到老师那份数据）；
+   在外网独立访问时本地库为空，自动回退到云端 student-api Edge Function。 */
+import { handle as localHandle } from './js/localapi.js';
+import { getStudentMaterials, materialEndpoint, passcodeHeaders } from './js/material-sharing.mjs';
+import { resolveEnvironmentProfile } from './js/environment-config.mjs';
+import { setActiveAccount } from './js/localdb.js';
+import { taskImagePages, downloadCanvas } from './js/selfstudy-task-image.mjs';
+/* 同一个浏览器里演示时，学生端要读老师那份账号库。
+   localdb 会记住最后登录的账号，这里先恢复，否则读到默认空库，
+   表现就是「链接不存在或已关闭」。 */
+try { const uid = localStorage.getItem('wb_static_active_uid'); if (uid) setActiveAccount(uid); } catch {}
+/* 打包版没有 js/localapi.js 这个路径了，测试/调试统一从 window 取 */
+window.__wbLocalApi = { handle: localHandle };
+/* student-api 只有一个通道：按当前环境配置直连 Supabase Edge Function。
+   早先这里先试同源 /api/student-api、失败再打远端 ngrok——那是数据库还挂在 ngrok 隧道上
+   时的临时绕行。隧道和 Cloudflare Pages 都不在线上路径上了，同源那一跳只剩一个 404，
+   学生每次签到/留言都要白等它一个来回。 */
+function studentApiBase() {
+  try { return resolveEnvironmentProfile().supabaseUrl + '/functions/v1/student-api'; }
+  catch { return ''; }
 }
-applyTheme(localStorage.getItem('wb-theme')||'purple');
-document.getElementById('theme-row').onclick=()=>openTheme(true);
-document.querySelectorAll('.theme-opt').forEach(o=>o.onclick=()=>{applyTheme(o.dataset.t);openTheme(false);});
-
-window.__UI_CAPTURE__={
-  reset:async()=>{openModal(false);document.querySelector('.tabbar button').click();},
-  states:[
-    {id:'home',label:'学生首页'},
-    {id:'signed',label:'签到成功弹层',go:async()=>openModal(true)},
-    {id:'files',label:'资料站',go:async()=>{document.querySelectorAll('.tabbar button')[1].click();}},
-    {id:'me',label:'我的',go:async()=>{document.querySelectorAll('.tabbar button')[2].click();}}
-  ]
+async function callCloudStudent(method, path, query, body) {
+  const base = studentApiBase();
+  if (!base) throw new Error('学生服务地址未配置');
+  const url = new URL(base);
+  /* path 里只放路径。以前顺手把 query 拼在它尾巴上，空 query 也会留一个 '?'，
+     函数按 '/' 切段时就把 'dmkobb?' 当成链接码，正则判不过 → 学生看到「链接不存在或已关闭」。
+     参数挂到外层 URL 上，正好是函数读 searchParams 的方式。 */
+  url.searchParams.set('path', path);
+  for (const [key, value] of Object.entries(query || {})) {
+    if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
+  }
+  const init = { method, headers: { 'Content-Type': 'application/json' } };
+  if (method === 'POST' && body !== undefined) init.body = JSON.stringify(body);
+  const res = await fetch(url.toString(), init);
+  const result = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(result.error || '服务暂时不可用，请稍后重试');
+  return result;
+}
+const api = async (p, body) => {
+  const [path, qs] = String(p).split('?');
+  const method = body === undefined ? 'GET' : 'POST';
+  const ctx = { query: Object.fromEntries(new URLSearchParams(qs || '')), body };
+  /* 只有资料详情走 material-sharing：它是唯一会吐文件清单和签名地址的地方，口令闸就设在那儿。
+     链接主视图不能跟着一起走——material-sharing 只组装教材，点名/自习/违纪/留言一律给空数组，
+     外网学生会因此丢掉「签到」「自习」页签。主视图交给 student-api，它才组装整页数据。 */
+  const materialRoute = path.match(/^\/public\/link\/([^/]+)\/materials\/(\d+)$/);
+  if (method === 'GET' && materialRoute) {
+    /* 教材：本地 → 云端 material-sharing */
+    const local = await localHandle(method, path, ctx.query).catch(() => null);
+    if (local?.ok) return local.data;
+    /* 本机库已经判定「口令不对」，就别再去云端等一个来回：两个答案是同一句话。 */
+    if (local?.extra?.need_passcode === true) throw Object.assign(new Error(local.error || '这份资料需要口令'), { needPasscode: true });
+    try { return await getStudentMaterials(materialRoute[1], materialRoute[2], String(ctx.query.passcode || '')); }
+    catch (error) {
+      const need = error?.needPasscode === true;
+      /* 云端判「要口令」时以云端那句为准：本机库为空的学生，local.error 只是
+         「链接不存在或已关闭」，拿它当提示会把「请输入口令」这一步盖掉。 */
+      throw Object.assign(new Error(need ? error.message : (local?.error || error?.message || '教材加载失败')), { needPasscode: need });
+    }
+  }
+  /* 非教材路由：本地 → 云端 student-api */
+  const local = await localHandle(method, path, ctx.query, ctx.body).catch(() => null);
+  if (local?.ok) return local.data;
+  /* 本地失败（常见于外网独立访问，没有老师的 localStorage），走云端 */
+  try { return await callCloudStudent(method, path, ctx.query, ctx.body); }
+  catch (cloudErr) { throw new Error(local?.error || cloudErr.message || '加载失败'); }
 };
+/* 记住我是谁：学号/姓名存本地，下次自动带出 */
+const ME_KEY = 'wb_stu_' + code;
+const recall = () => { try { return JSON.parse(localStorage.getItem(ME_KEY) || 'null'); } catch { return null; } };
+const remember = (v) => { try { localStorage.setItem(ME_KEY, JSON.stringify(v)); } catch {} };
+/* 班级名拼接：库里存的常是"高二(5)班"，年级也是"高二"，直接拼会重复成"高二 高二(5)班" */
+function clsName(grade, cls) {
+  const g = String(grade || '').trim();
+  const c = String(cls || '').trim();
+  if (!g) return c;
+  if (!c) return g;
+  return c.startsWith(g) ? c : g + ' ' + c;
+}
+let data = null;
+let tab = null;   // 默认落到老师开放的第一个模块
+let availTabs = [];
+let cur = null;
+
+/* 本机偏好：班级从任务/名册自动带出，不再提供右上角设置入口。 */
+const PREF_KEY = 'wb_stu_pref_' + code;
+const prefs = () => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch { return {}; } };
+const savePref = (k, v) => { try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...prefs(), [k]: v })); } catch {} };
+function myClass() {
+  const p = prefs();
+  if (p.cls) return p.cls;
+  /* 没选过班级时用当前任务里的班级，保证学生一进来就能看到内容。 */
+  const t = (data?.selfstudyTasks || [])[0];
+  return t && t.class_scope !== 'all' ? (t.class_label || '') : '';
+}
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/* 老师在「教材 / 点名 / 盲盒」页里可以逐个关掉学生端模块；
+   自习没有单独的开关，发布了任务就相当于这个模块存在。
+   全部关掉且没有任务/签到时，整页只显示「正在来的路上」。 */
+function visibleTabs() {
+  const mods = data?.link?.modules || {};
+  const on = (k) => Number(mods[k]) !== 0;
+  const list = [];
+  if ((data?.selfstudyTasks || []).length) list.push('selfstudy');
+  if (data?.roll && data.roll.length) list.push('checkin');
+  if (on('material')) list.push('material');
+  if (on('roll')) list.push('roll');
+  if (on('punish')) list.push('punish');
+  if (on('misconduct')) list.push('misconduct');
+  if (on('bulletin')) list.push('bulletin');
+  return list;
+}
+
+async function init() {
+  try { data = await api(`/public/link/${code}`); }
+  catch (e) { $('#s-app').innerHTML = `<div class="card card-pad empty"><div class="em">${ICON.lock}</div>${esc(e.message)}</div>`; return; }
+  document.title = '学生工作台';
+  availTabs = visibleTabs();
+  /* 老师端各模块的链接会带 ?tab=，直接落到对应页签（教材/点名/盲盒/自习）；
+     该模块被关掉时退回第一个可见页签。 */
+  const wanted = new URLSearchParams(location.search).get('tab');
+  tab = availTabs.includes(wanted) ? wanted : (availTabs[0] || null);
+  paint();
+}
+const TAB_DEF = {
+  selfstudy: { icon: ICON.clock, label: '任务' },
+  checkin: { icon: ICON.check, label: '签到', dot: true },
+  material: { icon: ICON.mat, label: '教材' },
+  roll: { icon: ICON.dice, label: '点名' },
+  punish: { icon: ICON.target, label: '盲盒' },
+  misconduct: { icon: ICON.alert, label: '违纪' },
+  bulletin: { icon: ICON.chat, label: '留言板' },
+};
+function paint() {
+  if (!availTabs.length) {
+    $('#s-app').innerHTML = `<div class="card card-pad">
+      <div class="stu-empty" style="margin:40px auto 10px">
+        <b style="font-size:19px">正在来的路上</b>
+        <div class="tiny muted" style="margin-top:8px">老师还没开放内容，稍后再来看看</div>
+      </div>
+    </div>`;
+    return;
+  }
+  if (!availTabs.includes(tab)) tab = availTabs[0];
+  $('#s-app').innerHTML = `
+    <div class="s-tabs">
+      ${availTabs.map((t) => {
+        const d = TAB_DEF[t];
+        return `<button data-t="${t}" class="${tab === t ? 'on' : ''}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
+      }).join('')}
+    </div>
+    <div id="s-body"></div>`;
+  document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; cur = null; paint(); }; });
+  if (tab === 'selfstudy') paintSelfstudy();
+  if (tab === 'checkin') paintCheckin();
+  if (tab === 'material') paintMaterials();
+  if (tab === 'roll') paintRoll();
+  if (tab === 'punish') paintPunish();
+  if (tab === 'misconduct') paintMisconduct();
+  if (tab === 'bulletin') paintBulletin();
+}
+
+/* ---------- 自习任务：与教材、点名一致的普通卡片 ---------- */
+function taskLines(t) {
+  return String(t.content || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+    .map((line) => line.replace(/^\s*(?:\d+[.、)]|[-•])\s*/, '')).filter(Boolean);
+}
+function studentCardHtml(t) {
+  const items = taskLines(t);
+  const body = items.length > 1
+    ? `<ol class="st-list">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>`
+    : `<div class="st-text">${esc(items[0] || '')}</div>`;
+  const img = t.task_image || t.generated_image;
+  const day = t.date === todayStr() ? '今日' : (t.date || '');
+  const deadline = [day, t.deadline_time || t.end_time || t.period].filter(Boolean).join(' ');
+  return `<div class="card card-pad">
+    <div class="card-title" style="text-align:center">${esc(t.title || '今日任务')}</div>
+    <div class="st-card-body" style="padding:20px 0 12px;font-size:16px">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
+    <div class="row wrap tiny muted" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
+      <span>教师：${esc(t.creator || '老师')}</span>
+      <span>任务类型：课堂自习</span>
+      <span>截止时间：${esc(deadline)}</span>
+    </div>
+    <div class="row wrap" style="gap:10px;margin-top:4px">
+      <button class="btn ghost" id="st-view">查看任务</button>
+      <button class="btn primary" id="st-save">保存任务图</button>
+    </div>
+  </div>`;
+}
+function paintSelfstudy() {
+  const all = data.selfstudyTasks || [];
+  const mine = all.filter((t) => t.class_scope === 'all' || t.class_label === myClass());
+  const t = mine[0];
+  if (!t) {
+    /* 和教材 / 点名 / 盲盒保持一致：都放在一张普通卡片里，不再用整页居中的空白块 */
+    $('#s-body').innerHTML = `<div class="card card-pad">
+      <div class="card-title">${ICON.clock} 今日任务</div>
+      <div class="tiny muted" style="margin-top:4px">${myClass() ? `当前设备班级：${esc(myClass())} · ` : ''}老师发布后会自动出现在这里</div>
+      <div class="stu-empty" style="margin:26px auto 6px">
+        <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5M8 16h3"/></svg>
+        <b>暂无任务</b>
+      </div>
+    </div>`;
+    return;
+  }
+  $('#s-body').innerHTML = studentCardHtml(t);
+  $('#st-view').onclick = () => openTaskModal(t);
+  $('#st-save').onclick = () => {
+    const pages = taskImagePages({
+      title: t.title, class_label: t.class_label, date: t.date, period: t.period,
+      content: t.content, school: data.teacher?.school || '',
+    }, 'save');
+    pages.forEach((c, i) => downloadCanvas(c, `${t.title || '自习任务'}-${t.date || ''}-${i + 1}.png`));
+  };
+}
+function openTaskModal(t) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stu-modal';
+  wrap.innerHTML = `<div class="stu-modal-card">
+    <div class="stu-modal-head"><b>${esc(t.title || '今日任务')}</b><button aria-label="关闭">×</button></div>
+    <div class="stu-modal-body">${esc(t.content || '')}${(t.task_image || t.generated_image) ? `<img src="${esc(t.task_image || t.generated_image)}" alt="任务图">` : ''}</div>
+  </div>`;
+  const close = () => wrap.remove();
+  wrap.querySelector('button').onclick = close;
+  wrap.onclick = (e) => { if (e.target === wrap) close(); };
+  document.body.appendChild(wrap);
+}
+
+/* 学生端 60 秒轮询一次：任务或模块开关有变化才重绘，避免大屏上闪白 */
+setInterval(async () => {
+  try {
+    const d = await api(`/public/link/${code}`);
+    const before = JSON.stringify(data?.selfstudyTasks || []);
+    const after = JSON.stringify(d.selfstudyTasks || []);
+    if (data) { data.selfstudyTasks = d.selfstudyTasks || []; if (d.link) data.link = d.link; }
+    const next = visibleTabs();
+    const tabsChanged = next.join(',') !== availTabs.join(',');
+    availTabs = next;
+    if (tabsChanged) paint();
+    else if (before !== after && tab === 'selfstudy') paint();
+  } catch {}
+}, 60000);
+/* ---------- 签到：学生点一下，老师端实时看到 ---------- */
+const ST_LABEL = { present: '已到', late: '迟到', leave: '请假' };
+function paintCheckin() {
+  const sess = data.roll || [];
+  if (!sess.length) {
+    $('#s-body').innerHTML = `<div class="card card-pad" style="text-align:center">
+      <div class="muted" style="font-size:40px;margin:10px 0">${ICON.clock}</div>
+      <div class="bold">现在没有在进行的签到</div>
+      <div class="tiny muted" style="margin-top:6px">老师开始点名后，这里会出现签到按钮</div>
+      <button class="btn ghost sm" id="reload" style="margin-top:16px">刷新看看</button></div>`;
+    $('#reload').onclick = () => init();
+    return;
+  }
+  const me = recall();
+  const s0 = sess[0];
+  $('#s-body').innerHTML = `<div class="card card-pad">
+    <div class="row" style="align-items:center;gap:8px">
+      <div style="flex:1"><div class="bold" style="font-size:17px">${esc(clsName(s0.grade, s0.class_name))}</div>
+        <div class="tiny muted">${s0.period_no ? '第 ' + s0.period_no + ' 节 · ' : ''}${esc(s0.subject || '')} · 应到 ${s0.expect} 人</div></div>
+      <span class="chip blue" id="cnt">—</span>
+    </div>
+    ${me ? `<div class="ck-me">你是 <b>${esc(me.name || me.stu_no)}</b> <button class="btn ghost sm" id="swho" style="margin-left:auto">不是我</button></div>` : ''}
+    <div id="who" class="${me ? 'hidden' : ''}" style="margin-top:14px">
+      <div class="field"><label class="field-label">填一下你的学号或姓名</label>
+        <input class="input" id="myname" placeholder="如 张一诺 或 20240312" ${me ? `value="${esc(me.name || '')}"` : ''} autocomplete="off"></div>
+      <div class="tiny muted">只需填一次，以后打开自动记住；老师能看到谁到了、谁没到</div>
+    </div>
+    <div class="ck-grid" id="btns">
+      <button class="ck-b ok" data-st="present">${ICON.check}<span>我到了</span></button>
+      <button class="ck-b warn" data-st="late">${ICON.clock}<span>迟到了</span></button>
+      <button class="ck-b mute" data-st="leave">请假</button>
+    </div>
+    <div id="ckmsg" style="margin-top:12px"></div>
+  </div>`;
+  if (me) $('#swho').onclick = () => { try { localStorage.removeItem(ME_KEY); } catch {} ; paintCheckin(); };
+  document.querySelectorAll('[data-st]').forEach((b) => {
+    b.onclick = async () => {
+      const nameEl = document.getElementById('myname');
+      const name = (me?.name || me?.stu_no || nameEl?.value || '').trim();
+      const no = (me?.stu_no || '').trim();
+      if (!name) { document.getElementById('myname')?.focus(); document.getElementById('ckmsg').innerHTML = '<div class="tiny" style="color:var(--red)">请先填学号或姓名</div>'; return; }
+      const btns = document.querySelectorAll('[data-st]');
+      btns.forEach((x) => { x.disabled = true; });
+      try {
+        const r = await api(`/public/link/${code}/roll/${s0.id}`, { name, stu_no: no, status: b.dataset.st });
+        remember({ name, stu_no: no });
+        document.getElementById('cnt').textContent = `${r.present + r.late} / ${s0.expect}`;
+        document.getElementById('ckmsg').innerHTML = `<div class="ck-done">${ICON.check} 已登记：<b>${ST_LABEL[r.mine] || '已到'}</b>
+          <div class="tiny muted" style="margin-top:4px">本班已签 ${r.present + r.late} 人（含迟到 ${r.late}）</div>
+          <div class="tiny muted">如果点错了，可以直接再点一次改正</div>
+          <button class="btn ghost sm" id="notme" style="margin-top:8px">不是我，换个名字</button></div>`;
+        document.getElementById('notme').onclick = () => {
+          try { localStorage.removeItem(ME_KEY); } catch {}
+          paintCheckin();
+        };
+        try { navigator.vibrate?.(60); } catch {}
+      } catch (e) {
+        document.getElementById('ckmsg').innerHTML = `<div class="tiny" style="color:var(--red)">${esc(e.message)}</div>`;
+      } finally { btns.forEach((x) => { x.disabled = false; }); }
+    };
+  });
+  // 拉一次当前人数
+  api(`/public/link/${code}`).then((d) => {
+    const c = document.getElementById('cnt');
+    if (c && d.roll?.[0]) c.textContent = `应到 ${d.roll[0].expect}`;
+  }).catch(() => {});
+}
+
+/* 资料口令记在 sessionStorage（不是 localStorage）：
+   班里共用一台电脑时，localStorage 会把第一个学生输的口令永久留给后面所有人，
+   关掉标签页就作废才符合「这个班的口令只在这节课有效」。 */
+const PC_KEY = 'wb_stu_pc_' + code;
+const unlockedMats = () => { try { return JSON.parse(sessionStorage.getItem(PC_KEY) || '{}'); } catch { return {}; } };
+const passcodeFor = (id) => String(unlockedMats()[id] || '');
+const rememberPasscode = (id, value) => { try { sessionStorage.setItem(PC_KEY, JSON.stringify({ ...unlockedMats(), [id]: value })); } catch {} };
+const forgetPasscode = (id) => { const all = unlockedMats(); delete all[id]; try { sessionStorage.setItem(PC_KEY, JSON.stringify(all)); } catch {} };
+/* 列表只说「这份要不要口令」，真开不开得起来由服务端判：
+   所以这里点进去先探一次详情，口令缺失就直接弹输入框，不去猜本地那份准不准。 */
+function openMaterial() {
+  const m = (data.materials || []).find((x) => String(x.id) === String(cur));
+  if (m?.locked && !passcodeFor(cur)) return paintPasscodeGate();
+  return paintMaterialDetail();
+}
+function paintMaterials() {
+  if (cur) return openMaterial();
+  const mats = data.materials;
+  $('#s-body').innerHTML = `<div class="card">
+    <div class="card-pad" style="padding-bottom:6px"><div class="card-title">全部资料 <span class="chip blue">${mats.length}</span></div>
+      <div class="tiny muted" style="margin-top:4px">点开即可查看和下载；标了「需要口令」的，要输入老师给的班级口令</div></div>
+    ${mats.length ? mats.map((m) => {
+    const locked = m.locked && !passcodeFor(m.id);
+    return `<div class="mat-card" data-m="${m.id}" style="cursor:pointer">
+      <div class="doc-ico">${locked ? ICON.lockSm : ICON.mat}</div>
+      <div style="flex:1;min-width:0"><div class="bold small">${esc(m.title)}</div>
+        <div class="tiny muted">${esc([clsName(m.grade, m.class_name), m.descr || ''].filter(Boolean).join(' · '))}${locked ? ' · 需要口令' : ''}</div></div>
+      <span class="tiny muted">${locked ? '输口令' : '查看'} ${ICON.more}</span></div>`;
+  }).join('') : `<div class="empty">老师还没有上传资料</div>`}
+  </div>`;
+  document.querySelectorAll('[data-m]').forEach((d) => { d.onclick = () => { cur = Number(d.dataset.m); openMaterial(); }; });
+}
+/* 口令输错只改这一行字，不重画整块：重画会把学生已经输入的内容抹掉。 */
+function paintPasscodeGate(tip) {
+  const m = (data.materials || []).find((x) => String(x.id) === String(cur)) || {};
+  $('#s-body').innerHTML = `<div class="card card-pad">
+    <button class="btn ghost sm" id="pc-back">‹ 返回列表</button>
+    <div class="pc-em">${ICON.lock}</div>
+    <h2 style="margin:4px 0 4px;font-size:18px">${esc(m.title || '这份资料')}</h2>
+    <div class="tiny muted">老师给这份资料设了班级口令，输入正确才能查看和下载。</div>
+    <div class="field" style="margin-top:14px"><label class="field-label" for="pc-in">班级口令</label>
+      <input class="input" id="pc-in" type="text" autocomplete="off" spellcheck="false" placeholder="输入老师给的口令"></div>
+    <div class="tiny" id="pc-msg" style="color:var(--red);margin-top:8px" hidden></div>
+    <button class="btn primary block" id="pc-go" style="margin-top:12px">打开资料</button>
+  </div>`;
+  const say = (msg) => { const tipEl = $('#pc-msg'); tipEl.textContent = msg; tipEl.hidden = !msg; };
+  say(tip || '');
+  $('#pc-back').onclick = () => { cur = null; paint(); };
+  const input = $('#pc-in'), go = $('#pc-go');
+  const submit = async () => {
+    const value = input.value.trim();
+    if (!value) return say('请先输入口令');
+    go.disabled = true;
+    go.textContent = '校验中…';
+    try {
+      /* 口令对不对由服务端说了算：这里真取一次详情，取到了才算解锁。 */
+      await api(`/public/link/${code}/materials/${cur}?passcode=${encodeURIComponent(value)}`);
+      rememberPasscode(cur, value);
+      paintMaterialDetail();
+    } catch (e) {
+      forgetPasscode(cur);
+      say(e?.needPasscode ? '口令不对，找老师再确认一下' : (e.message || '打开失败，请稍后重试'));
+      go.disabled = false;
+      go.textContent = '打开资料';
+      input.focus();
+    }
+  };
+  go.onclick = submit;
+  input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  input.focus();
+}
+/* 学生端能预览的类型。docx 由 mammoth 在本地转成网页（不走外网），
+   其余（xlsx / pptx / zip…）浏览器渲染不了：
+   以前点一下会新开空白页，再把 octet-stream 的 blob 当页面打开，
+   结果存成一个没有扩展名的 UUID 文件，下载完谁也打不开。
+   现在能预览的在页面内预览，不能预览的按原文件名下载。 */
+const PREVIEW_KIND = {
+  pdf: 'pdf', docx: 'docx',
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
+  mp4: 'video', webm: 'video', ogv: 'video',
+  mp3: 'audio', m4a: 'audio', wav: 'audio', ogg: 'audio',
+};
+const previewKind = (name) => PREVIEW_KIND[String(name || '').split('.').pop().toLowerCase()] || '';
+
+/* mammoth 只在真的打开 docx 时才加载：每个学生一进页面就多下 600KB 不值得。
+   放在 assets/ 下而不是 js/，因为 js/ 会被 Service Worker 全量预缓存。 */
+let mammothLoading = null;
+function loadMammoth() {
+  if (window.mammoth) return Promise.resolve(window.mammoth);
+  if (!mammothLoading) {
+    mammothLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = './assets/vendor/mammoth.browser.min.js';
+      s.onload = () => (window.mammoth ? resolve(window.mammoth) : reject(new Error('文档解析组件不可用')));
+      s.onerror = () => { mammothLoading = null; reject(new Error('文档解析组件加载失败，请检查网络')); };
+      document.head.appendChild(s);
+    });
+  }
+  return mammothLoading;
+}
+/* 文档内容来自上传的文件，渲染前去掉脚本类标签和内联事件，避免变成可执行页面。 */
+function sanitizeDoc(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  tpl.content.querySelectorAll('script,style,iframe,object,embed,link,meta,form').forEach((n) => n.remove());
+  tpl.content.querySelectorAll('*').forEach((n) => {
+    for (const attr of [...n.attributes]) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) n.removeAttribute(attr.name);
+      else if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(attr.value)) n.removeAttribute(attr.name);
+    }
+  });
+  return tpl.innerHTML;
+}
+async function paintMaterialDetail() {
+  $('#s-body').innerHTML = '<div class="card card-pad small muted">加载中…</div>';
+  const passcode = passcodeFor(cur);
+  try {
+    const d = await api(`/public/link/${code}/materials/${cur}` + (passcode ? '?passcode=' + encodeURIComponent(passcode) : ''));
+    $('#s-body').innerHTML = `<div class="card card-pad">
+      <button class="btn ghost sm" id="back">‹ 返回列表</button>
+      <h2 style="margin:12px 0 4px;font-size:19px">${esc(d.material.title)}</h2>
+      <div class="tiny muted">${esc(d.material.descr || '')}</div>
+      <div class="col" style="margin-top:14px">
+        ${d.files.length ? d.files.map((f) => {
+          const kind = previewKind(f.name);
+          return `<button class="btn ghost block" data-file="${f.id}" data-name="${esc(f.name)}" data-kind="${kind}" style="justify-content:flex-start;gap:10px">
+            <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis">${esc(f.name)}</span>
+            <span class="tiny muted">${kind ? '预览' : '下载'} · ${(f.size / 1024 / 1024).toFixed(1)} MB</span></button>`;
+        }).join('')
+          : '<div class="muted small">这份资料还没有文件</div>'}
+      </div>
+      <div class="row wrap" style="gap:8px;margin-top:14px">
+        ${d.files.map((f) => `<button class="btn soft sm" data-dl="${f.id}" data-name="${esc(f.name)}">${ICON.dl} 下载 ${esc(f.name).slice(0, 12)}</button>`).join('')}
+      </div>
+      <div class="tiny muted" style="margin-top:14px">PDF、图片、音视频和 Word 文档点开即可在线预览；Excel / PPT 等格式浏览器无法预览，点击会按原文件名下载。</div>
+    </div>`;
+    /* 不能直接给 href 让浏览器跳转：文件地址在云端函数上，顶层导航会撞上 ngrok 提示页，
+       跨域时 download 属性也会被忽略。先 fetch 成 blob 再预览或保存。 */
+    let pvURL = '';
+    const loadBlob = async (id, mode) => {
+      /* 口令放请求头再取文件：URL 会原样进服务端访问日志，不该带口令。
+         服务端不认就直接 401，一个字节都拿不到。 */
+      const res = await fetch(materialEndpoint(code, cur, id, mode), { headers: passcodeHeaders(passcodeFor(cur)) }).catch(() => null);
+      if (!res) throw new Error('文件暂时打不开，请稍后重试');
+      if (res.status === 401) { forgetPasscode(cur); throw new Error('口令已失效，请重新输入'); }
+      if (!res.ok) throw new Error('文件暂时打不开，请稍后重试');
+      return res.blob();
+    };
+    /* 不能预览的类型直接下载：保留原文件名，否则浏览器会把 blob 存成一串 UUID */
+    const saveAs = async (btn, id, name) => {
+      const label = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = '下载中…';
+      try {
+        const href = URL.createObjectURL(await loadBlob(id, 'download'));
+        const a = document.createElement('a');
+        a.href = href; a.download = name || '教材文件';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(href), 10000);
+        btn.textContent = '已开始下载';
+        setTimeout(() => { btn.innerHTML = label; }, 1800);
+      } catch (e) {
+        btn.textContent = e.message;
+        setTimeout(() => { btn.innerHTML = label; }, 2400);
+      }
+      btn.disabled = false;
+    };
+    /* 预览放在当前页里，不新开窗口：新窗口会先显示 about:blank，
+       手机上也容易被弹窗拦截。 */
+    const showPreview = async (btn, id, name, kind) => {
+      const label = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = '加载中…';
+      try {
+        const blob = await loadBlob(id, 'view');
+        if (pvURL) URL.revokeObjectURL(pvURL);
+        pvURL = URL.createObjectURL(blob);
+        const media = kind === 'image' ? `<img src="${pvURL}" alt="${esc(name)}">`
+          : kind === 'video' ? `<video src="${pvURL}" controls playsinline preload="metadata"></video>`
+            : kind === 'audio' ? `<audio src="${pvURL}" controls preload="metadata"></audio>`
+              : kind === 'docx' ? '<div class="pv-doc" id="pv-doc">正在解析文档…</div>'
+                : `<iframe src="${pvURL}" title="${esc(name)}"></iframe>`;
+        $('#s-body').innerHTML = `<div class="card card-pad">
+          <div class="row wrap" style="gap:8px">
+            <button class="btn ghost sm" id="pv-back">‹ 返回资料</button>
+            <span style="flex:1"></span>
+            <button class="btn soft sm" id="pv-dl">${ICON.dl} 下载原文件</button>
+          </div>
+          <h2 style="margin:12px 0 4px;font-size:16px;word-break:break-all">${esc(name)}</h2>
+          <div class="pv-wrap">${media}</div>
+        </div>`;
+        $('#pv-back').onclick = () => {
+          if (pvURL) { URL.revokeObjectURL(pvURL); pvURL = ''; }
+          paintMaterialDetail();
+        };
+        $('#pv-dl').onclick = () => {
+          const a = document.createElement('a');
+          a.href = pvURL; a.download = name || '教材文件';
+          document.body.appendChild(a); a.click(); a.remove();
+        };
+        if (kind === 'docx') {
+          try {
+            const mammoth = await loadMammoth();
+            const out = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+            const box = document.getElementById('pv-doc');
+            if (box) box.innerHTML = sanitizeDoc(out.value || '<p>（文档内容为空）</p>');
+          } catch (err) {
+            const box = document.getElementById('pv-doc');
+            if (box) box.innerHTML = `<p class="muted">文档解析失败：${esc(err.message)}。可以点右上角「下载原文件」。</p>`;
+          }
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = e.message;
+        setTimeout(() => { btn.innerHTML = label; }, 2400);
+      }
+    };
+    document.querySelectorAll('[data-file]').forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.kind) showPreview(b, b.dataset.file, b.dataset.name, b.dataset.kind);
+        else saveAs(b, b.dataset.file, b.dataset.name);
+      };
+    });
+    document.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = () => saveAs(b, b.dataset.dl, b.dataset.name); });
+    document.getElementById('back').onclick = () => { cur = null; paint(); };
+  } catch (e) {
+    /* 老师中途改过口令：本机记的那份已经作废，回到输入框重新要一次。 */
+    if (e?.needPasscode) { forgetPasscode(cur); return paintPasscodeGate('这份资料需要口令，请先输入'); }
+    $('#s-body').innerHTML = `<div class="card card-pad">${esc(e.message)}</div>`;
+  }
+}
+/* ---------- 点名：选班级 → 点一下 → 滚出名字 ---------- */
+const ROLL_ME = 'wb_pick_';
+function paintRoll() {
+  /* 【第 19 条】以前这里有一道硬拦截：没有班级名单就直接「老师还没有设置班级名单」，
+     整页什么都不给。可老师最常见的用法恰恰是「报个班号，从 1 号点到 50 号」——
+     根本不需要名单。名单现在只是「按名字点」这个可选项的数据来源，
+     没有名单就默认走按号码，页面照常可用。 */
+  const rosters = data.rosters || [];
+  const liveCls = (data.roll && data.roll[0]) || null;
+  const first = (liveCls && rosters.find((r) => String(r.id) === String(liveCls.roster_id)))
+    || rosters[0]
+    || { id: 0, grade: '', class_name: '', names: [], count: 0 };
+  /* 【第 19 条：点名改成填人数 + 点几个，按号码点】
+     原来只能从老师预置的名单里选班，名单没建就没得点；
+     「同时点 N 人」藏在右上角一个不起眼的数字框里；点的永远是名字。
+     老师实际用法通常是：随便报个班号，从 1 号点到 50 号，点 3 个。
+     现在只填人数和点几个，默认按号码点；班级和最近常用班已按反馈去掉，
+     姓名模式退化为使用老师当前名单（有名单时可选）。 */
+  const names0 = (first.names || []).filter(Boolean);
+  const hasNames = names0.length > 0;
+  const cnt0 = Math.max(1, Math.min(200, Number(first.count) || first.roster_count || names0.length || 40));
+
+  $('#s-body').innerHTML = `<div class="card card-pad">
+    <div class="pk-grid">
+      <div class="field"><label class="field-label">人数</label>
+        <input class="input" id="pk-total" type="number" inputmode="numeric" min="1" max="200" value="${cnt0}"></div>
+      <div class="field"><label class="field-label">点几个</label>
+        <input class="input" id="pk-num" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
+    </div>
+    <div class="field" style="margin-top:4px">
+      <label class="field-label">怎么点</label>
+      <div class="seg pk-mode">
+        <button class="on" data-mode="no">按号码</button>
+        <button data-mode="name" ${hasNames ? '' : 'disabled title="还没有名单，导入名单后才能按名字点"'}>按名单名字</button>
+      </div>
+    </div>
+    <label class="pk-nr"><input type="checkbox" id="pk-norepeat"><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
+    <button class="btn primary block" id="go" style="height:56px;font-size:17px;margin-top:14px">${ICON.dice} 开始点名</button>
+    <div class="pick-stage"><div class="pick-roll" id="stage">填好人数和点几个，点「开始点名」</div></div>
+    <div id="history" class="tiny muted" style="text-align:center;min-height:18px"></div>
+  </div>`;
+
+  let mode = 'no';
+  let norepeat = false;
+  let pool = [];        // 不重复模式下「还没点到过」的
+  let poolKey = '';     // 人数|模式，变了就重置池子
+
+  const totalOf = () => Math.max(1, Math.min(200, Number($('#pk-total').value) || 1));
+  // 池子：号码是 1..人数；名字是名单（人数框跟着名单长度走）
+  const allOf = () => {
+    if (mode === 'name' && hasNames) return names0.slice();
+    const n = totalOf();
+    return Array.from({ length: n }, (_, i) => String(i + 1));
+  };
+  const keyOf = () => `${mode}|${mode === 'name' ? names0.length : totalOf()}`;
+  const resetPool = (force = false) => {
+    const k = keyOf();
+    if (!force && k === poolKey) return;
+    poolKey = k; pool = allOf();
+  };
+
+  // 模式切换
+  $('#s-body').querySelectorAll('[data-mode]').forEach((b) => {
+    b.onclick = () => {
+      if (b.disabled) return;
+      mode = b.dataset.mode;
+      $('#s-body').querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
+      if (mode === 'name') $('#pk-total').value = names0.length;
+      resetPool(true);
+      $('#history').textContent = norepeat ? `已点 0/${pool.length}，点完自动洗牌` : '';
+    };
+  });
+  $('#pk-norepeat').onchange = (e) => {
+    norepeat = e.target.checked;
+    resetPool(true);
+    $('#history').textContent = norepeat ? `已点 0/${pool.length}，点完自动洗牌重新开始` : '';
+  };
+  $('#pk-total').oninput = () => { if (norepeat) resetPool(); };
+  resetPool(true);
+
+  $('#go').onclick = () => {
+    resetPool();
+    const k = Math.max(1, Math.min(20, Number($('#pk-num').value) || 1));
+    const whole = allOf();
+    if (norepeat && pool.length < k) { pool = whole.slice(); poolKey = keyOf(); }
+    const source = (norepeat ? pool : whole).slice();
+    const picks = [];
+    for (let i = 0; i < k && source.length; i++) {
+      picks.push(source.splice(Math.floor(Math.random() * source.length), 1)[0]);
+    }
+    if (norepeat) pool = pool.filter((x) => !picks.includes(x));
+    const label = (v) => (mode === 'name' ? v : v + ' 号');
+
+    const btn = $('#go');
+    btn.disabled = true;
+    stage.className = 'pick-roll blur';
+    let c = 0;
+    const total = 16 + Math.floor(Math.random() * 6);
+    const shown = whole.length ? whole : ['1'];
+    const t = setInterval(() => {
+      stage.textContent = label(shown[Math.floor(Math.random() * shown.length)]);
+      if (++c > total) {
+        clearInterval(t);
+        btn.disabled = false;
+        stage.className = '';
+        if (picks.length === 1) {
+          stage.className = 'pick-win';
+          stage.textContent = label(picks[0]);
+        } else {
+          stage.innerHTML = `<div class="pick-names">${picks.map((p) => `<span class="pick-win sm">${esc(label(p))}</span>`).join('')}</div>`;
+        }
+        try { navigator.vibrate?.([40, 60, 90]); } catch {}
+        if (norepeat) {
+          $('#history').textContent = pool.length
+            ? `已点 ${whole.length - pool.length}/${whole.length} 人，还剩 ${pool.length} 人`
+            : '全班都点过了，下次点击自动洗牌重来';
+        } else {
+          $('#history').textContent = `从 ${whole.length} ${mode === 'name' ? '个名字' : '个号码'}里点了 ${picks.length} 个`;
+        }
+      }
+    }, 62);
+  };
+  return;
+}
+
+/* ---------- 惩罚盲盒：点一下，摇晃、开箱、亮出任务 ---------- */
+const LV_NAME = { light: '轻松', average: '有点挑战', heavy: '大冒险' };
+const LV_CLASS = { light: 'l1', average: 'l2', heavy: 'l3' };
+/* 用 SVG 而不是 emoji：部分安卓机/电脑缺 emoji 字体，会渲染成方框 */
+const BOX_ICO = {
+  closed: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v3.5h-19zM12 9v11.5"/><path d="M12 9S10.6 4 8.2 4a2.4 2.4 0 0 0 0 5M12 9s1.4-5 3.8-5a2.4 2.4 0 0 1 0 5"/></svg>',
+  light: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.2 5.6L20 10l-4.4 3.6L16.6 20 12 16.8 7.4 20l1-6.4L4 10l5.8-1.4z"/></svg>',
+  average: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>',
+  heavy: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 6 6.6 6 10a6 6 0 0 1-12 0c0-3.4 3-6 6-10z"/><path d="M12 17a2.6 2.6 0 0 1-2.6-2.6c0-1.5 1.3-2.6 2.6-4.4 1.3 1.8 2.6 2.9 2.6 4.4A2.6 2.6 0 0 1 12 17z"/></svg>',
+};
+/* 这一轮还剩几个没点过（第 20 条） */
+function leftCount(list) {
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem('wb_punish_done_' + code) || '[]'); } catch { done = []; }
+  const ids = new Set(done.map(String));
+  return list.filter((x) => !ids.has(String(x.id))).length;
+}
+
+function paintPunish() {
+  const list = data.punishments || [];
+  const me = recall();
+  $('#s-body').innerHTML = `<div class="card card-pad" style="text-align:center">
+    <div class="card-title" style="justify-content:center">${ICON.target} 惩罚盲盒</div>
+    <div class="tiny muted">点一下开箱，点到什么就做什么</div>
+    <div class="box-stage" id="box">
+      <div>
+        <div class="box-icon" id="bico">${BOX_ICO.closed}</div>
+        <div class="box-text" id="ptext" style="font-size:18px;font-weight:600;color:var(--text-2)">点下面按钮开箱</div>
+        <div id="plv"></div>
+        ${me ? `<div class="box-who">给 <b>${esc(me.name || me.stu_no)}</b> 点的</div>` : ''}
+      </div>
+    </div>
+    <button class="btn primary block" id="spin" style="height:54px;font-size:16px" ${list.length ? '' : 'disabled'}>
+      ${ICON.target} <span id="spintxt">${list.length ? '开箱' : '老师还没设置任务'}</span>
+    </button>
+    <div class="tiny muted" id="pcnt" style="margin-top:12px">${list.length ? `盲盒里共 ${list.length} 个任务 · 这一轮还剩 ${leftCount(list)} 个没点过` : '请老师到「工作 - 课件」里添加'}</div>
+  </div>`;
+  if (!list.length) return;
+
+  const box = $('#box'); const icon = $('#bico'); const text = $('#ptext'); const lv = $('#plv');
+  let busy = false;
+  $('#spin').onclick = () => {
+    if (busy) return;
+    busy = true;
+    const btn = $('#spin');
+    btn.disabled = true;
+    $('#spintxt').textContent = '摇一摇…';
+    box.classList.remove('open');
+    lv.innerHTML = '';
+    icon.innerHTML = BOX_ICO.closed;
+    icon.className = 'box-icon box-shake';
+    text.style.cssText = 'font-size:18px;font-weight:600;color:var(--text-2)';
+    text.textContent = '摇一摇…';
+    let c = 0;
+    let picked = null;
+    const total = 12 + Math.floor(Math.random() * 6);
+    /* 【第 20 条：盲盒不能重复】
+       原来每一轮都是从全部任务里完全随机取，同一个任务一节课能被点到三次，
+       学生一眼就看出「又是这个」，盲盒的公平性也就没了。
+       现在按「本轮已点」记账：优先从没点过的里点；全部点完才洗牌重来，
+       并在界面上说清「这一轮点完了，已重新洗牌」，而不是悄悄从头开始。 */
+    const KEY_DONE = 'wb_punish_done_' + code;
+    const readDone = () => {
+      try { return JSON.parse(localStorage.getItem(KEY_DONE) || '[]'); } catch { return []; }
+    };
+    const writeDone = (arr) => { try { localStorage.setItem(KEY_DONE, JSON.stringify(arr)); } catch {} };
+    // 只认当前还存在的任务（老师删掉的任务不该永久占着名额）
+    let done = readDone().filter((id) => list.some((x) => String(x.id) === String(id)));
+    let reshuffled = false;
+    const pickFrom = () => {
+      const left = list.filter((x) => !done.some((id) => String(id) === String(x.id)));
+      if (!left.length) { done = []; reshuffled = true; return list[Math.floor(Math.random() * list.length)]; }
+      return left[Math.floor(Math.random() * left.length)];
+    };
+    const t = setInterval(() => {
+      picked = list[Math.floor(Math.random() * list.length)];
+      text.textContent = picked.text;
+      if (++c > total) {
+        clearInterval(t);
+        reshuffled = false;
+        picked = pickFrom();
+        done.push(picked.id);
+        writeDone(done);
+        icon.className = 'box-icon';
+        icon.innerHTML = BOX_ICO[picked.level] || BOX_ICO.light;
+        text.style.cssText = '';   // 交回 .box-text 的样式
+        text.textContent = picked.text;
+        if (picked.level) lv.innerHTML = `<span class="box-lv ${LV_CLASS[picked.level] || 'l1'}">${LV_NAME[picked.level] || '任务'}</span>`;
+        box.classList.add('open');
+        btn.disabled = false;
+        busy = false;
+        const pc = $('#pcnt');
+        if (pc && list.length) {
+          const lf = leftCount(list);
+          pc.textContent = reshuffled
+            ? `这一轮 ${list.length} 个都点过了，已重新洗牌 · 还剩 ${lf} 个没点过`
+            : `盲盒里共 ${list.length} 个任务 · 这一轮还剩 ${lf} 个没点过`;
+        }
+        $('#spintxt').textContent = '再来一个';
+        try { navigator.vibrate?.([40, 60, 90]); } catch {}
+        // 开箱即留痕：老师那边能看到谁、什么时候、点到了什么
+        const cls = (data.roll && data.roll[0]) || {};
+        api(`/public/link/${code}/punish`, {
+          text: picked.text, stu_name: me?.name || '', grade: cls.grade || '', class_name: cls.class_name || '',
+          roster_id: cls.roster_id || null,
+        }).catch(() => {});
+      }
+    }, 78);
+  };
+}
+
+/* 年级 / 班级选项来自老师的课表（/public/link 下发的 classes）；
+   旧版后端还没下发时，退回到花名册，保证下拉框不会只剩一行提示。 */
+function classChoices() {
+  const pairMap = new Map();
+  [...(data?.classes || []), ...(data?.rosters || [])].forEach((r) => {
+    const grade = String(r?.grade || '').trim();
+    const class_name = String(r?.class_name || '').trim();
+    if (!grade && !class_name) return;
+    pairMap.set(grade + '\u0000' + class_name, { grade, class_name });
+  });
+  const classPairs = [...pairMap.values()];
+  /* numeric: true 是关键：班号直接拼在年级后面（高二10班 / 高二5班），
+     不带它的话按字符比，10 班会排到 5 班前面，和学生手里的名单对不上。 */
+  const gradeList = [...new Set(classPairs.map((r) => r.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+  const classesOf = (grade) => [...new Set(classPairs.filter((r) => r.grade === grade).map((r) => r.class_name).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+  /* 兼容旧偏好：以前只存了「高一 · 1 班」一整串 */
+  const splitCls = (text) => {
+    const t = String(text || '').trim();
+    if (!t) return { grade: '', class_name: '' };
+    const hit = classPairs.find((r) => clsName(r.grade, r.class_name) === t);
+    if (hit) return hit;
+    const parts = t.split(/[·.\s]+/).filter(Boolean);
+    return parts.length >= 2 ? { grade: parts[0], class_name: parts.slice(1).join(' ') } : { grade: '', class_name: t };
+  };
+  return { classPairs, gradeList, classesOf, splitCls };
+}
+
+/* ---------- 违纪：学生填报，教师端查看与编辑 ---------- */
+function paintMisconduct() {
+  const { classPairs, gradeList, classesOf, splitCls } = classChoices();
+  const saved = prefs();
+  const pref = saved.misconduct_grade !== undefined
+    ? { grade: String(saved.misconduct_grade || '').trim(), class_name: String(saved.misconduct_cls || '').trim() }
+    : splitCls(saved.misconduct_cls);
+  const auto = splitCls(myClass());
+  const curGrade = pref.grade || auto.grade;
+  const curClass = pref.class_name || auto.class_name;
+  const otherGrade = !!curGrade && !gradeList.includes(curGrade);
+  const initialClasses = curGrade ? classesOf(curGrade) : [];
+  const otherClass = !!curClass && !initialClasses.includes(curClass);
+  $('#s-body').innerHTML = `<div class="card card-pad">
+    <div class="card-title">${ICON.alert} 违纪登记</div>
+    <div class="tiny muted" style="margin:4px 0 12px">选择你所在的年级班级，填写违纪情况后提交，老师会在教师端看到。</div>
+    <div class="field">
+      <label class="field-label">年级</label>
+      <select class="input" id="mc-grade">
+        <option value="">请选择年级</option>
+        ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
+        <option value="__other__"${otherGrade ? ' selected' : ''}>其他（手动填写）</option>
+      </select>
+      <input class="input" id="mc-grade-custom" placeholder="例如：高一" value="${otherGrade ? esc(curGrade) : ''}" style="display:none;margin-top:8px">
+    </div>
+    <div class="field">
+      <label class="field-label">班级</label>
+      <select class="input" id="mc-cls">
+        <option value="">请选择班级</option>
+        ${initialClasses.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+        <option value="__other__"${otherClass ? ' selected' : ''}>其他（手动填写）</option>
+      </select>
+      <input class="input" id="mc-cls-custom" placeholder="例如：1 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
+    </div>
+    <div class="field">
+      <label class="field-label">违纪情况</label>
+      <textarea class="input" id="mc-text" rows="4" placeholder="写清楚时间、地点和具体情节"></textarea>
+    </div>
+    <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
+      <span class="tiny" id="mc-tip" style="color:var(--green)"></span>
+      <button class="btn primary" id="mc-send">提交</button>
+    </div>
+  </div>`;
+  const tip = (msg, bad) => { const t = $('#mc-tip'); t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  const gradeSelect = $('#mc-grade');
+  const gradeCustom = $('#mc-grade-custom');
+  const clsSelect = $('#mc-cls');
+  const clsCustom = $('#mc-cls-custom');
+  const syncCustom = () => {
+    const customGrade = gradeSelect.value === '__other__';
+    gradeCustom.style.display = customGrade ? '' : 'none';
+    clsSelect.style.display = customGrade ? 'none' : '';
+    clsCustom.style.display = (customGrade || clsSelect.value === '__other__') ? '' : 'none';
+  };
+  const fillClasses = (grade) => {
+    clsSelect.innerHTML = '<option value="">请选择班级</option>'
+      + classesOf(grade).map((c) => `<option>${esc(c)}</option>`).join('')
+      + '<option value="__other__">其他（手动填写）</option>';
+  };
+  gradeSelect?.addEventListener('change', () => {
+    if (gradeSelect.value === '__other__') {
+      savePref('misconduct_grade', '');
+    } else {
+      fillClasses(gradeSelect.value);
+      savePref('misconduct_grade', gradeSelect.value.trim());
+      savePref('misconduct_cls', '');
+    }
+    syncCustom();
+  });
+  clsSelect?.addEventListener('change', () => {
+    syncCustom();
+    /* 手动填写的值没法拿去下次默认选中，只有选中具体班级时才记住偏好 */
+    if (clsSelect.value !== '__other__') savePref('misconduct_cls', clsSelect.value.trim());
+  });
+  syncCustom();
+  $('#mc-send')?.addEventListener('click', async () => {
+    const customGrade = gradeSelect.value === '__other__';
+    const grade = (customGrade ? gradeCustom.value : gradeSelect.value).trim();
+    const classText = (customGrade || clsSelect.value === '__other__' ? clsCustom.value : clsSelect.value).trim();
+    const content = $('#mc-text').value.trim();
+    if (!grade) return tip('请先选择年级', true);
+    if (!classText) return tip('请先选择班级', true);
+    if (!content) return tip('请填写违纪情况', true);
+    const hit = classPairs.find((r) => r.grade === grade && r.class_name === classText);
+    const class_name = hit ? hit.class_name : classText;
+    const btn = $('#mc-send');
+    btn.disabled = true; btn.textContent = '提交中…';
+    try {
+      await api(`/public/link/${code}/misconduct`, { grade, class_name, content });
+      $('#mc-text').value = '';
+      tip('已提交，老师那边可以看到了');
+    } catch (error) {
+      tip(error.message || '提交失败，请稍后再试', true);
+    } finally { btn.disabled = false; btn.textContent = '提交'; }
+  });
+}
+
+/* ---------- 留言板：学生填报，教师端查看与编辑 ---------- */
+function paintBulletin() {
+  /* 年级 / 班级同样取自课表（与违纪登记共用一份选项）；
+     没有匹配项时保留「其他（手动填写）」，避免课表还没排课时无法提交。 */
+  const { classPairs, gradeList, classesOf, splitCls } = classChoices();
+  const saved = prefs();
+  const pref = saved.bulletin_grade !== undefined
+    ? { grade: String(saved.bulletin_grade || '').trim(), class_name: String(saved.bulletin_cls || '').trim() }
+    : splitCls(saved.bulletin_cls);
+  const auto = splitCls(myClass());
+  const curGrade = pref.grade || auto.grade;
+  const curClass = pref.class_name || auto.class_name;
+  const otherGrade = !!curGrade && !gradeList.includes(curGrade);
+  const initialClasses = curGrade ? classesOf(curGrade) : [];
+  const otherClass = !!curClass && !initialClasses.includes(curClass);
+  $('#s-body').innerHTML = `<div class="card card-pad">
+    <div class="card-title">${ICON.chat} 留言板</div>
+    <div class="tiny muted" style="margin:4px 0 12px">写下想说的话，老师会在教师端的留言板里看到。</div>
+    <div class="row wrap" style="gap:8px">
+      <div class="field" style="flex:1;min-width:140px">
+        <label class="field-label">年级</label>
+        <select class="input" id="bl-grade">
+          <option value="">请选择年级</option>
+          ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
+          <option value="__other__"${otherGrade ? ' selected' : ''}>其他（手动填写）</option>
+        </select>
+        <input class="input" id="bl-grade-custom" placeholder="例如：高一" value="${otherGrade ? esc(curGrade) : ''}" style="display:none;margin-top:8px">
+      </div>
+      <div class="field" style="flex:1;min-width:140px">
+        <label class="field-label">班级</label>
+        <select class="input" id="bl-class">
+          <option value="">请选择班级</option>
+          ${initialClasses.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+          <option value="__other__"${otherClass ? ' selected' : ''}>其他（手动填写）</option>
+        </select>
+        <input class="input" id="bl-class-custom" placeholder="例如：3 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">留言内容</label>
+      <textarea class="input" id="bl-text" rows="4" placeholder="想对老师说的话"></textarea>
+    </div>
+    <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
+      <span class="tiny" id="bl-tip" style="color:var(--green)"></span>
+      <button class="btn primary" id="bl-send">提交</button>
+    </div>
+  </div>`;
+  const tip = (msg, bad) => { const t = $('#bl-tip'); t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  const gradeSelect = $('#bl-grade');
+  const gradeCustom = $('#bl-grade-custom');
+  const clsSelect = $('#bl-class');
+  const clsCustom = $('#bl-class-custom');
+  const syncCustom = () => {
+    const customGrade = gradeSelect.value === '__other__';
+    gradeCustom.style.display = customGrade ? '' : 'none';
+    clsSelect.style.display = customGrade ? 'none' : '';
+    clsCustom.style.display = (customGrade || clsSelect.value === '__other__') ? '' : 'none';
+  };
+  const fillClasses = (grade) => {
+    clsSelect.innerHTML = '<option value="">请选择班级</option>'
+      + classesOf(grade).map((c) => `<option>${esc(c)}</option>`).join('')
+      + '<option value="__other__">其他（手动填写）</option>';
+  };
+  gradeSelect?.addEventListener('change', () => {
+    if (gradeSelect.value === '__other__') {
+      savePref('bulletin_grade', '');
+    } else {
+      fillClasses(gradeSelect.value);
+      savePref('bulletin_grade', gradeSelect.value.trim());
+      savePref('bulletin_cls', '');
+    }
+    syncCustom();
+  });
+  clsSelect?.addEventListener('change', () => {
+    syncCustom();
+    if (clsSelect.value !== '__other__') savePref('bulletin_cls', clsSelect.value.trim());
+  });
+  syncCustom();
+  $('#bl-send')?.addEventListener('click', async () => {
+    const customGrade = gradeSelect.value === '__other__';
+    const grade = (customGrade ? gradeCustom.value : gradeSelect.value).trim();
+    const class_name = (customGrade || clsSelect.value === '__other__' ? clsCustom.value : clsSelect.value).trim();
+    const content = $('#bl-text').value.trim();
+    if (!grade && !class_name) return tip('请选择年级或班级', true);
+    if (!content) return tip('请填写留言内容', true);
+    const hit = classPairs.find((r) => r.grade === grade && r.class_name === class_name);
+    const cls = hit ? hit.class_name : class_name;
+    const btn = $('#bl-send');
+    btn.disabled = true; btn.textContent = '提交中…';
+    try {
+      await api(`/public/link/${code}/bulletin`, { grade, class_name: cls, content });
+      $('#bl-text').value = '';
+      tip('已提交，老师那边可以看到了');
+    } catch (error) {
+      tip(error.message || '提交失败，请稍后再试', true);
+    } finally { btn.disabled = false; btn.textContent = '提交'; }
+  });
+}
+
+init();
 </script>
 </body>
 </html>
+

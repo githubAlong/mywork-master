@@ -12,7 +12,6 @@ import { registerView, icon, pageHead, state } from './ui.js';
 import { taskImagePages, canvasToDataUrl, downloadCanvas } from './selfstudy-task-image.mjs';
 import { cleanPeriodTime, normalizeTimetablePeriods, completeTimetablePeriods } from './timetable-periods.mjs';
 import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.mjs';
-import { syncMaterialSharing } from './material-sharing.mjs';
 
 /* 单独占一个视图名还保留着，是为了 #/selfstudy 这种老链接能落到正确的地方；
    实际渲染走 render() 里的 translate，这里只做兜底。 */
@@ -176,7 +175,6 @@ async function renderSelfstudyManage(box) {
   const loadTask = (t) => {
     editingId = t.id;
     errors = {};
-    savedAt = 0;
     ddOpen = false;
     form = {
       title: t.title || '', class_scope: t.class_scope || 'all', class_label: t.class_label || '全部',
@@ -184,32 +182,6 @@ async function renderSelfstudyManage(box) {
       task_image: t.task_image || '', generated_image: t.generated_image || '',
     };
     paint();
-  };
-
-  const deleteTask = async (task) => {
-    if (busy || !task) return;
-    busy = true;
-    try {
-      const confirmed = await confirmDialog(
-        `删除「${task.title || '未命名任务'}」？删除后学生端将不再显示这条任务。`,
-        { title: '删除自习任务', okText: '删除', danger: true },
-      );
-      if (!confirmed) return;
-      await api.del('/selfstudy_tasks/' + encodeURIComponent(task.id));
-      tasks = tasks.filter((t) => t.id !== task.id);
-      if (editingId === task.id) {
-        editingId = null;
-        errors = {};
-        savedAt = 0;
-        form = { ...form, title: '今日自习任务', class_scope: 'all', class_label: '全部', content: '', task_image: '', generated_image: '' };
-      }
-      toast('已删除');
-    } catch (e) {
-      toast(e.message || '删除失败', 'err');
-    } finally {
-      busy = false;
-      paint();
-    }
   };
 
   const validate = () => {
@@ -250,12 +222,10 @@ async function renderSelfstudyManage(box) {
   const readImage = (file) => {
     if (!/^image\/(jpeg|png)$/.test(file.type)) return toast('只支持 JPG 或 PNG 图片', 'warn');
     if (file.size > 5 * 1024 * 1024) return toast('图片过大，请压缩后上传', 'warn');
-    const imageForm = form;
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        if (form !== imageForm) return;
         /* 存原图 dataURL 会很快吃光 localStorage，这里按长边 900 压缩后再入库 */
         const scale = Math.min(1, 900 / Math.max(img.width, img.height));
         const c = document.createElement('canvas');
@@ -379,7 +349,7 @@ async function renderSelfstudyManage(box) {
           <input type="file" id="ssm-file" accept="image/png,image/jpeg" class="hidden">
 
           <div class="ssm-actions">
-            ${editingId ? `<button type="button" class="ssm-btn danger" id="ssm-del" ${busy ? 'disabled' : ''}>删除</button>` : ''}
+            ${editingId ? '<button class="ssm-btn danger" id="ssm-del">删除</button>' : ''}
             <span style="flex:1"></span>
             <button class="ssm-btn${saved ? ' ok' : ''}" id="ssm-save" ${busy || saved ? 'disabled' : ''}>${saved ? '已保存' : '保存任务'}</button>
             <button class="ssm-btn primary" id="ssm-preview" ${busy ? 'disabled' : ''}>生成学生端预览</button>
@@ -392,18 +362,14 @@ async function renderSelfstudyManage(box) {
             <div class="ssm-list">
               ${list.length ? list.map((t, index) => {
                 const st = ssTaskStatus(t);
-                return `<div class="ssm-item ${String(t.id) === String(editingId) ? 'on' : ''}" data-task="${esc(t.id)}">
+                return `<div class="ssm-item ${String(t.id) === String(editingId) ? 'on' : ''}" data-task="${t.id}">
                   <div class="ssm-item-no">${index + 1}</div>
                   <div class="ssm-item-ico">${icon('file', 16)}</div>
-                  <div class="ssm-item-copy">
+                  <div style="flex:1;min-width:0">
                     <div class="ssm-item-t">${esc(t.title || '未命名任务')}</div>
                     <div class="ssm-item-d">${esc(t.date || '')}</div>
                   </div>
-                  <div class="ssm-item-actions">
-                    <span class="ssm-tag ${st === 'published' ? 'pub' : 'draft'}">${st === 'published' ? '已发布' : '编辑中'}</span>
-                    <button type="button" class="ssm-btn" data-task-action="edit" ${busy ? 'disabled' : ''}>编辑</button>
-                    <button type="button" class="ssm-btn danger" data-task-action="delete" ${busy ? 'disabled' : ''}>删除</button>
-                  </div>
+                  <span class="ssm-tag ${st === 'published' ? 'pub' : 'draft'}">${st === 'published' ? '已发布' : '编辑中'}</span>
                 </div>`;
               }).join('') : '<div class="empty" style="padding:20px">还没有任务，填好左侧内容后点「保存任务」</div>'}
             </div>
@@ -460,7 +426,7 @@ async function renderSelfstudyManage(box) {
       const btn = box.querySelector('#ssm-save');
       btn.disabled = true; btn.textContent = '保存中…';
       try {
-        await upsert(isPublished() ? 'published' : 'draft');
+        await upsert('draft');
         busy = false;
         /* 保存成功不能只靠 toast：'已保存' 属于全局静默文案（core.js 的
            SILENT_SAVE_MESSAGES），不弹提示，按钮又瞬间复原，用户会以为没点上。
@@ -502,18 +468,24 @@ async function renderSelfstudyManage(box) {
     };
 
     box.querySelectorAll('[data-task]').forEach((n) => {
-      n.onclick = (e) => {
-        if (busy) return;
+      n.onclick = () => {
         const t = tasks.find((x) => String(x.id) === String(n.dataset.task));
-        if (!t) return;
-        const action = e.target.closest('[data-task-action]')?.dataset.taskAction;
-        if (action === 'delete') return deleteTask(t);
-        if (current() !== t) loadTask(t);
-        if (action === 'edit') box.querySelector('#ssm-title').focus();
+        if (t) loadTask(t);
       };
     });
 
-    box.querySelector('#ssm-del')?.addEventListener('click', () => deleteTask(current()));
+    box.querySelector('#ssm-del')?.addEventListener('click', async () => {
+      if (!editingId) return;
+      if (!await confirmDialog('删除这条自习任务？删除后学生端立即不再显示。')) return;
+      try {
+        await api.del('/selfstudy_tasks/' + editingId);
+        tasks = await api.get('/selfstudy_tasks');
+        editingId = null;
+        form = { ...form, title: '今日自习任务', class_scope: 'all', class_label: '全部', content: '', task_image: '', generated_image: '' };
+        toast('已删除');
+        paint();
+      } catch (e) { toast(e.message || '删除失败', 'err'); }
+    });
 
     /* 下拉点空白收起：只在面板打开时挂一次，交给下一次点击自然结束 */
     box.querySelector('#ssm-dd').addEventListener('click', (e) => e.stopPropagation());
@@ -538,7 +510,6 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
     api.get('/rosters').catch(() => []),
   ]);
   const link = links[0];
-  let visible = link?.modules?.selfstudy !== 0;
   const open = sessions.filter((s) => s.status === 'open');
   const today = sessions.filter((s) => String(s.date || '') === ymd(new Date()));
   box.innerHTML = `
@@ -550,18 +521,9 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
              <button class="btn ghost sm" id="ss-copy">${icon('copy', 14)} 复制链接</button>
              <a class="btn ghost sm" href="${esc(studentUrl(link.code, 'tab=selfstudy'))}" target="_blank" rel="noopener">打开看看</a>
            </div>
-           <div class="field-hint" style="margin-top:8px">开启后，学生端会显示「自习」页签。任务发布后，学生可在该页查看。</div>`
+           <div class="field-hint" style="margin-top:8px">学生打开这个链接，发布任务后顶部会出现「自习」页；没有进行中的签到时，页面会显示「现在没有在进行的签到」。</div>`
       : `<div class="empty" style="padding:18px">还没有生成学生链接。<button class="btn primary sm" id="ss-mklink">生成一条</button></div>`}
     </div>
-    ${entryOnly && link ? `<div class="card card-pad" style="margin-bottom:14px">
-      <div class="ssm-card-title">是否在学生端显示</div>
-      <div class="ssm-pc-row">
-        <button type="button" class="ssm-switch ${visible ? 'on' : ''}" id="ss-visible"
-                role="switch" aria-label="在学生端显示自习" aria-checked="${visible}"></button>
-        <span class="ssm-pc-text ${visible ? 'on' : ''}" id="ss-visible-text">${visible ? '开启' : '关闭'}</span>
-      </div>
-      <div class="ssm-pc-note">关闭后隐藏学生端的「自习」页签。重新开启会恢复已发布的任务。</div>
-    </div>` : ''}
     ${entryOnly ? '' : `
     <div class="ss-stats mod-stats">
       <div class="card card-pad ss-stat"><div class="ss-k">进行中</div>
@@ -592,33 +554,7 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
     await api.post('/links', { title: '班级资料站' }).catch(() => { });
     renderStudentSelfstudy(box, entryOnly);
   });
-  if (entryOnly) {
-    const btn = box.querySelector('#ss-visible');
-    btn?.addEventListener('click', async () => {
-      const next = !visible;
-      const label = box.querySelector('#ss-visible-text');
-      btn.disabled = true;
-      try {
-        await api.patch('/links/' + link.id, { modules: { selfstudy: next ? 1 : 0 } });
-        visible = next;
-        btn.setAttribute('aria-checked', String(next));
-        btn.classList.toggle('on', next);
-        label.classList.toggle('on', next);
-        label.textContent = next ? '开启' : '关闭';
-        try {
-          await syncMaterialSharing();
-          if (navigator.onLine === false) toast('已保存到本机，联网后同步到学生端', 'warn');
-        } catch (error) {
-          toast('已保存到本机，学生端同步失败。' + (error.message || '请稍后重试'), 'err');
-        }
-      } catch (error) {
-        toast(error.message || '保存失败，请重试', 'err');
-      } finally {
-        btn.disabled = false;
-      }
-    });
-    return;
-  }
+  if (entryOnly) return;
   box.querySelector('#ss-open')?.addEventListener('click', () => openRollDialog(rosters, () => renderStudentSelfstudy(box)));
 
   /* 场次列表 */
