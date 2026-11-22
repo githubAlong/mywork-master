@@ -173,6 +173,52 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-he
 .toast{position:absolute;left:50%;bottom:calc(var(--tab) + 24px);z-index:70;transform:translate(-50%,14px);opacity:0;
   pointer-events:none;max-width:78%;padding:11px 18px;border-radius:var(--r-pill);background:rgba(15,35,34,.88);color:#fff;font-size:13.5px;transition:opacity .28s var(--ease),transform .28s var(--ease)}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ══ PC 桌面布局（≥1024px）：左侧栏 + 双列内容；760–1023 仍为手机壳预览 ══ */
+@media(min-width:1024px){
+  .stage{background:radial-gradient(130% 90% at 50% 8%,#eef3f1,#d8e2e0 72%)}
+  .notch,.statusbar{display:none}
+  #app{width:100%;height:100%;border-radius:0;box-shadow:none;background:var(--page);
+    display:grid;grid-template-columns:212px 1fr;grid-template-rows:auto 1fr}
+
+  /* 侧栏导航 */
+  .tabbar{position:static;grid-column:1;grid-row:1/-1;height:auto;flex-direction:column;gap:4px;
+    background:var(--bg);border-right:1px solid var(--border);border-top:0;padding:26px 14px 20px;align-items:stretch}
+  .tabbar::before{content:"学生端";font-size:15.5px;font-weight:800;color:var(--ink-1);
+    padding:0 14px 20px;display:flex;align-items:center;gap:10px}
+  .tabbar button{flex:none;flex-direction:row;gap:12px;justify-content:flex-start;align-items:center;
+    padding:12px 14px;border-radius:12px;font-size:14.5px;color:var(--ink-2)}
+  .tabbar button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+  .tabbar button .ic{width:20px;height:20px}
+
+  /* 页眉 + 内容流 */
+  .topbar{position:static;grid-column:2;grid-row:1;padding:26px 38px 4px;gap:14px}
+  .topbar .avatar{width:46px;height:46px}
+  .topbar .greet .hi{font-size:20px}
+  #flow{position:static;grid-column:2;grid-row:2;height:100%;padding:16px 38px 40px;scrollbar-width:thin}
+  #flow::-webkit-scrollbar{width:8px}
+  #flow::-webkit-scrollbar-thumb{background:var(--panel-3);border-radius:4px}
+
+  /* 首页：签到大卡居左，作业/留言居右 */
+  [data-panel=home]{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start}
+  .task-hero{grid-column:1;grid-row:1 / span 2}
+  .home-hw{grid-column:2}
+  .home-msg{grid-column:2}
+
+  /* 资料站四列 */
+  [data-panel=files] .files{grid-template-columns:repeat(4,1fr)}
+
+  /* 我的：左名片右菜单 */
+  [data-panel=me]{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start;max-width:1000px}
+  .me-hero{margin-bottom:0}
+
+  /* 弹层居中 */
+  .modal{left:50%;top:50%;right:auto;bottom:auto;width:460px;max-width:92vw;
+    transform:translate(-50%,140%);visibility:hidden;border-radius:22px;padding:28px 26px 24px;max-height:84%;text-align:center}
+  .modal.on{transform:translate(-50%,-50%);visibility:visible}
+  .modal .grab{display:none}
+  .toast{bottom:28px}
+}
 </style>
 </head>
 <body>
@@ -197,7 +243,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-he
         <button class="sign-btn" id="sign-btn"><span data-ic="check-circle" class="ic sm"></span>立即签到</button>
       </article>
 
-      <article class="card">
+      <article class="card home-hw">
         <div class="card-hd"><span data-ic="file-text" class="ic"></span><h3>我的作业</h3>
           <button class="link">全部 <span data-ic="arrow-right" class="ic xs"></span></button></div>
         <div class="hw"><div class="n">第 3 章课后练习<br><span class="d">信息技术 · 明天截止</span></div><span class="badge o">待提交</span></div>
@@ -205,7 +251,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;min-he
         <div class="hw"><div class="n">上午默写任务<br><span class="d">20 分钟 · 今天 09:00</span></div><span class="badge g">已完成</span></div>
       </article>
 
-      <article class="card">
+      <article class="card home-msg">
         <div class="card-hd"><span data-ic="chat" class="ic"></span><h3>班级留言</h3>
           <button class="link">全部 <span data-ic="arrow-right" class="ic xs"></span></button></div>
         <div class="msg"><div class="av">王</div><div class="b"><div class="t">王老师</div><div class="d">明天带笔记本电脑到机房，提前充好电。</div></div><span class="time">10:05</span></div>
