@@ -202,7 +202,7 @@ test('本机接口：口令挡住详情，列表只给 locked，老师端仍能�
 test('教师端：上传/编辑课件有口令输入框，保存与列表都带上它', async () => {
   const src = await read('js/work.js');
   assert.match(src, /for="pc">班级口令/);
-  assert.match(src, /passcode: body\.querySelector\('#pc'\)\.value\.trim\(\)\)/);
+  assert.match(src, /passcode: body\.querySelector\('#pc'\)\.value\.trim\(\)/);
   assert.match(src, /value="\$\{esc\(m\?\.passcode \|\| ''\)\}"/, '编辑时要回填原口令');
   assert.match(src, /icon\('lock', 13\)\} 口令 \$\{esc\(m\.passcode\)\}/);
 });
