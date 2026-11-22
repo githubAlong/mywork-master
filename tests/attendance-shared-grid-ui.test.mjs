@@ -133,7 +133,7 @@ const control=(root,key,id='1')=>root.querySelectorAll('[data-grid-person]').fin
 test('花名册和坐班表保留完整名单，子表固定列并显示已登记记录',async()=>{
   const {root}=await setup();
   const headers=()=>[...root.innerHTML.matchAll(/<th>(.*?)<\/th>/g)].map(match=>match[1]);
-  const names=()=>[...root.innerHTML.matchAll(/<td><b>(.*?)<\/b><\/td>/g)].map(match=>match[1]);
+  const names=()=>[...root.innerHTML.matchAll(/<td class="aprd-name">([^<]*)/g)].map(match=>match[1]);
   /* 用户 11-15 需求：默认进入坐班表（数据源），优先展示全状态 */
   assert.deepEqual(headers(),['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作']);
   await root.querySelector('[data-tab="roster"]').click();

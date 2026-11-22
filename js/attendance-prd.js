@@ -1448,7 +1448,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const rows = entries.map(({teacher,state,department,remark:savedRemark},index) => {
       if (type === 'roster') {
         return '<tr><td>'+(index+1)+'</td><td>'+esc(deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
-          +'<td><b>'+esc(teacher.name)+'</b></td><td>'+esc(teacher.subject||'')+'</td>'
+          +'<td class="aprd-name">'+esc(teacher.name)+'</td><td>'+esc(teacher.subject||'')+'</td>'
           +'<td><input type="text" class="aprd-note-input" data-roster-note="'+esc(teacher.id)+'" value="'+escAttr(noteOf(teacher))+'" placeholder="备注" aria-label="'+escAttr(teacher.name+' 备注')+'"></td>'
           +'<td>'+actionsOf(teacher)+'</td></tr>';
       }
@@ -1485,7 +1485,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         return '<td>'+mark(key,shown[key])+'</td>';
       }).join('');
       return '<tr><td>'+(index+1)+'</td><td>'+esc(department||deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
-        +'<td><b>'+esc(teacher.name)+'</b>'+(dirtyKeys.has(sheetRowKey({teacher}))?'<span class="aprd-dirty">已修改</span>':'')+'</td><td>'+esc(teacher.subject||'')+'</td>'
+        +'<td class="aprd-name">'+esc(teacher.name)+(dirtyKeys.has(sheetRowKey({teacher}))?'<span class="aprd-dirty">已修改</span>':'')+'</td><td>'+esc(teacher.subject||'')+'</td>'
         +stateCells+'<td>'+remark+'</td>'
         +'<td>'+actionsOf(teacher)+'</td></tr>';
     }).join('');
