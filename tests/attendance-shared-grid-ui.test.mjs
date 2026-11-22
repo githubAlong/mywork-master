@@ -68,11 +68,12 @@ async function setup(options={}) {
     {id:'2',name:'王老师',subject:'数学',grade:'高一',active:1}];
   /* 课表 fixture 供「时段取自当天课表」的用例使用，默认不给课表数据。 */
   const courses=options.courses||[], periods=options.periods||[], grade=options.grade||'高一';
-  const calls=[],exportedGrids=[],toasts=[],patchCalls=[];
+  const calls=[],exportedGrids=[],toasts=[],patchCalls=[],gets=[];
   let version=0, settings=options.settings?structuredClone(options.settings):{};
   const nextVersion=()=>String(++version);
   const api={
     async get(path) {
+      gets.push(path);
       if(path==='/grades') return {grades:['高一','高二']};
       if(path==='/teachers') return {list:structuredClone(teachers)};
       if(path==='/me') return {user:{settings:structuredClone(settings)}};
@@ -127,11 +128,11 @@ async function setup(options={}) {
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
   await render(root,{grade});
-  return {root,saved,calls,exportedGrids,toasts,patchCalls,reopen:()=>render(root,{grade})};
+  return {root,saved,calls,exportedGrids,toasts,patchCalls,gets,reopen:()=>render(root,{grade})};
 }
 const control=(root,key,id='1')=>root.querySelectorAll('[data-grid-person]').find(element=>element.dataset.gridPerson===id&&element.dataset.gridKey===key);
 
-test('花名册和坐班表保留完整名单，子表固定列并显示已登记记录',async()=>{
+test('坐班表、上课表、教研表名单与列一模一样，花名册只维护名单',async()=>{
   const {root}=await setup();
   const headers=()=>[...root.innerHTML.matchAll(/<th>(.*?)<\/th>/g)].map(match=>match[1]);
   const names=()=>[...root.innerHTML.matchAll(/<td class="aprd-name">([^<]*)/g)].map(match=>match[1]);
@@ -144,24 +145,41 @@ test('花名册和坐班表保留完整名单，子表固定列并显示已登�
   assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
   assert.equal(root.querySelectorAll('[data-person]').length,0);
   let workHeaders=null;
-  /* 用户 11-22 裁决：坐班表/上课表/教研表列结构统一成坐班表那套，
-     不属于本表的格子只读回显，所以三张表的表头必须一模一样。 */
+  /* 用户 11-22 裁决：坐班表/上课表/教研表一模一样——列结构统一成坐班表那套，
+     名单也跟着花名册全量列，不属于本表的格子只读回显。 */
   const unifiedHeaders=['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作'];
   const expectedHeaders={seat:unifiedHeaders,class:unifiedHeaders,research:unifiedHeaders};
-  const expectedNamesByType={seat:['李老师','王老师'],class:[],research:[]};
-  const expectedControls={seat:12,class:0,research:0};
+  const allNames=['李老师','王老师'];
+  const expectedNamesByType={seat:allNames,class:allNames,research:allNames};
+  /* 本表可编的格子：坐班表五类全开，上课表开上课/听课，教研表开教研+请假，备注每行一个 */
+  const expectedControls={seat:12,class:6,research:6};
   for(const type of ['seat','class','research']) {
     await root.querySelector('[data-tab="'+type+'"]').click();
     const current=headers();
     if(workHeaders===null) workHeaders=current;
     assert.deepEqual(current,expectedHeaders[type]);
-    assert.deepEqual(names(),expectedNamesByType[type]);
+    assert.deepEqual(names(),expectedNamesByType[type],type+' 的名单要和坐班表一样全');
+    assert.doesNotMatch(root.innerHTML,/暂无记录，请在坐班表勾选后确认生成/,'子表不再因为没记录收成空表');
     assert.equal(root.querySelectorAll('[data-grid-person]').length,expectedControls[type]);
+    assert.equal(root.querySelectorAll('[data-delete-work-record]').length,type==='seat'?0:2);
     /* 用户 11-12 裁决：去掉「保存本表」，改为点一下即自动保存 */
     assert.equal(root.querySelector('[data-grid-save]'),null);
     assert.equal(/保存本表/.test(root.innerHTML),false);
   }
   assert.ok(workHeaders.includes('坐班')&&workHeaders.includes('请假'));
+});
+
+test('切页签不再重拉接口：按日视图只重绘，月/年累计才现拉',async()=>{
+  const {root,gets}=await setup();
+  const before=gets.length;
+  for(const type of ['seat','class','research','roster','leave','summary','class','seat']) {
+    await root.querySelector('[data-tab="'+type+'"]').click();
+  }
+  /* 用户 11-22 反馈「切换表格之后要好久才生效」：按日视图的数据早就在内存里，
+     以前每次点页签都 await load() 把 6 个接口重跑一遍。 */
+  assert.equal(gets.length,before,'按日切页签一个接口都不该再打');
+  await root.querySelector('#aprd-view-period').change('month');
+  assert.ok(gets.length>before,'按月/按年是累计快照，仍要现拉');
 });
 
 test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/编辑/学科管理/确认生成',async()=>{
@@ -280,10 +298,11 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.equal(saved.class.rows.length,0);
   assert.equal(saved.research.rows.length,0);
   await root.querySelector('[data-tab="class"]').click();
-  /* 只勾坐班不会给上课表生成记录。 */
-  assert.equal(control(root,'sit'),undefined);
-  assert.equal(control(root,'class'),undefined);
-  assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
+  /* 只勾坐班不会给上课表生成记录：名单和坐班表一样全，但本表这些格子仍是空白。 */
+  assert.equal(saved.class.rows.length,0,'只勾坐班不该写出上课记录');
+  assert.equal(control(root,'sit'),undefined,'坐班格在上课表只读回显，不给写入入口');
+  assert.match(control(root,'class').attributes['aria-label'],/上课：未登记/);
+  assert.match(control(root,'listen').attributes['aria-label'],/听课：未登记/);
   await root.querySelector('[data-tab="roster"]').click();
   /* 花名册只保留名单与操作，不再展示任何考勤状态格 */
   assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
@@ -338,19 +357,20 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   await control(root,'class').click();
   await control(root,'sit','2').click();
   await select('class');
-  assert.equal(control(root,'class'),undefined,'自动保存的坐班草稿尚未生效');
+  /* 名单统一后上课表也列全量人，这里验的是这一节的格子还没被坐班草稿带过来 */
+  assert.match(control(root,'class').attributes['aria-label'],/上课：未登记/,'自动保存的坐班草稿尚未生效');
   await select('seat');
   await confirm();
   assert.equal(saved.seat.confirm_state,'confirmed');
   await select('class');
-  assert.equal(control(root,'class','2'),undefined);
+  assert.match(control(root,'class','2').attributes['aria-label'],/上课：未登记/,'王老师只勾了坐班，上课表里这一格仍是空白');
   assert.match(control(root,'class').attributes.class,/ y$/);
   await control(root,'remark').change('补充记录');
   await select('seat');
   await root.querySelector('[data-edit-sheet]').click();
   await control(root,'research','2').click();
   await select('research');
-  assert.equal(control(root,'research','2'),undefined);
+  assert.match(control(root,'research','2').attributes['aria-label'],/教研：未登记/);
   await select('seat');
   await confirm();
   await select('research');
@@ -360,7 +380,8 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   await select('class');
   assert.equal(control(root,'remark').value,'补充记录');
   await root.querySelector('[data-delete-work-record="1"]').click();
-  assert.equal(control(root,'class'),undefined);
+  /* 名单统一后删记录不是把整行删掉，而是这一格回到空白 */
+  assert.match(control(root,'class').attributes['aria-label'],/上课：未登记/,'删除子表记录后本表格子回到空白');
   await select('seat');
   await root.querySelector('[data-edit-sheet]').click();
   assert.match(control(root,'class').attributes.class,/ y$/,'删除子表记录保留坐班表和教师');
@@ -443,14 +464,17 @@ test('切换节次和日期不会把之前的草稿带入教研表',async()=>{
   await root.querySelector('[data-tab="seat"]').click();
   await control(root,'research').click();
   await root.querySelector('[data-tab="research"]').click();
+  const marks=()=>root.querySelectorAll('[data-grid-person]').filter(el=>el.dataset.gridKey==='research');
+  const blank=()=>marks().map(el=>el.attributes['aria-label']).join('|');
   await root.querySelector('#aprd-period').change('2');
-  assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
+  /* 名单统一后教研表也列全量人，验的是换了节次这些格子仍空白，不是行数归零 */
+  assert.equal(blank(),'李老师 教研：未登记|王老师 教研：未登记','换节次不能把原节次的草稿带过来');
   /* 真实环境按日期分表，换日期就是另一张空表；这里清空桩数据来模拟 */
   Object.values(saved).forEach(table=>{table.rows=[];});
   await root.querySelector('#aprd-date').change('2026-10-01');
-  assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
+  assert.equal(blank(),'李老师 教研：未登记|王老师 教研：未登记','换日期同样不该串草稿');
   await root.querySelector('#aprd-search').input('王老师');
-  assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
+  assert.equal(marks().length,1,'搜索收窄到王老师一个人');
 });
 
 test('教师搜索支持中文输入法组合输入，组合期间不重绘，选字完成后再筛选',async()=>{

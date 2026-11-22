@@ -1492,7 +1492,10 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const isWorksheet=type==='class'||type==='research';
     const dirtyKeys = sheetDirtyKeys(type);
     const entries = type==='roster' ? visibleTeachers().map(teacher=>({teacher}))
-      : (result?.rows ?? worksheetEntries(type,isEditing(type),isEditing(type))).filter(({teacher})=>matchesSheetFilter(teacher));
+      /* 上课表/教研表的名单和坐班表一样全：没登记的人就是几格空白，
+         不能因为「这条表还没记录」把整张表收成空（用户 11-22 要求三张表一模一样）。
+         只改这份显示名单，确认生成与导出仍走 worksheetEntries 的已登记口径。 */
+      : (result?.rows ?? worksheetEntries(type,isEditing(type),true)).filter(({teacher})=>matchesSheetFilter(teacher));
     const listedTeachers=entries.map(({teacher})=>teacher);
     const activeStateKeys = type === 'roster' ? [] : SHEET_STATE_COLUMNS;
     const nativeKeys = GRID_STATE_COLUMNS[type] || SHEET_STATE_COLUMNS;
@@ -1501,9 +1504,17 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const seatStates = type === 'class' || type === 'research'
       ? new Map(worksheetEntries('seat', isEditing('seat'), true).map(({ teacher, state }) => [String(teacher.id), state]))
       : null;
-    const viewStateOf = (teacher, state) => (!seatStates ? state
-      : { ...(seatStates.get(String(teacher.id)) || {}), listeners: state.listeners,
-        ...Object.fromEntries(nativeKeys.map(key => [key, state[key]])) });
+    const viewStateOf = (teacher, state) => {
+      if (!seatStates) return state;
+      const merged = { ...(seatStates.get(String(teacher.id)) || {}), listeners: state.listeners };
+      /* 本表自己的列（连同记 y/n 的 *Status 变体）一律用本表数据：
+         坐班表刚勾、还没确认生成时，子表这一格不能先显示成已登记。 */
+      for (const key of nativeKeys) {
+        merged[key] = state[key];
+        if (key === 'listen' || key === 'research') merged[key + 'Status'] = state[key + 'Status'];
+      }
+      return merged;
+    };
     const editableKey = key => editable && nativeKeys.includes(key);
     /* 花名册只维护教师名单：考勤状态不展示，但保留一列可直接填写的备注（用户 11-15 要求）。 */
     const columns = type === 'roster'
@@ -1598,7 +1609,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+tools+'</div>'
       +'<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+listedTeachers.length+' 位教师</span></div>'+teacherAddCardHtml()+summaryStrip
       +'<div class="aprd-table-wrap"><table><thead><tr>'+columns.map(column=>'<th>'+column+'</th>').join('')
-      +'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+columns.length+'" class="aprd-empty">'+(isWorksheet?'暂无记录，请在坐班表勾选后确认生成':'当前筛选下暂无在岗教师')+'</td></tr>')+'</tbody></table></div>';
+      +'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+columns.length+'" class="aprd-empty">当前筛选下暂无在岗教师</td></tr>')+'</tbody></table></div>';
   };
   const leaveHtml = () => {
     const result = leaveOnlyDate && !isEditing('leave') ? confirmedResult('leave') : null;
@@ -1966,7 +1977,13 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       if(busy || generating || !await flushBeforeSwitch())return;
       tab=b.dataset.tab;
       search='';subject='';
-      await refreshView();
+      /* 切页签只是换一张表看，名单和状态都已经在内存里；这里再去 await load()
+         等于每点一次页签把 6 个接口重跑一遍，「切换后要好久才生效」就是这个
+         （用户 11-22 反馈）。只有月/年累计和月度快照是现拉的，才需要等。 */
+      if(viewPeriod==='day')paint();
+      else if(isRangeView(tab))await loadRange();
+      else if(isMonthlySummary(tab))await loadMonth();
+      else paint();
     });
     root.querySelector('[data-leave-show-all]')?.addEventListener('click',()=>{leaveOnlyDate='';paint();});
     root.querySelectorAll('[data-grade-tab]').forEach(b=>b.onclick=async()=>{if(busy||generating||!await flushBeforeSwitch())return;grade=b.dataset.gradeTab;leaveOnlyDate=date;await load();});
@@ -2146,7 +2163,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     });
     root.querySelectorAll('[data-delete-work-record]').forEach(button=>button.onclick=async()=>{
       const type=tab, teacher=teachers.find(item=>String(item.id)===button.dataset.deleteWorkRecord);
-      if(!teacher||generating||!await confirmDialog('删除这条考勤记录？'))return;
+      if(!teacher||generating)return;
+      /* 名单统一后每行都挂着删除按钮：这个人在本表这一节什么都没登记时别写空白行，
+         否则点一次「删除」反而凭空多一条草稿记录。 */
+      const own=worksheetState(teacher,type,getDraftRows(type));
+      if(!(GRID_STATE_COLUMNS[type]||[]).some(key=>key!=='leave'&&own[key]&&own[key]!=='u')){
+        toast('这个人在本表还没有登记，不用删','warn');return;
+      }
+      if(!await confirmDialog('删除这条考勤记录？'))return;
       if(type!==tab)return;
       for(const key of GRID_STATE_COLUMNS[type])if(key!=='leave')updateWorksheet(teacher,type,key,'u');
       editConfirmedSheet();
