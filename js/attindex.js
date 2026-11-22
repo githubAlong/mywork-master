@@ -27,7 +27,7 @@ export async function renderGradeList(box) {
   const grades = tabs.map((grade) => ({ grade, count: Number(counts[grade] || 0) }));
   const teacherTotal = grades.reduce((sum, item) => sum + item.count, 0);
 
-  const card = ({ grade, count }) => `<button class="agd-grade-card" data-g="${esc(grade)}" title="进入 ${esc(grade)} 考勤工作台">
+  const card = ({ grade, count }) => `<button type="button" class="agd-grade-card" data-g="${esc(grade)}" title="进入 ${esc(grade)} 考勤工作台">
       <span class="agd-grade-banner">
         <span class="agd-grade-name"><i>${icon('users', 20)}</i>${esc(grade)}</span>
       </span>
@@ -36,7 +36,7 @@ export async function renderGradeList(box) {
           <b>${count || '—'}</b><span>${count ? '位教师' : '还没有教师'}</span>
         </span>
         <span class="agd-grade-scope">${WORKSPACE_SCOPE.map(esc).join('<i>·</i>')}</span>
-        <span class="agd-grade-foot"><span>按年级独立管理花名册与考勤数据</span><b>进入考勤工作台 ${icon('right', 14)}</b></span>
+        <span class="agd-grade-foot"><b>进入考勤工作台 ${icon('right', 17)}</b></span>
       </span>
     </button>`;
 
@@ -54,23 +54,19 @@ export async function renderGradeList(box) {
     </header>
 
     <section class="agd-stats" aria-label="考勤数据概览">
-      <div class="agd-stat blue"><i>▱</i><div><b>${tabs.length}</b><span>管理年级</span></div></div>
-      <div class="agd-stat purple"><i>♙</i><div><b>${teacherTotal}</b><span>教师总人数</span></div></div>
+      <div class="agd-stat blue"><i>${icon('grid', 24)}</i><div><span>管理年级</span><b>${tabs.length}</b></div></div>
+      <div class="agd-stat purple"><i>${icon('user', 26)}</i><div><span>教师总人数</span><b>${teacherTotal}</b></div></div>
     </section>
 
     <section class="agd-workspace">
       <div class="agd-section-head">
-        <div><h3>${icon('grid', 19)} 年级考勤工作区</h3><p>选择年级进入独立工作台，查看当天考勤与历史记录</p></div>
-        <span class="agd-date">${dateText(today)}</span>
+        <div><h3>年级考勤工作区</h3><p>选择年级进入独立工作台，查看当天考勤与历史记录</p></div>
+        <time class="agd-date" datetime="${today}">${icon('cal', 17)} ${dateText(today)}</time>
       </div>
-      <div class="agd-grade-grid${tabs.length ? '' : ' is-empty'}">
+      <div class="agd-grade-grid" ${tabs.length ? '' : 'hidden'}>
         ${grades.map(card).join('')}
-        <button class="agd-new-card" id="agl-add-card">
-          <span class="agd-new-plus">${icon('plus', 25)}</span>
-          <b>新建年级</b><span>添加新的年级考勤管理</span>
-          <i class="agd-school-scene" aria-hidden="true">⌂</i>
-        </button>
       </div>
+      <button type="button" class="agd-new-card" id="agl-add-card">${icon('plus', 23)} 新建年级</button>
     </section>
 
     <details class="agd-maintenance">

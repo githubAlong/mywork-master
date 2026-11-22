@@ -1,4 +1,4 @@
-import { api, el, esc, toast, sheet, saving, confirmDialog, WD_SHORT, ymd } from './core.js';
+import { api, el, esc, toast, sheet, saving, confirmDialog, WD_SHORT, ymd, classPickerAuto } from './core.js';
 import { state, icon, onViewLeave } from './ui.js';
 import { detectTimetable } from './ttimage.js';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
@@ -765,6 +765,8 @@ export async function renderTimetable(box) {
       '<div class="field field-full"><label class="field-label" for="tt-course-class">授课班级</label><input class="input" id="tt-course-class" value="' + esc(row?.class_name || (defaultLunch ? '全体' : '')) + '" placeholder="如：高一1班 / 高二全年级"></div>' +
       '</div><div class="confirm-actions"><button class="btn ghost" id="tt-course-cancel">取消</button><button class="btn primary" id="tt-course-save">保存课程</button></div></div>');
     const modal = sheet({ title: isNew ? '新增课程' : '编辑课程', body, wide: true });
+    /* 授课班级给课表已有班级当候选，选完顺手带出所属年级；仍可手动改。 */
+    classPickerAuto(body.querySelector('#tt-course-class'), { gradeInput: body.querySelector('#tt-course-grade') });
     body.querySelector('#tt-course-cancel').onclick = modal.close;
     body.querySelectorAll('[data-time-pick]').forEach((button) => {
       button.onclick = () => {

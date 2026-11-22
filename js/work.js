@@ -1,4 +1,4 @@
-import { api, el, esc, clsName, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath } from './core.js';
+import { api, el, esc, clsName, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath, classPickerAuto } from './core.js';
 import { printStatement } from './pdfprint.js';
 import { registerView, state, icon, go, pageHead, onViewLeave } from './ui.js';
 import { renderAttendance } from './attendance.js';
@@ -175,7 +175,7 @@ registerView(async function materials(main, { tab }) {
     pick: ['点名', '学生端「点名」：按号码或按名单，点过的不重复'],
     mystery: ['盲盒', '学生端「盲盒」：点一下随机弹一个任务，这一轮不重复'],
     misconduct: ['违纪', '学生端「违纪」：学生提交的违纪情况，这里查看与编辑'],
-    bulletin: ['留言板', '学生端「留言板」：学生提交的留言，这里查看与编辑'],
+    bulletin: ['留言板', '查看学生留言并回复，学生可在留言板查看教师回复'],
   }[t] || ['小助手', '学生端互动工具统一管理：自习、教材、点名、盲盒'];
 
   main.innerHTML = '<div id="materials-body"></div>';
@@ -691,6 +691,8 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
   </div>`);
   const s = sheet({ title: isNew ? '记一节课' : '编辑上课记录', body, wide: true });
   const $ = (q) => body.querySelector(q);
+  /* 班级框直接给课表里的班级候选，选完不用再手打；取不到候选也能直接输入。 */
+  classPickerAuto($('#class'));
   let type = curType;
 
   const syncType = () => {
@@ -1524,24 +1526,14 @@ function printTimetableHTML(courses, periods, maxP) {
 }
 function courseEditor(row, reload) {
   const isNew = !row?.id;
-  /* 【历史值联想】
-     全站不再预填「语文 / 高二」这类默认值 —— 预填的东西如果不符实际，
-     用户还得先删掉才能填，反而更慢。所以默认留空，直接手填。
-     但又不想让用户每次都从头打字：把已存课程里出现过的科目/年级/班级
-     按最近更新时间优先去重，每个字段只保留最近 5 个候选，挂在 datalist 上。
-     这叫「手填为主，联想为辅」：没有强制默认值，只是给个快捷入口。
-
-     注意：这里必须保持同步函数。弹层要立刻出现，不能等接口；
-     历史值晚一步到达也没关系，反正用户点开下拉是在之后。 */
-
   const body = el(`<div class="sheet-body"><div class="form-grid">
     <div class="field"><label class="field-label">星期</label><select class="input" id="weekday">${[1,2,3,4,5,6,0].map((d) => `<option value="${d}" ${Number(row?.weekday) === d ? 'selected' : ''}>周${WD_SHORT[d]}</option>`).join('')}</select></div>
     <div class="field"><label class="field-label">节次</label><input class="input" type="number" id="period_no" value="${row?.period_no || 1}"></div>
     <div class="field"><label class="field-label">开始时间</label><input class="input" type="time" id="st" value="${esc(row?.start_time || '')}"></div>
     <div class="field"><label class="field-label">结束时间</label><input class="input" type="time" id="et" value="${esc(row?.end_time || '')}"></div>
-    <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(row?.grade || '')}" data-hist="grade"></div>
-    <div class="field"><label class="field-label">班级</label><input class="input" id="class_name" value="${esc(row?.class_name || '')}" data-hist="class_name"></div>
-    <div class="field"><label class="field-label">科目</label><input class="input" id="subject" value="${esc(row?.subject || '')}" data-hist="subject"></div>
+    <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(row?.grade || '')}"></div>
+    <div class="field"><label class="field-label">班级</label><input class="input" id="class_name" value="${esc(row?.class_name || '')}"></div>
+    <div class="field"><label class="field-label">科目</label><input class="input" id="subject" value="${esc(row?.subject || '')}"></div>
     <div class="field"><label class="field-label">地点</label><input class="input" id="room" value="${esc(row?.room || '')}" placeholder="例如：教学楼A栋101、大操场、机房" autocomplete="off"></div>
     <div class="field"><label class="field-label">生效开始日</label><input class="input" type="date" id="sd" value="${esc(row?.start_date || '')}"></div>
     <div class="field"><label class="field-label">生效结束日</label><input class="input" type="date" id="ed" value="${esc(row?.end_date || '')}"></div>
@@ -1550,45 +1542,9 @@ function courseEditor(row, reload) {
   <div class="confirm-actions">${isNew ? '' : '<button class="btn ghost" id="del" style="margin-right:auto;color:var(--red)">删除</button>'}
   <button class="btn ghost" id="cancel">取消</button><button class="btn primary" id="save">保存</button></div></div>`);
 
-  /* 历史值异步补上：失败就静默，手填照常可用 */
-  api.get('/courses').then((all) => {
-    // 最近使用的课程优先；优先按更新时间，其次创建时间，最后用 ID 稳定排序。
-    const timestampOf = (course) => {
-      const updatedAt = Date.parse(course?.updated_at || '');
-      if (Number.isFinite(updatedAt)) return updatedAt;
-      const createdAt = Date.parse(course?.created_at || '');
-      return Number.isFinite(createdAt) ? createdAt : Number(course?.id) || 0;
-    };
-    const recent = [...(Array.isArray(all) ? all : [])].sort((a, b) =>
-      timestampOf(b) - timestampOf(a) || (Number(b?.id) || 0) - (Number(a?.id) || 0)
-    );
-    for (const k of ['grade', 'class_name', 'subject']) {
-      const seen = new Set();
-      const vals = [];
-      for (const course of recent) {
-        const value = String(course?.[k] || '').trim();
-        const normalized = value.toLocaleLowerCase();
-        if (!value || seen.has(normalized)) continue;
-        seen.add(normalized);
-        vals.push(value);
-        if (vals.length === 5) break;
-      }
-      if (!vals.length) continue;
-      const input = body.querySelector(`[data-hist="${k}"]`);
-      if (!input) continue;
-      const id = 'dl-' + k;
-      document.getElementById(id)?.remove();
-      // 用 createElement 而不是 el()：el() 走 template.firstElementChild，
-      // 只保证返回「第一个元素」，这里要的就是 datalist 本身，直接建更清楚。
-      const list = document.createElement('datalist');
-      list.id = id;
-      list.innerHTML = vals.map((v) => `<option value="${esc(v)}">`).join('');
-      body.appendChild(list);
-      input.setAttribute('list', id);
-      input.setAttribute('autocomplete', 'off');
-    }
-  }).catch(() => {});
   const s = sheet({ title: isNew ? '添加课程' : '修改课程', body });
+  /* 班级候选来自课表与班级名单；选完顺手把年级补上，仍可手填。 */
+  classPickerAuto(body.querySelector('#class_name'), { gradeInput: body.querySelector('#grade') });
   body.querySelector('#cancel').onclick = s.close;
   body.querySelector('#del')?.addEventListener('click', async () => {
     if (await confirmDialog('删除这门课？')) { await api.del('/courses/' + row.id); s.close(); reload(); }
@@ -1643,7 +1599,7 @@ function periodEditor(periods, reload) {
 /* ================= 监考 ================= */
 async function renderInvigilation(box) {
   const module = await import('./invigilation.js');
-  return module.renderInvigilation(box);
+  return module.renderInvigilation(box, state.user?.nickname);
 }
 
 /* ================= 出差 ================= */
@@ -2592,7 +2548,7 @@ const STUDENT_MOD = {
   },
   bulletin: {
     name: '留言板', icon: 'chat', tab: 'bulletin',
-    desc: '学生在学生端留言，这里查看、编辑和删除。',
+    desc: '学生在学生端留言，教师在这里查看和回复。',
   },
 };
 
@@ -2708,10 +2664,8 @@ async function renderStudentModule(box, key) {
     const next = !modOn;
     btn.disabled = true;
     try {
-      const modules = { ...(link.modules || {}), [modKey]: next ? 1 : 0 };
-      await api.patch('/links/' + link.id, { modules });
+      await api.patch('/links/' + link.id, { modules: { [modKey]: next ? 1 : 0 } });
       modOn = next;
-      link.modules = modules;
       btn.classList.toggle('on', next);
       txt.textContent = next ? '开启' : '关闭';
       txt.classList.toggle('on', next);
@@ -2927,7 +2881,7 @@ async function renderStudentModule(box, key) {
       renderStudentModule(box, key);
     });
   } else if (key === 'bulletin') {
-    /* —— 留言板：学生提交，老师这里查看与编辑 —— */
+    /* —— 留言板：教师可回复学生留言 —— */
     const bToday = bulletins.filter((b) => (b.created_at || '').slice(0, 10) === ymd(new Date()));
     inner.innerHTML = `
       <div class="rp-stats mod-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
@@ -2950,10 +2904,46 @@ async function renderStudentModule(box, key) {
           <span class="chip blue">${esc(clsName(b.grade, b.class_name) || '未指定班级')}</span>
           <span class="pb-text">${esc(b.content)}</span>
           <span class="tiny muted">${esc(fmtTime(b.created_at))}</span>
+          <button class="btn ghost sm" data-bl-reply="${esc(b.id)}">${b.reply ? '编辑回复' : '回复'}</button>
           <button class="icon-btn sm" data-bl-edit="${b.id}" title="编辑">${icon('edit', 13)}</button>
           <button class="icon-btn sm" data-bl-del="${b.id}" title="删除">${icon('close', 13)}</button>
-        </div>`).join('')}</div>`
+        </div>${b.reply ? `<div class="tiny" style="padding:6px 12px 12px;white-space:pre-wrap;overflow-wrap:anywhere"><b>教师回复</b>　${esc(b.reply)}</div>` : ''}`).join('')}</div>`
         : '<div class="empty" style="padding:16px">还没有学生留言</div>';
+      listBox.querySelectorAll('[data-bl-reply]').forEach((btn) => {
+        btn.onclick = () => {
+          const b = bulletins.find((row) => String(row.id) === btn.dataset.blReply);
+          if (!b) return;
+          const body = el(`<div class="sheet-body">
+            <p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(b.content)}</p>
+            <div class="field">
+              <label class="field-label" for="bl-reply-text">教师回复</label>
+              <textarea class="input" id="bl-reply-text" rows="4" maxlength="500">${esc(b.reply || '')}</textarea>
+              <p class="tiny muted">回复会显示给打开学生端留言板的学生。</p>
+            </div>
+            <div class="row" style="justify-content:flex-end;gap:8px">
+              <button class="btn ghost" data-cancel>取消</button>
+              <button class="btn primary" data-save>发布回复</button>
+            </div>
+          </div>`);
+          const dialog = sheet({ title: b.reply ? '编辑回复' : '回复留言', body });
+          body.querySelector('[data-cancel]').onclick = () => dialog.close();
+          saving(body.querySelector('[data-save]'), async () => {
+            const reply = body.querySelector('#bl-reply-text').value.trim();
+            if (!reply) { toast('请填写回复内容', 'err'); return; }
+            const changes = { reply, replied_at: new Date().toISOString() };
+            await api.patch('/bulletin_records/' + encodeURIComponent(b.id), changes);
+            Object.assign(b, changes);
+            dialog.close();
+            paintBlList();
+            try {
+              await syncMaterialSharing();
+              toast(navigator.onLine === false ? '已保存，联网后同步学生端' : '回复已保存');
+            } catch (error) {
+              toast('回复已保存到本机，云端同步失败：' + error.message, 'err');
+            }
+          });
+        };
+      });
       listBox.querySelectorAll('[data-bl-edit]').forEach((btn) => {
         btn.onclick = () => {
           const b = bulletins.find((x) => String(x.id) === btn.dataset.blEdit);
@@ -3763,19 +3753,39 @@ async function renderNotes(box) {
       '<button class="btn primary sm" data-note-save>保存</button></div>';
     const s = sheet({ title: isNew ? '新增笔记' : '编辑笔记', body, footer, wide: true });
     s.wrap.querySelector('[data-note-cancel]').onclick = () => s.close();
-    saving(s.wrap.querySelector('[data-note-save]'), async () => {
-      let categoryId = s.wrap.querySelector('#note-cat').value;
-      if (categoryId === '__new') {
-        const name = await promptDialog({ title: '新建分类', label: '分类名称', placeholder: '如：课文解读' });
+    const categorySelect = s.wrap.querySelector('#note-cat');
+    const saveButton = s.wrap.querySelector('[data-note-save]');
+    let selectedCategory = categorySelect.value;
+    categorySelect.onchange = async () => {
+      if (categorySelect.value !== '__new') {
+        selectedCategory = categorySelect.value;
+        return;
+      }
+      categorySelect.value = selectedCategory;
+      if (saveButton.disabled) return;
+      categorySelect.disabled = true;
+      saveButton.disabled = true;
+      try {
+        const name = (await promptDialog({ title: '新建分类', label: '分类名称', okText: '新建' }))?.trim();
         if (!name) return;
         const created = await api.post('/categories', { scope: 'note', name });
-        cats = await api.get('/categories', { scope: 'note' }) || cats;
-        categoryId = String(created?.id || cats.find((c) => c.name === name)?.id || '');
+        selectedCategory = String(created.id);
+        cats = [...cats, created];
+        categorySelect.add(new Option(created.name, selectedCategory), categorySelect.options.length - 1);
+        categorySelect.value = selectedCategory;
+        paint();
+      } catch (error) {
+        toast(error?.message || '新建分类失败，请重试', 'err');
+      } finally {
+        categorySelect.disabled = false;
+        saveButton.disabled = false;
       }
+    };
+    saving(saveButton, async () => {
       const payload = {
         title: s.wrap.querySelector('#note-title').value.trim() || '未命名笔记',
         content: s.wrap.querySelector('#note-body').value,
-        category_id: Number(categoryId) || null,
+        category_id: Number(selectedCategory) || null,
         tags: readTags({ tags: s.wrap.querySelector('#kb-tags').value }),
         pinned: s.wrap.querySelector('#kb-pin').checked ? 1 : 0,
       };

@@ -1,4 +1,4 @@
-import { api, esc, el, sheet, saving, confirmDialog, toast, download } from './core.js';
+import { api, classPickerAuto, esc, el, sheet, saving, confirmDialog, toast, download } from './core.js';
 import { cleanPeriodTime, resolveTimetablePeriods } from './timetable-periods.mjs';
 
 /* 上课类型：预设 + 可手动输入。预设用来带默认课时费与支付状态；
@@ -485,7 +485,7 @@ export async function renderClassRecords(root) {
       <div class="cr-form-grid">
         <div class="cr-field"><label>上课日期 <span class="cr-required">*</span></label><input id="cr-date" type="date" value="${esc(initialTime.date)}"></div>
         <div class="cr-field"><label>上课年级 <span class="cr-required">*</span></label><input id="cr-grade" list="cr-grade-options" value="${esc(row?.grade || '')}" placeholder="如：高一 / 高二 / 高三"><datalist id="cr-grade-options">${GRADE_OPTIONS.map((g) => '<option value="' + g + '"></option>').join('')}</datalist></div>
-        <div class="cr-field"><label>上课班级 <span class="cr-required">*</span></label><input id="cr-class" value="${esc(row?.class_name || '')}" placeholder="如：高二11班"></div>
+        <div class="cr-field"><label for="cr-class">上课班级 <span class="cr-required">*</span></label><input id="cr-class" value="${esc(row?.class_name || '')}" placeholder="选择课表班级或手动输入"></div>
         <div class="cr-field"><label>节次</label><input id="cr-period" list="cr-period-options" value="${esc(initialTime.period)}" placeholder="选择课表节次或手动输入"><datalist id="cr-period-options"></datalist></div>
         <div class="cr-field"><label>学科</label><input id="cr-subject" value="${esc(row?.subject || '')}" placeholder="例如：信息技术、语文"></div>
         <div class="cr-field"><label>上课类型</label><input id="cr-type" list="cr-type-options" value="${esc(initialType)}" placeholder="选择预设或手动输入"><datalist id="cr-type-options">${TYPES.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</datalist></div>
@@ -513,6 +513,12 @@ export async function renderClassRecords(root) {
     };
     type.addEventListener('input', applyTypeDefaults);
     if (!editing || (row.amount == null && !row.pay_status)) applyTypeDefaults();
+
+    /* 上课班级：候选来自课表（/courses）与班级名单（/rosters），两者合并去重。
+       年级框一起带上 —— 选完班级顺手把上课年级补上，不用再选一遍。
+       两个来源都取不到时下拉自动隐藏，输入框照旧可以手填，不会卡住录入。 */
+    const classInput = form.querySelector('#cr-class');
+    classPickerAuto(classInput, { gradeInput: form.querySelector('#cr-grade') });
 
     /* 时间不再单独显示，但节次仍按课表自动带出，保持 class_time 与历史数据兼容。 */
     let autoTime = initialTime.time;
@@ -550,7 +556,25 @@ export async function renderClassRecords(root) {
         const end = cleanPeriodTime(override.end_time) || cleanPeriodTime(period.end_time);
         return { name: period.name || '第' + period.period_no + '节', time: start && end ? start + '-' + end : '' };
       });
-      form.querySelector('#cr-period-options').innerHTML = [...new Set(timetableOptions.map((option) => option.name))].map((name) => `<option value="${esc(name)}"></option>`).join('');
+      /* 节次面板右侧带作息时间段，录记录时不用另翻课表；同名节次只留第一条。 */
+      const periodChoices = [];
+      const seenPeriod = new Set();
+      for (const option of timetableOptions) {
+        if (seenPeriod.has(option.name)) continue;
+        seenPeriod.add(option.name);
+        periodChoices.push({
+          value: option.name,
+          label: option.name,
+          hint: option.time ? option.time.replace('-', '–') : '',
+        });
+      }
+      periodInput.__choiceItems = periodChoices;
+      /* 候选挂到 __choiceItems 之后就把原生 datalist 摘掉：
+         留着 list 属性，Chrome 会在框下面再弹一层自己的小面板（按当前值过滤，
+         常常只剩一行「第9节」），跟自绘面板叠在一起，看着像两个字段串了值。
+         摘 list 顺带会触发 editable-choices 的观察器，把右侧箭头刷新出来。 */
+      periodInput.removeAttribute('list');
+      form.querySelector('#cr-period-options')?.remove();
       fillTime();
     }).catch(() => { if (form.isConnected) toast('课表加载失败，仍可手动填写节次', 'warn'); });
 

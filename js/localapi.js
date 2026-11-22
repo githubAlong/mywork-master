@@ -672,6 +672,8 @@ function lessonSummaryPayload(month, rows) {
 const DEFAULT_INVIG_RULES = {
   mode: '分钟',
   perMinute: 0.4,
+  schoolHourlyRate: 40,
+  peerPerMinute: 1,
   perSession: 60,
   perHour: 30,
   peerPerSession: 50,
@@ -843,6 +845,7 @@ function attTablesList(q = {}) {
     .filter((t) => (!q.kind || tableTypeOf(t) === q.kind)
       && (!q.sheet_type || tableTypeOf(t) === q.sheet_type)
       && (!q.sheet_date || String(t.sheet_date || '') === String(q.sheet_date))
+      && (!q.month || String(t.month || t.sheet_date || '').slice(0, 7) === String(q.month))
       && (!q.grade || t.grade === q.grade))
     .sort((a, b) => String(b.sheet_date || '').localeCompare(String(a.sheet_date || '')) || b.id - a.id);
   return out.map((t) => {
@@ -871,6 +874,7 @@ function attTablesList(q = {}) {
       row_count: rows.length,
       subjects,
       summary: { leave: leaveCount, leave_names: leaveNames.slice(0, 6), none: unchecked },
+      ...(q.month && q.include_rows === '1' ? { rows: rows.map(attRowShape) } : {}),
     };
   });
 }
@@ -2478,24 +2482,21 @@ on('PATCH', '/attendance/:id', ({ params, body }) => {
 });
 /* 确认生成：点一下才算正式生效（PRD FR-TABLE-4）。
    确认之后仍然可以改，改完再点一次「重新确认」覆盖（FR-TABLE-5）。 */
-const validWorkspaceSnapshot = record => record && /^\d+$/.test(String(record.period)) && Array.isArray(record.rows);
-const isChildWorkspaceConfirmation = body => validWorkspaceSnapshot(body?.workspace_result)
-  && ['class','research','leave'].includes(body.workspace_result.type);
+const separateWorkspaceResult = key => /^(?:leave:\d+|summary(?::month)?)$/.test(key);
 
 function workspaceConfirmation(meta, body) {
   const snapshot = body?.workspace_snapshot;
+  if (snapshot && /^\d+$/.test(String(snapshot.period)) && Array.isArray(snapshot.rows)) {
+    meta = { ...meta, workspace_confirmed: {
+      ...meta.workspace_confirmed, [String(snapshot.period)]: snapshot.rows,
+    } };
+  }
   const result = body?.workspace_result;
-  let next = meta;
-  if (validWorkspaceSnapshot(snapshot)) {
-    next = { ...next, workspace_confirmed: { ...next.workspace_confirmed, [String(snapshot.period)]: snapshot.rows } };
-  }
-  if (validWorkspaceSnapshot(result) && ['seat','class','research','leave'].includes(result.type)) {
-    const sheets = safeJSON(next.workspace_results, {});
-    next = { ...next, workspace_results: { ...sheets, [result.type]: {
-      ...sheets[result.type], [String(result.period)]: { rows: result.rows },
-    } } };
-  }
-  return next;
+  if (!result || !(separateWorkspaceResult(result.key) || /^(seat|class|research):\d+$/.test(result.key))
+    || !Array.isArray(result.rows)) return meta;
+  return { ...meta, workspace_results: {
+    ...meta.workspace_results, [result.key]: { rows: result.rows, grid: result.grid, confirmed_at: nowISO() },
+  } };
 }
 on('POST', '/attendance/:id/confirm', ({ params, body }) => {
   const t = byId('attendance_tables', params.id);
@@ -2504,7 +2505,7 @@ on('POST', '/attendance/:id/confirm', ({ params, body }) => {
     fail(409, 'WB_ATTENDANCE_CONFLICT: 表头已被另一台设备修改');
   }
   const meta = workspaceConfirmation(safeJSON(t.meta, {}), body);
-  if (isChildWorkspaceConfirmation(body)) {
+  if (separateWorkspaceResult(body?.workspace_result?.key)) {
     t.meta = JSON.stringify(meta);
     t.updated_at = nowISO();
     save();
@@ -3002,8 +3003,18 @@ on('GET', '/invig/rules', () => ({ rules: getInvigRules(), defaults: DEFAULT_INV
 on('PATCH', '/invig/rules', ({ body }) => {
   const u = currentUser();
   const cur = getInvigRules();
+  const hourly = body?.schoolHourlyRate ?? cur.schoolHourlyRate;
+  if (hourly === '' || !Number.isFinite(Number(hourly)) || Number(hourly) < 0) {
+    fail(422, '请输入有效的学校发放标准');
+  }
+  const peerRate = body?.peerPerMinute ?? cur.peerPerMinute;
+  if (peerRate === '' || !Number.isFinite(Number(peerRate)) || Number(peerRate) < 0) {
+    fail(422, '请输入有效的同事代监每分钟单价');
+  }
   const next = {
-    mode: body?.mode === '时长' ? '时长' : body?.mode === '分钟' ? '分钟' : '场次',
+    schoolHourlyRate: Number(hourly),
+    peerPerMinute: Number(peerRate),
+    mode: ['时长', '分钟', '场次'].includes(body?.mode) ? body.mode : cur.mode,
     perMinute: Number(body?.perMinute ?? cur.perMinute) || 0,
     perSession: Number(body?.perSession ?? cur.perSession) || 0,
     perHour: Number(body?.perHour ?? cur.perHour) || 0,
@@ -3836,12 +3847,11 @@ on('DELETE', '/attachments/:id', ({ params }) => {
 });
 
 /* ---- 学生短链 ---- */
-/* 学生页「教材 / 点名 / 盲盒」三个模块的可见开关，存在 links.modules 上。
+/* 学生页各模块的可见开关，存在 links.modules 上。
    默认全开：老链接没有这个字段时，学生看到的还是原来的样子。 */
-const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin'];
+const LINK_MODULE_KEYS = ['material', 'roll', 'punish', 'misconduct', 'bulletin', 'selfstudy'];
 function linkModules(l) {
-  let raw = {};
-  try { raw = JSON.parse(l?.modules || '{}') || {}; } catch { raw = {}; }
+  const raw = safeJSON(l?.modules, {}) || {};
   const out = {};
   for (const k of LINK_MODULE_KEYS) out[k] = Number(raw[k]) === 0 ? 0 : 1;
   return out;
@@ -3872,7 +3882,7 @@ on('PATCH', '/links/:id', ({ params, body }) => {
   for (const k of ['title', 'enabled']) if (k in (body || {})) l[k] = body[k];
   if (body?.grades) l.grades = JSON.stringify(body.grades);
   if (body?.modules && typeof body.modules === 'object') {
-    l.modules = JSON.stringify(linkModules({ modules: JSON.stringify(body.modules) }));
+    l.modules = JSON.stringify(linkModules({ modules: { ...linkModules(l), ...body.modules } }));
   }
   l.updated_at = nowISO();
   save();
@@ -4043,14 +4053,15 @@ on('GET', '/public/link/:code', ({ params, query }) => {
   const misconduct = rowsOf('misconduct_records')
     .filter((m) => !grades.length || !m.grade || grades.includes(m.grade))
     .map((m) => ({ id: m.id, grade: m.grade, class_name: m.class_name, student_name: m.student_name, student_no: m.student_no, content: m.content, created_at: m.created_at }));
-  const bulletin = rowsOf('bulletin_records')
+  const bulletin = !linkModules(l).bulletin ? [] : rowsOf('bulletin_records')
     .filter((b) => !grades.length || !b.grade || grades.includes(b.grade))
-    .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, content: b.content, created_at: b.created_at }));
+    .filter((b) => String(b.reply || '').trim())
+    .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, reply: b.reply, replied_at: b.replied_at }));
   return {
     link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
     materials: mats, categories: cats, rosters, classes: publicClassOptions(grades), punishments: punish, roll, date,
-    selfstudyTasks: publicSelfstudyTasks(),
+    selfstudyTasks: publicSelfstudyTasks(l),
     misconduct, bulletin,
   };
 });
@@ -4081,7 +4092,8 @@ function sixthPeriodEnd() {
 
 /* 学生端可见的自习任务：只下发已发布的，其余（班级匹配、PC 开关）由学生端判定。
    这样总开关一关，下一次轮询拿到的就是空数组，学生端立即进入空态。 */
-function publicSelfstudyTasks() {
+function publicSelfstudyTasks(link) {
+  if (linkModules(link).selfstudy === 0) return [];
   const periods = rowsOf('periods');
   const endTimeOf = (period) => {
     const no = String(period || '').replace(/[^\d]/g, '');
@@ -4106,7 +4118,7 @@ function publicSelfstudyTasks() {
 on('GET', '/public/link/:code/selfstudy', ({ params }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);
   if (!l) fail(404, '链接不存在或已关闭');
-  return { tasks: publicSelfstudyTasks() };
+  return { tasks: publicSelfstudyTasks(l) };
 });
 on('GET', '/public/link/:code/file/:id', ({ params, query }) => {
   const l = (load().links || []).find((x) => x.code === params.code && num(x.enabled) === 1 && !x.deleted_at);
@@ -4374,12 +4386,12 @@ for (const table of CRUD_TABLES) {
       class_records: [['class_month', '请填写上课日期'], ['grade', '请填写上课年级'], ['class_name', '请填写上课班级']],
       preps: [['topic', '请填写标题']],
       trips: [['to_place', '目的地不能为空']],
-      invigilations: [['__atLeastOne', '考试名称 / 考场 / 开始时间至少填一个']],
+      invigilations: [['__atLeastOne', '考试名称、考场、开始时间或监考时长至少填一项']],
     }[table];
     if (REQUIRED) {
       for (const [k, msg] of REQUIRED) {
         if (k === '__atLeastOne') {
-          const any = ['exam_name', 'room', 'start_time'].some((f) => String(b[f] ?? '').trim());
+          const any = ['exam_name', 'room', 'start_time'].some((f) => String(b[f] ?? '').trim()) || Number(b.duration_min) > 0;
           if (!any) fail(422, msg);
         } else if (!String(b[k] ?? '').trim()) {
           fail(422, msg);
@@ -4877,7 +4889,7 @@ async function cloudRoute(method, clean, query, body) {
     /* ---- 列表：/attendance ---- */
     if (method === 'GET' && !second) {
       const { tables, rows } = await m.listAttendance(query);
-      return attListShape(tables, rows);
+      return attListShape(tables, rows, query.month && query.include_rows === '1');
     }
 
     /* ---- 新建：/attendance ---- */
@@ -4956,16 +4968,19 @@ async function cloudRoute(method, clean, query, body) {
       const t = await m.getRow('attendance_tables', id);
       if (!t) throw new Error('考勤表不存在');
       const prevM = safeJSON(t.meta, {});
-      const meta = workspaceConfirmation(prevM, body);
-      if (!isChildWorkspaceConfirmation(body)) {
-        const audit = Array.isArray(prevM.audit) ? prevM.audit.slice(-19) : [];
-        audit.push({ at: nowISO(), action: prevM.confirmed_at ? 'reconfirm' : 'confirm', dirty: num(prevM.confirm_dirty) ? 1 : 0 });
-        Object.assign(meta, { confirmed_at: nowISO(), confirm_dirty: 0, audit });
+      if (separateWorkspaceResult(body?.workspace_result?.key)) {
+        const meta = workspaceConfirmation(prevM, body);
+        const row = await m.updateAttendanceTable(id, { meta }, body.expected_updated_at);
+        return { ...row, columns: attCols(row), meta };
       }
+      /* 留痕，跟本地版一致：确认/重新确认各记一条，最多留 20 条 */
+      const audit = Array.isArray(prevM.audit) ? prevM.audit.slice(-19) : [];
+      audit.push({ at: nowISO(), action: prevM.confirmed_at ? 'reconfirm' : 'confirm', dirty: num(prevM.confirm_dirty) ? 1 : 0 });
+      const meta = { ...workspaceConfirmation(prevM, body), confirmed_at: nowISO(), confirm_dirty: 0, audit };
       const row = body?.expected_updated_at === undefined
         ? await m.updateRow('attendance_tables', id, { meta })
         : await m.updateAttendanceTable(id, { meta }, body.expected_updated_at);
-      return { ...row, columns: attCols(row), meta, confirm_state: attConfirmState(meta) };
+      return { ...row, columns: attCols(row), meta, confirm_state: 'confirmed' };
     }
 
     /* ---- 粘贴导入：/attendance/:id/import ---- */
@@ -5096,7 +5111,7 @@ function attConfirmState(meta) {
   return num(m.confirm_dirty) ? 'modified' : 'confirmed';
 }
 
-function attListShape(tables, rows) {
+function attListShape(tables, rows, includeRows = false) {
   const byTable = new Map();
   for (const r of rows) {
     const k = String(r.table_id);
@@ -5126,6 +5141,7 @@ function attListShape(tables, rows) {
       row_count: mine.length,
       subjects,
       summary: { leave: leaveCount, leave_names: leaveNames.slice(0, 6), none: unchecked },
+      ...(includeRows ? { rows: mine.map(attRowShape) } : {}),
     };
   }).sort((a, b) => String(b.sheet_date || '').localeCompare(String(a.sheet_date || ''))
     || Number(b.id) - Number(a.id));
