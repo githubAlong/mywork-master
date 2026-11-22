@@ -5,7 +5,7 @@ import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
   deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration, buildAttendanceExportGrid,
   deriveTableGridState, paginateExportGrid, splitAttendanceExportGrid, importAttendanceSummary, attendanceSummaryTotals,
-  summarizeAttendanceMonth, attendanceSummaryMonthBounds,
+  summarizeAttendanceMonth, attendanceSummaryMonthBounds, leaveDayParts, leaveDayPartLabel,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -121,18 +121,32 @@ test('汇总 KPI 跨节次累计，未登记与缺勤不混为一类', () => {
   assert.equal(s.rows[0].overall,'已登记');
 });
 
-test('请假时长支持半天、上午、下午和小时小数', () => {
+test('请假时段按 24 小时制：钟点段取作息表，历史「上午/下午/整天」照样能显示', () => {
   assert.deepEqual(parseLeaveDuration('0.5','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0});
   assert.deepEqual(parseLeaveDuration('0.5','morning'), {duration:0.5,duration_unit:'morning',days:0.5,hours:0});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','morning')),'上午（0.5天）');
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','morning')),'08:00-12:20（0.5天）');
   assert.deepEqual(parseLeaveDuration('0.5','afternoon'), {duration:0.5,duration_unit:'afternoon',days:0.5,hours:0});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'下午（0.5天）');
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'14:10-17:45（0.5天）');
   assert.deepEqual(parseLeaveDuration('1.5','hour'), {duration:1.5,duration_unit:'hour',days:0,hours:1.5});
   assert.throws(() => parseLeaveDuration('0.25','day'), /0.5天/);
-  /* 用户 11-15 要求：天支持 上午/下午/1天（原「整天」改为「1天」），月按数字填写 */
-  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
-  assert.deepEqual(parseLeaveDuration('1天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('上午','day')),'上午');
+  /* 用户 11-22 要求：不再说上午/下午，按 24 小时钟点段填；半天=0.5 天的折算规则不变 */
+  assert.deepEqual(parseLeaveDuration('08:00-12:20','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'08:00-12:20'});
+  assert.deepEqual(parseLeaveDuration('14:10-17:45','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'14:10-17:45'});
+  assert.deepEqual(parseLeaveDuration('08:00-17:45','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('1天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('上午','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'08:00-12:20'});
+  assert.equal(formatLeaveDuration(parseLeaveDuration('下午','day')),'14:10-17:45（0.5天）');
+  assert.equal(formatLeaveDuration({day_part:'整天',days:1}),'08:00-17:45（1天）');
+  assert.equal(formatLeaveDuration({days:2,hours:0}),'2天');
+  /* 半天从作息表里最大的那段空当切开，不是写死的 12:00 */
+  assert.deepEqual(leaveDayParts([
+    {no:1,start:'09:00',end:'09:45'},{no:2,start:'10:30',end:'11:15'},{no:3,start:'15:00',end:'15:45'},
+  ]).map(part=>part.label), ['09:00-11:15','15:00-15:45','09:00-15:45']);
+  assert.deepEqual(leaveDayParts().map(part=>part.label), ['08:00-12:20','14:10-17:45','08:00-17:45']);
+  assert.equal(leaveDayPartLabel('上午'),'08:00-12:20');
+  assert.equal(leaveDayPartLabel('08:00-12:20'),'08:00-12:20');
+  assert.equal(leaveDayPartLabel(''),'');
   assert.deepEqual(parseLeaveDuration('1','month'), {duration:1,duration_unit:'month',days:30,hours:0,months:1});
   assert.equal(formatLeaveDuration(parseLeaveDuration('2','month')),'2个月');
 });

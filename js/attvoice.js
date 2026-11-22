@@ -113,7 +113,7 @@ export function parseVoicePhrases(text, { cols = [], subjects = [] } = {}) {
  * @param {{rows: Array, cols: Array, isClass?: boolean, onApply: (items)=>void}} opts
  * rows=当前表的人（提供学科列表和姓名 datalist），cols=勾选列
  */
-export function voiceSheet({ rows = [], cols = [], isClass = false, onApply }) {
+export function voiceSheet({ rows = [], cols = [], isClass = false, dayParts = null, onApply }) {
   const checkCols = cols.filter((c) => c.type === 'check');
   const subjects = [...new Set(rows.map((r) => r.subject).filter(Boolean))];
   const names = rows.map((r) => r.teacher).filter(Boolean);
@@ -162,7 +162,7 @@ export function voiceSheet({ rows = [], cols = [], isClass = false, onApply }) {
       <select class="input vv-st" data-i="${i}">
         ${statusOptions(it.absent ? '__absent' : it.leave ? '__leave' : it.statusKey)}
       </select>
-      ${it.leave ? `<span class="vv-lv" data-i="${i}" title="点开选假别/时段/时长">${esc(it.leaveType || '假别未注明')} · ${esc(it.period || '全天')}</span>` : ''}
+      ${it.leave ? `<span class="vv-lv" data-i="${i}" title="点开选假别/时段/时长">${esc(it.leaveType || '假别未注明')} · ${esc(leavePeriodLabel(dayParts, it.period || '全天'))}</span>` : ''}
       <button class="icon-btn sm" data-rm="${i}" title="删除这条">${icon('close', 13)}</button>
     </div>`).join('') || `<div class="vv-empty">还没有识别到内容${SR ? '' : '（这台设备不支持语音，用上面的打字入口）'}</div>`;
     /* 打字版/语音识别都没有时直接展开手动入口 */
@@ -186,7 +186,7 @@ export function voiceSheet({ rows = [], cols = [], isClass = false, onApply }) {
       };
     });
     body.querySelectorAll('.vv-lv').forEach((sp) => {
-      sp.onclick = () => leaveQuick(items[Number(sp.dataset.i)], paintList);
+      sp.onclick = () => leaveQuick(items[Number(sp.dataset.i)], paintList, dayParts);
     });
     body.querySelectorAll('[data-rm]').forEach((b) => {
       b.onclick = () => { items.splice(Number(b.dataset.rm), 1); paintList(); };
@@ -280,9 +280,18 @@ export function voiceSheet({ rows = [], cols = [], isClass = false, onApply }) {
   paintList();
 }
 
-/* 请假细化快捷选择：病假/事假 + 上午/下午/全天。
+/* 用户 11-22 要求：时段按 24 小时制显示，别再写「上午/下午」。
+   存的值仍是 上午/下午/全天 —— 旧考勤页和「按上午/下午计数」的统计认这三个字，
+   这里只换界面上的说法：调用方按作息表传 dayParts 就显示钟点段，没传就退回原词。 */
+const LEAVE_PERIOD_KEYS = ['上午', '下午', '全天'];
+const leavePeriodLabel = (dayParts, key) => {
+  const index = LEAVE_PERIOD_KEYS.indexOf(key);
+  return (index >= 0 && dayParts?.[index]?.label) || key || '全天';
+};
+
+/* 请假细化快捷选择：病假/事假 + 时段（24 小时钟点段）。
    时长默认按时段给（全天 1 天、半天 0.5 天），应用后还能在表格里点开改。 */
-function leaveQuick(it, repaint) {
+function leaveQuick(it, repaint, dayParts) {
   const body = el(`<div class="sheet-body">
     <div class="field"><label class="field-label">假别</label>
       <div class="seg" style="width:100%">
@@ -290,7 +299,7 @@ function leaveQuick(it, repaint) {
       </div></div>
     <div class="field"><label class="field-label">时段</label>
       <div class="seg" style="width:100%">
-        ${['上午', '下午', '全天'].map((p) => `<button class="seg-btn${(it.period || '全天') === p ? ' on' : ''}" data-p="${p}" style="flex:1;justify-content:center">${p}</button>`).join('')}
+        ${LEAVE_PERIOD_KEYS.map((p) => `<button class="seg-btn${(it.period || '全天') === p ? ' on' : ''}" data-p="${p}" style="flex:1;justify-content:center" title="${p}">${esc(leavePeriodLabel(dayParts, p))}</button>`).join('')}
       </div></div>
     <div class="field"><label class="field-label">时长（天）</label>
       <input class="input" type="number" min="0.5" step="0.5" id="lq-d" value="${esc(String(it.duration ?? ((it.period || '全天') === '全天' ? 1 : 0.5)))}"></div>

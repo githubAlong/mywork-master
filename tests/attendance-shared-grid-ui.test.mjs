@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import * as domain from '../js/attendance-prd-domain.mjs';
 import * as timetablePeriods from '../js/timetable-periods.mjs';
 import * as dayPeriods from '../js/attendance-day-periods.mjs';
+import * as attendanceDomain from '../js/attendance-domain.mjs';
 
 // Exercise the actual renderer and its event handlers with a small DOM/API fixture.
 // No database, account, browser storage or network is used.
@@ -122,7 +123,7 @@ async function setup(options={}) {
       return structuredClone(table);
     },
   };
-  const dependencies={...domain,...timetablePeriods,...dayPeriods,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
+  const dependencies={...domain,...timetablePeriods,...dayPeriods,...attendanceDomain,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
   await render(root,{grade});
@@ -215,6 +216,58 @@ test('按月按年查看：每人一行累计，写操作整排锁住只能回�
   assert.doesNotMatch(root.innerHTML,/累计教师/);
 });
 
+test('花名册和请假表上方也有统计条，数字跟着当前筛选走',async()=>{
+  const kpi=html=>[...html.matchAll(/<div class="aprd-kpi[^"]*"><b>([^<]*)<\/b><span>([^<]*)<\/span>/g)].map(m=>m[2]+'='+m[1]);
+  const {root}=await setup({settings:{attendanceWorkspace:{leaves:[
+    /* 起止日期给成一个大区间，用例不依赖今天到底是哪天 */
+    {id:1,name:'李老师',subject:'语文',grade:'高一',type:'病假',start_date:'2000-01-01',end_date:'2999-12-31',days:0.5,hours:0,duration_unit:'day'},
+    {id:2,name:'王老师',subject:'数学',grade:'高一',type:'事假',start_date:'2000-01-01',end_date:'2999-12-31',days:0,hours:3,duration_unit:'hour'},
+  ]}}});
+  await root.querySelector('[data-tab="roster"]').click();
+  assert.deepEqual(kpi(root.innerHTML),['在册教师=2','学科=2','归属部门=1','已停用=0']);
+  await root.querySelector('[data-tab="leave"]').click();
+  assert.deepEqual(kpi(root.innerHTML),
+    ['请假教师=2','请假条数=2','病假=1','事假=1','累计时长=0.5天 / 3小时']);
+  /* 筛到只剩一个学科，人数与请假条数要跟着变小，不能还是整份名单 */
+  await root.querySelector('#aprd-subject').change('语文');
+  assert.deepEqual(kpi(root.innerHTML).slice(0,2),['请假教师=1','请假条数=1']);
+});
+
+test('请假时段按 24 小时制显示，页面里不再出现上午/下午',async()=>{
+  const {root}=await setup({settings:{attendanceWorkspace:{leaves:[
+    /* 历史数据存的还是「上午」，展示时必须换成作息表钟点段 */
+    {id:7,name:'李老师',subject:'语文',grade:'高一',type:'病假',start_date:'2000-01-01',end_date:'2999-12-31',days:0.5,hours:0,duration_unit:'day',day_part:'上午'},
+  ]}}});
+  await root.querySelector('[data-tab="leave"]').click();
+  assert.match(root.innerHTML,/08:00-12:20（0\.5天）/,'请假时长要写成钟点段并保留半天口径');
+  assert.doesNotMatch(root.innerHTML,/>[^<]*上午[^<]*</,'请假表里不再出现「上午」');
+  assert.doesNotMatch(root.innerHTML,/>[^<]*下午[^<]*</,'请假表里不再出现「下午」');
+  /* 编辑器的下拉选项由作息表推导，不再是写死的 上午/下午/1天 */
+  assert.match(source,/leaveDayParts\(\)/);
+  assert.doesNotMatch(source,/\['上午',\s*'下午',\s*'1天'\]/);
+  assert.match(source,/dayPart\.innerHTML=parts\.map/);
+});
+
+test('按月按年回看时收掉按日的批量入口，顶部换成累计区间',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-tab="seat"]').click();
+  assert.ok(root.querySelector('[data-roster-export-toggle]'),'按日仍要能批量导出');
+  for(const period of ['month','year']) {
+    await root.querySelector('#aprd-view-period').change(period);
+    assert.equal(root.querySelector('[data-roster-export-toggle]'),null,'按'+period+'导的是当天那份，不能留这个入口');
+    assert.equal(root.querySelector('[data-roster-import]'),null,'按'+period+'是只读回看，不给批量导入');
+    assert.match(root.innerHTML,/累计区间/);
+    assert.doesNotMatch(root.innerHTML,/当前批次/,'累计视图不该再显示某一天的批次条');
+  }
+  await root.querySelector('#aprd-view-period').change('day');
+  assert.ok(root.querySelector('[data-roster-export-toggle]'),'切回按日入口要回来');
+  /* 汇总表的按月是「月度快照」，可编辑，不能当成只读累计；快照加载完批量导入要回来 */
+  await root.querySelector('[data-tab="summary"]').click();
+  await root.querySelector('#aprd-view-period').change('month');
+  for(let i=0;i<20&&!/<div class="aprd-kpis/.test(root.innerHTML);i+=1) await new Promise(r=>setImmediate(r));
+  assert.doesNotMatch(root.innerHTML,/只读回看|累计教师/,'按月汇总是可编快照，不是只读累计');
+  assert.ok(root.querySelector('[data-summary-import]'),'按月汇总加载完成后批量导入要在');
+});
 test('真实操作链：草稿跨页签保留，自动保存仅写本表，重新打开与花名册一致',async()=>{
   const {root,saved,calls}=await setup();
   await root.querySelector('[data-tab="seat"]').click();
@@ -462,8 +515,8 @@ test('节次与时段取自当天课表：有课节次排前、无课节次标�
   assert.equal(items.find(item=>item.value==='1').off,false);
   assert.equal(items.find(item=>item.value==='5').off,true);
   assert.match(items.find(item=>item.value==='5').text,/^第5节（当日无课）$/);
-  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
-  assert.match(root.innerHTML,/id="aprd-end" value="10:40"/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="10:40"/);
   assert.match(root.innerHTML,/当前批次/);
   assert.match(root.innerHTML,/时段取自当天课表 · 2 个有课节次/);
   assert.match(root.innerHTML,/全天 08:00—10:40/);
@@ -474,8 +527,8 @@ test('当天完全没排课时不逐条标注无课，全天时段退到作息�
   assert.doesNotMatch(root.innerHTML,/当日无课/);
   assert.match(root.innerHTML,/当日课表无排课，时段取作息表 9 个节次/);
   /* 第1节 08:00 起、第9节 18:35 止（作息表缺失时的夏令时兜底口径） */
-  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
-  assert.match(root.innerHTML,/id="aprd-end" value="18:35"/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
   assert.doesNotMatch(root.innerHTML,/value="00:00"/);
   assert.doesNotMatch(root.innerHTML,/value="23:59"/);
 });
@@ -502,16 +555,40 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
   };
   await root.querySelector('#aprd-start').change('07:30');
   await repaint();
-  assert.match(root.innerHTML,/id="aprd-start" value="07:30"/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/);
   assert.match(root.innerHTML,/全天 07:30—08:40/);
   /* 手改只落在「全天」这一档，切回第1节仍是课表给的时间 */
   await root.querySelector('#aprd-period').change('1');
-  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
-  assert.match(root.innerHTML,/id="aprd-end" value="08:40"/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="08:40"/);
   await root.querySelector('#aprd-period').change('0');
   await root.querySelector('#aprd-end').change('06:00');
   assert.ok(toasts.some(item=>/结束时间必须晚于开始时间/.test(item.message)));
   assert.match(root.innerHTML,/全天 07:30—08:40/);
+});
+
+test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 也认，写「下午」拦下',async()=>{
+  const weekday=dayPeriods.weekdayOf(todayYmd());
+  const {root,toasts}=await setup({courses:[
+    {id:'c1',weekday,period_no:1,grade:'高一',start_time:'08:00',end_time:'08:40'},
+  ]});
+  const repaint=async()=>{
+    await root.querySelector('[data-tab="roster"]').click();
+    await root.querySelector('[data-tab="seat"]').click();
+  };
+  /* <input type=time> 在中文系统里渲染成「上午 08:00」，lang 属性扭不过来，只能自己画 */
+  assert.doesNotMatch(root.innerHTML,/type="time"/,'时段不能再交给浏览器时间控件');
+  assert.match(root.innerHTML,/class="aprd-hhmm"[^>]*id="aprd-start"/);
+  await root.querySelector('#aprd-start').change('730');
+  await repaint();
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/,'手机数字键盘打不出冒号也要认');
+  await root.querySelector('#aprd-end').change('10:00');
+  await repaint();
+  assert.match(root.innerHTML,/全天 07:30—10:00/);
+  await root.querySelector('#aprd-start').change('下午6:30');
+  assert.ok(toasts.some(item=>/时段按 24 小时写/.test(item.message)),'带「下午」的写法要拦下来');
+  await repaint();
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/,'拦下来之后退回原值，不留半截时间');
 });
 
 test('编辑已确认的坐班表：改一行才报未确认变更，并在那一行标出已修改',async()=>{
@@ -533,3 +610,4 @@ test('编辑已确认的坐班表：改一行才报未确认变更，并在那�
   assert.doesNotMatch(root.innerHTML,/未确认变更/);
   assert.doesNotMatch(root.innerHTML,/aprd-dirty">已修改/);
 });
+

@@ -15,7 +15,7 @@ import {
   matchesAttendancePeriod, deriveTableGridState, updateTeacherGrid, mergeTeacherGridRows, matchesGridTeacher, paginateExportGrid,
   splitAttendanceExportGrid,
   SUMMARY_COUNT_FIELDS, attendanceSummaryTotals, attendanceSummaryMonthBounds, summarizeAttendanceMonth,
-  updateAttendanceSummaryRow, importAttendanceSummary,
+  updateAttendanceSummaryRow, importAttendanceSummary, leaveDayParts, leaveDayPartLabel,
 } from './attendance-prd-domain.mjs';
 
 const TABS = [
@@ -1148,14 +1148,15 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       '<div class="aprd-foot"><button type="button" data-cancel>取消</button><button class="primary" type="submit">保存</button></div></form>';
     (root.querySelector('.attendance-prd') || root).append(dialog); const form=dialog.querySelector('form');
     classPicker(form.elements.namedItem('class_name'), { courses: timetableCourses, qualified: true });
-    /* 时长单位=天 时，时长换成「上午/下午/1天」选择；小时/月仍用数字（用户 11-15 要求） */
+    /* 时长单位=天 时，时长换成作息表的 24 小时钟点段；小时/月仍用数字（用户 11-22 要求，不再分上午下午） */
     const durationUnit=form.querySelector('[name="duration_unit"]');
     const durationInput=form.querySelector('[name="days"]');
     if(durationUnit&&durationInput){
+      const parts=leaveDayParts();
       const dayPart=document.createElement('select');
       dayPart.name='day_part';dayPart.hidden=true;
-      dayPart.innerHTML=['上午','下午','1天'].map(v=>'<option value="'+v+'">'+v+'</option>').join('');
-      if(initial.day_part)dayPart.value=initial.day_part;
+      dayPart.innerHTML=parts.map(part=>'<option value="'+escAttr(part.label)+'">'+esc(part.label+'（'+part.days+'天）')+'</option>').join('');
+      if(initial.day_part)dayPart.value=leaveDayPartLabel(initial.day_part);
       durationInput.after(dayPart);
       const syncDurationMode=()=>{
         const byDay=durationUnit.value==='day';
@@ -1171,10 +1172,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const editLeaveRecord = (record = null, defaultTeacher = null) => {
     const recordName=record?.name||record?.teacher||'';
     const unitOf=record?.duration_unit==='month'?'month':record?.duration_unit==='hour'?'hour':'day';
-    /* 历史数据的「整天」编辑时统一回显为「1天」（用户 11-15 要求） */
-    const dayPartOf=(record?.day_part==='整天'?'1天':record?.day_part)||(['morning','afternoon'].includes(record?.duration_unit)
-      ?(record.duration_unit==='morning'?'上午':'下午')
-      :(Number(record?.days??record?.duration??1)>=1?'1天':'上午'));
+    /* 历史数据存的「上午/下午/整天」编辑时统一回显成作息表钟点段（用户 11-22 要求） */
+    const dayParts = leaveDayParts();
+    const legacyUnitPart = record?.duration_unit === 'morning' ? dayParts[0].label
+      : record?.duration_unit === 'afternoon' ? dayParts[1].label : '';
+    const dayPartOf = leaveDayPartLabel(record?.day_part) || legacyUnitPart
+      || (Number(record?.days ?? record?.duration ?? 1) >= 1 ? dayParts[2].label : dayParts[0].label);
     const amountOf=unitOf==='day'?dayPartOf:(record?.months??record?.hours??record?.duration??1);
     openEditor(record?'修改请假记录':'登记请假',[
       /* 教师直接手输：全校名单太长，下拉翻半天反而慢 */
@@ -1428,8 +1431,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const subjectManagerButtonHtml = () => '<button type="button" class="aprd-op" data-subject-manager>学科管理</button>';
   const generateButtonHtml = locked => '<button type="button" class="primary" data-generate'
     +(locked||generating?' disabled':'')+'>确认生成</button>';
-  const sheetStatusHtml = (type,locked) => {
-    if(locked)return '<span class="aprd-filter-count" role="status">'+esc(rangeLabel())+'累计 · 只读回看</span>';
+  const sheetStatusHtml = (type,locked,statusNote) => {
+    /* 加载中的月度快照也要禁写，但它不是「只读累计」，状态别说成回看。 */
+    if(locked)return '<span class="aprd-filter-count" role="status">'+esc(statusNote||rangeLabel()+'累计 · 只读回看')+'</span>';
     const confirmed=confirmedResult(type), editing=isEditing(type);
     const draft=type==='summary' && summaryDrafts.has(summaryDraftKey());
     const status=editing?'编辑中 · 修改后点确认生成':draft||!confirmed?'待确认':'';
@@ -1438,9 +1442,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const countOf = value => String(Number(value) || 0);
   /* 六张表下方按钮统一：学科筛选 / 搜索框 / 语音速记 / 新增 / 编辑 / 学科管理 / 确认生成。
      月/年查看态下写操作的按钮一起锁住，只留筛选和学科管理可用。 */
-  const toolbarMainHtml = (type, extra = '', locked = false) => teacherFiltersHtml()+voiceButtonHtml(locked)
+  const toolbarMainHtml = (type, extra = '', locked = false, statusNote = '') => teacherFiltersHtml()+voiceButtonHtml(locked)
     +addButtonHtml(type,locked)+editButtonHtml(type,locked)+subjectManagerButtonHtml()
-    +generateButtonHtml(locked)+sheetStatusHtml(type,locked)+extra;
+    +generateButtonHtml(locked)+sheetStatusHtml(type,locked,statusNote)+extra;
   /* 草稿与已确认快照逐行比对，只在「编辑中」算差异：
      未确认变更 = 这次编辑里改了但还没重新确认生成的行数。 */
   const gridStateValue = value => value === 'y' || value === true ? 'y' : value === 'n' ? 'n' : 'u';
@@ -1579,10 +1583,18 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         return [label,currentStates.filter(match).length];
       }),
     ];
-    const summaryStrip = type!=='roster'
-      ? '<div class="aprd-kpis aprd-grid-summary">'+summaryItems.map(([label,value])=>
-        '<div class="aprd-kpi'+(label==='请假教师'?' leave':'')+'"><b>'+value+'</b><span>'+label+'</span></div>').join('')+'</div>'
-      : '';
+    /* 花名册也要统计条（用户 11-22 要求）：人数跟着当前筛选走，
+       学科和部门数的是筛完之后真实出现的去重值；停用是整份名单的口径，
+       跟着筛选走反而看不出是谁被停的。 */
+    const rosterItems = [
+      ['在册教师', listedTeachers.length],
+      ['学科', new Set(listedTeachers.map(t => String(t.subject || '').trim()).filter(Boolean)).size],
+      ['归属部门', new Set(listedTeachers.map(teacher => deptOf(teacher))).size],
+      ['已停用', allTeachers.length - teachers.length],
+    ];
+    const summaryStrip = '<div class="aprd-kpis aprd-grid-summary">'
+      +(type === 'roster' ? rosterItems : summaryItems).map(([label,value])=>
+        '<div class="aprd-kpi'+(label==='请假教师'?' leave':'')+'"><b>'+value+'</b><span>'+label+'</span></div>').join('')+'</div>';
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+tools+'</div>'
       +'<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+listedTeachers.length+' 位教师</span></div>'+teacherAddCardHtml()+summaryStrip
       +'<div class="aprd-table-wrap"><table><thead><tr>'+columns.map(column=>'<th>'+column+'</th>').join('')
@@ -1612,7 +1624,21 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         : '暂无请假记录，可点击「新增请假」登记';
     tabCorner = tabCornerHtml('', teachers.length);
     const leaveColumns = ['序号',...ATTENDANCE_COLUMNS.leave];
+    /* 请假表也要统计条（用户 11-22 要求）：条数按当前筛选的请假记录数，
+       时长把天数和小时各自累加，和汇总表、导出的「请假时长」同一口径。 */
+    const leaveTypeCount = name => shown.filter(x => String(x.type || '').trim() === name).length;
+    const leaveKpis = [
+      ['请假教师', new Set(shown.map(x => String(x.name || '').trim()).filter(Boolean)).size],
+      ['请假条数', shown.length],
+      ['病假', leaveTypeCount('病假')],
+      ['事假', leaveTypeCount('事假')],
+      ['累计时长', formatLeaveDuration({
+        days: shown.reduce((sum, x) => sum + (Number(x.days) || 0), 0),
+        hours: shown.reduce((sum, x) => sum + (Number(x.hours) || 0), 0),
+      })],
+    ];
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+toolbarMainHtml('leave')+'</div>'+dayChip+'</div>'
+      +'<div class="aprd-kpis aprd-grid-summary">'+leaveKpis.map(([label,value])=>'<div class="aprd-kpi"><b>'+esc(value)+'</b><span>'+label+'</span></div>').join('')+'</div>'
       +'<div class="aprd-table-wrap"><table><thead><tr>'+leaveColumns.map(c=>'<th>'+c+'</th>').join('')+'<th>操作</th></tr></thead><tbody>'+(rows||'<tr><td class="aprd-empty" colspan="'+(leaveColumns.length+1)+'">'+emptyMessage+'</td></tr>')+'</tbody></table></div>';
   };
   const calculateSummaryRows = () => calculateDailySummary({teachers,seatRows:details.seat?.rows||[],classRows:details.class?.rows||[],
@@ -1624,7 +1650,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const byMonth=isMonthlySummary('summary');
     if(byMonth && (monthly?.key!==monthKey() || monthly.loading || monthly.error)){
       const message=monthly?.key===monthKey() ? monthly.error : '';
-      return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+toolbarMainHtml('summary','',true)+'</div></div>'
+      return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+toolbarMainHtml('summary','',true,summaryMonth+' 月度快照 · 正在加载')+'</div></div>'
         +'<div class="aprd-empty" role="status">'+(message?esc(message)+' <button type="button" class="aprd-op" data-summary-retry>重新加载</button>':'正在加载月汇总…')+'</div>';
     }
     const editing=isEditing('summary');
@@ -1884,8 +1910,19 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+ATTENDANCE_COLUMNS.seat.length+'" class="aprd-empty">'
       +'当前筛选下'+esc(rangeLabel())+'没有累计记录</td></tr>')+'</tbody></table></div>';
   };
+  /* 月/年回看时屏幕上是一张累计表，「当前批次 某天 第几节」和按日的批量导入/导出
+     都跟它对不上（导的是当天那份），所以这里换成累计区间，并把那两个入口收掉。 */
+  const rangeBatchHtml = () => {
+    const months = rangeMonths();
+    return '<div class="aprd-batch"><div class="aprd-batch-main"><span class="aprd-batch-label">累计区间</span>'
+      + '<b>' + esc(rangeLabel()) + '</b><span>' + esc(grade) + '</span>'
+      + '<span class="aprd-batch-period">' + esc(months[0] + ' 至 ' + months[months.length - 1]) + '</span></div>'
+      + '<div class="aprd-batch-side"><span class="aprd-batch-note">按'
+      + (viewPeriod === 'year' ? '年' : '月') + '累计，只读回看；逐格登记与批量导入导出请切回「按日」</span></div></div>';
+  };
   const renderPage = () => {
-    const batch = TYPE[tab] ? batchBarHtml(tab) : '';
+    const rangeView = isRangeView(tab);
+    const batch = rangeView ? rangeBatchHtml() : (TYPE[tab] ? batchBarHtml(tab) : '');
     const periodItems = dayPeriodInfo().items;
     /* 整天一节课都没有（周末、还没录课表）就不给每个节次挂「当日无课」，那样只会吵。 */
     const dayHasClasses = periodItems.some(item => item.schooled);
@@ -1907,10 +1944,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       :byYear?'<label>年份 <input type="number" id="aprd-view-year" min="2000" max="2199" step="1" value="'+viewYear+'"></label>'
       :'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
       +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+periodItems.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+((p.schooled||!dayHasClasses)?'':' class="aprd-period-off"')+'>'+esc(p.label+(p.schooled||!dayHasClasses?'':'（当日无课）'))+'</option>').join('')+'</select></label>'
-      +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>')
+      /* 时段不再用 <input type=time>：浏览器按系统语言渲染成「上午 08:00 / 下午 06:35」，
+         lang 属性也扭不过来（用户 11-22 要求一律 24 小时显示），改成自己校验的文本框。 */
+      +'<label>时段 <span class="aprd-time-range">'
+      +'<input class="aprd-hhmm" type="text" id="aprd-start" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="08:00" title="24 小时制，如 08:00" value="'+periodRange[0]+'">'
+      +'<span class="aprd-time-sep">—</span>'
+      +'<input class="aprd-hhmm" type="text" id="aprd-end" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="18:35" title="24 小时制，如 18:35" value="'+periodRange[1]+'">'
+      +'</span></label>')
       +'</div></div>'
       +'<section class="aprd-card"><div class="aprd-tabs-row"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
-      +(tabCorner?'<div class="aprd-tab-actions">'+tabCorner+'</div>':'')+'</div>'
+      +(tabCorner&&!rangeView?'<div class="aprd-tab-actions">'+tabCorner+'</div>':'')+'</div>'
       +'<div class="aprd-panel">'+batch+content+'</div></section></div>';
     root.querySelector('[data-scroll-dirty]')?.addEventListener('click',()=>{
       const row=root.querySelector('.aprd-dirty')?.closest('tr');
@@ -1959,8 +2002,26 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     root.querySelector('[data-summary-retry]')?.addEventListener('click',loadMonth);
     root.querySelector('[data-range-retry]')?.addEventListener('click',loadRange);
     const rememberPeriodTime = () => {
-      const start=root.querySelector('#aprd-start')?.value||'';
-      const end=root.querySelector('#aprd-end')?.value||'';
+      /* 文本框要认手打的 8:00，也认手机数字键盘打不出冒号的 0800；认不了就退回原值，
+         别让半截时间进筛选（用户 11-22 要求时段一律 24 小时）。 */
+      const to24 = (raw) => {
+        const digits = raw.replace(/\D/g, '');
+        const spaced = /[:：]/.test(raw) ? raw
+          : digits.length === 3 ? digits[0] + ':' + digits.slice(1)
+            : digits.length === 4 ? digits.slice(0, 2) + ':' + digits.slice(2) : raw;
+        return cleanPeriodTime(spaced);
+      };
+      const hhmm = (id, fallback) => {
+        const box = root.querySelector(id);
+        if (!box) return '';
+        const raw = String(box.value || '').trim();
+        const value = to24(raw);
+        if (value) box.value = value;
+        else if (raw) { toast('时段按 24 小时写，例如 08:00', 'warn'); box.value = fallback; }
+        return value || fallback;
+      };
+      const start=hhmm('#aprd-start',periodRange[0]);
+      const end=hhmm('#aprd-end',periodRange[1]);
       if(start&&end&&start>=end){toast('结束时间必须晚于开始时间','warn');paint();return;}
       periodTimeEdits[[date,currentScheduleType(),grade,period].join('|')]={start,end};
     };
@@ -2011,7 +2072,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const type=TYPE[tab]?tab:'seat';
       const selectedPeriod=period,selectedDate=date,selectedGrade=grade;
       const cols=[{key:'class',label:'上课',type:'check'},{key:'sit',label:'坐班',type:'check'},{key:'listen',label:'听课',type:'check'},{key:'research',label:'教研',type:'check'}];
-      voiceSheet({rows:teachers.map(t=>({teacher:t.name,subject:t.subject})),cols,onApply:items=>{
+      voiceSheet({rows:teachers.map(t=>({teacher:t.name,subject:t.subject})),cols,dayParts:leaveDayParts(),onApply:items=>{
         if(period!==selectedPeriod||date!==selectedDate||grade!==selectedGrade){toast('日期、年级或节次已切换，请重新语音登记','warn');return;}
         let count=0;
         for(const item of items){

@@ -180,8 +180,8 @@
 .attendance-prd .aprd-filter input,.attendance-prd .aprd-filter select{height:32px;border:1px solid #dce5f1;border-radius:8px;padding:0 9px;background:#fff;color:#263650;font:inherit;font-size:12px}
 .attendance-prd .aprd-filter input:focus,.attendance-prd .aprd-filter select:focus{outline:none;border-color:#6b9cff;box-shadow:0 0 0 3px rgba(22,93,255,.09)}
 .attendance-prd .aprd-filter input[type=date]{width:132px}
-/* 中文环境 time 输入框渲染成「上午 12:00」+ 时钟图标，96px 会把分钟压掉 */
-.attendance-prd .aprd-filter input[type=time]{width:138px;padding-right:2px}
+/* 时段是 24 小时文本框（原生 time 控件在中文环境渲染成「上午 08:00」，lang 改不动），宽度按 5 个字符给 */
+.attendance-prd .aprd-filter .aprd-hhmm{width:74px;padding:0 6px;text-align:center;font-variant-numeric:tabular-nums}
 .attendance-prd .aprd-time-range{display:inline-flex;align-items:center;gap:6px}
 .attendance-prd .aprd-time-sep{color:#98a6ba}
 .attendance-prd .aprd-filter-actions{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
@@ -268,7 +268,7 @@
 @media(max-width:600px){
  .attendance-prd .aprd-head-title h2{font-size:18px}
  .attendance-prd .aprd-filter-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
- .attendance-prd .aprd-filter input[type=date],.attendance-prd .aprd-filter input[type=time]{width:100%}
+ .attendance-prd .aprd-filter input[type=date],.attendance-prd .aprd-filter .aprd-hhmm{width:100%}
  .attendance-prd .aprd-time-range{width:100%}
  .attendance-prd .aprd-time-range input{flex:1;min-width:0}
  .attendance-prd .aprd-filter-actions{flex-wrap:wrap}
