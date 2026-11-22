@@ -13,7 +13,7 @@ const files = [
   'student.html',
   'student.bundle.js',
 ];
-const directories = ['assets', 'css', 'icons', 'js'];
+const directories = ['assets', 'css', 'icons', 'js', 'previews'];
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
