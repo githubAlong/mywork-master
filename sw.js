@@ -41,6 +41,7 @@ const CACHE = 'wb-v372-attendance-day-periods';
 const ASSETS = [
   './',
   './index.html',
+  './app.html',
   './manifest.webmanifest',
   './icons/favicon-tai.svg',
   './css/app.css',

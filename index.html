@@ -50,6 +50,7 @@ input{font:inherit;outline:none}
 .submit{width:100%;height:50px;border-radius:var(--r-ctl);background:var(--accent);color:#fff;font-size:16px;font-weight:700}
 .submit:active{background:var(--accent-deep)}
 .foot{margin-top:22px;text-align:center;font-size:12.5px;color:var(--ink-3)}
+.foot a{color:var(--accent);text-decoration:none;font-weight:600}
 @media(max-width:820px){
   .wrap{grid-template-columns:1fr;overflow-y:auto}
   .brand{padding:calc(env(safe-area-inset-top) + 48px) 26px 26px;min-height:280px;justify-content:flex-end}
@@ -80,7 +81,7 @@ input{font:inherit;outline:none}
       <div class="field"><label>密码</label><input type="password" placeholder="请输入密码"></div>
       <div class="row"><span>记住账号</span><a href="#">忘记密码？</a></div>
       <button class="submit" type="button" id="login-btn">登 录</button>
-      <div class="foot">首次使用请联系管理员开通账号 · v2.0 设计稿</div>
+      <div class="foot">首次使用请联系管理员开通账号 · v2.0 设计稿<br><a href="app.html">真实工作台</a> · <a href="teacher.html">v2 教师端界面稿</a></div>
     </form>
   </section>
 </div>
@@ -91,7 +92,9 @@ document.querySelectorAll('.role button').forEach(b=>b.onclick=()=>{
   role=b.textContent.trim()==='学生端'?'student':'teacher';
 });
 document.getElementById('login-btn').onclick=()=>{
-  location.href=role==='student'?'student.html':'teacher.html';
+  /* 教师端进真实工作台（app.html 加载 js/main.js）；这一页本身不做登录校验，
+     真实账号密码在 app.html 里过。学生端 student.html 是正式页面。 */
+  location.href=role==='student'?'student.html':'app.html';
 };
 </script>
 </body>
