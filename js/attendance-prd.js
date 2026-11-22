@@ -4,6 +4,7 @@ import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
 import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
+import { daySchooledPeriods, dayTimeRange, orderPeriods, weekdayLabel } from './attendance-day-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
@@ -108,9 +109,16 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       return saved.type === WINTER_SCHEDULE ? WINTER_SCHEDULE : SUMMER_SCHEDULE;
     } catch { return SUMMER_SCHEDULE; }
   };
-  const resolvePeriodRange = (number) => {
+  const daySchooledPeriodsOf = () => daySchooledPeriods(timetableCourses, {
+    date,
+    grade,
+    scheduleType: currentScheduleType(),
+    courseTypes: objectValue(timetableSettings.courseTypes),
+    periodTimes: objectValue(timetableSettings.periodTimes),
+    defaultCourseType: SUMMER_SCHEDULE,
+  });
+  const periodTimeOf = (number) => {
     const periodNo = Number(number);
-    if (periodNo === 0) return ['00:00','23:59'];
     const scheduleType = currentScheduleType();
     const periodTimes = objectValue(timetableSettings.periodTimes);
     const periodDefinitions = objectValue(timetableSettings.periodDefinitions);
@@ -147,6 +155,30 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const editKey = [date,scheduleType,grade,periodNo].join('|');
     const edited = periodTimeEdits[editKey];
     return edited ? [edited.start || start, edited.end || end] : [start,end];
+  };
+  const resolvePeriodRange = (number) => {
+    const periodNo = Number(number);
+    if (periodNo !== 0) return periodTimeOf(periodNo);
+    /* 全天不再写死 00:00—23:59：取当天课表实际有课节次的最早开始到最晚结束；
+       手改过全天的话以手改为准（以前写死时手改根本不生效）。 */
+    const times = daySchooledPeriodsOf().map(item => {
+      const [start,end] = periodTimeOf(item.no);
+      return { no:item.no, start, end };
+    });
+    const derived = dayTimeRange(times) || ['00:00','23:59'];
+    const edited = periodTimeEdits[[date,currentScheduleType(),grade,0].join('|')];
+    return edited ? [edited.start || derived[0], edited.end || derived[1]] : derived;
+  };
+  const dayPeriodInfo = () => {
+    const schooled = daySchooledPeriodsOf();
+    return {
+      schooled,
+      items: orderPeriods(DEFAULT_PERIODS, schooled),
+      /* 当天完全没有排课（周末、节假日、这个年级没课）时不假装是课表口径。 */
+      note: schooled.length
+        ? '时段取自当天课表 · ' + schooled.length + ' 个有课节次'
+        : '当日课表无排课，时段按默认节次',
+    };
   };
   let busy = false;
   const loadMonth = async () => {
@@ -1353,10 +1385,47 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<button type="button" class="primary" data-generate>确认生成</button>'
       +(status?'<span class="aprd-filter-count" role="status">'+status+'</span>':'');
   };
+  /* 草稿与已确认快照逐行比对，只在「编辑中」算差异：
+     未确认变更 = 这次编辑里改了但还没重新确认生成的行数。 */
+  const gridStateValue = value => value === 'y' || value === true ? 'y' : value === 'n' ? 'n' : 'u';
+  const sheetRowKey = row => String(row?.teacher?.id ?? row?.id ?? row?.teacher?.name ?? row?.teacher ?? row?.name ?? '');
+  const sheetRowSignature = (row, type) => {
+    const state = row?.state || row || {};
+    return (GRID_STATE_COLUMNS[type] || []).filter(key => key !== 'leave')
+      .map(key => key + ':' + gridStateValue(state[key])).join('|')
+      + '|leave:' + (state.leave || '') + '|remark:' + String(state.remark || '');
+  };
+  const sheetDirtyKeys = type => {
+    const confirmed = TYPE[type] ? confirmedResult(type) : null;
+    if (!confirmed || !Array.isArray(confirmed.rows) || !isEditing(type)) return new Set();
+    const previous = new Map(confirmed.rows.map(row => [sheetRowKey(row), sheetRowSignature(row, type)]));
+    const dirty = new Set();
+    for (const entry of worksheetEntries(type, true, true)) {
+      const key = sheetRowKey(entry);
+      /* 只对「确认快照里有的行」报差异：万一云端把快照结构改了，宁可少报也不要把整表都标成已修改。 */
+      if (previous.has(key) && previous.get(key) !== sheetRowSignature(entry, type)) dirty.add(key);
+    }
+    return dirty;
+  };
+  const batchBarHtml = (type) => {
+    const info = dayPeriodInfo();
+    const range = resolvePeriodRange(period);
+    const periodLabel = period === 0 ? '全天'
+      : (DEFAULT_PERIODS.find(item => Number(item.no) === period)?.label || ('第' + period + '节'));
+    const dirtyCount = sheetDirtyKeys(type).size;
+    return '<div class="aprd-batch"><div class="aprd-batch-main"><span class="aprd-batch-label">当前批次</span>'
+      + '<b>' + esc(date + ' ' + weekdayLabel(date)) + '</b>'
+      + '<span>' + esc(grade) + '</span><span>' + esc(currentScheduleType()) + '</span>'
+      + '<span class="aprd-batch-period">' + esc(periodLabel) + ' ' + esc(range[0] + '—' + range[1]) + '</span></div>'
+      + '<div class="aprd-batch-side">'
+      + (dirtyCount ? '<button type="button" class="aprd-dirty-badge" data-scroll-dirty>有 ' + dirtyCount + ' 条未确认变更</button>' : '')
+      + '<span class="aprd-batch-note">' + esc(info.note) + '</span></div></div>';
+  };
   const rosterHtml = (type = 'roster') => {
     const result = isEditing(type) ? null : confirmedResult(type);
     const editable = type !== 'roster' && !result;
     const isWorksheet=type==='class'||type==='research';
+    const dirtyKeys = sheetDirtyKeys(type);
     const entries = type==='roster' ? visibleTeachers().map(teacher=>({teacher}))
       : (result?.rows ?? worksheetEntries(type,isEditing(type),isEditing(type))).filter(({teacher})=>matchesSheetFilter(teacher));
     const listedTeachers=entries.map(({teacher})=>teacher);
@@ -1410,7 +1479,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         return '<td>'+mark(key,shown[key])+'</td>';
       }).join('');
       return '<tr><td>'+(index+1)+'</td><td>'+esc(department||deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
-        +'<td><b>'+esc(teacher.name)+'</b></td><td>'+esc(teacher.subject||'')+'</td>'
+        +'<td><b>'+esc(teacher.name)+'</b>'+(dirtyKeys.has(sheetRowKey({teacher}))?'<span class="aprd-dirty">已修改</span>':'')+'</td><td>'+esc(teacher.subject||'')+'</td>'
         +stateCells+'<td>'+remark+'</td>'
         +'<td>'+actionsOf(teacher)+'</td></tr>';
     }).join('');
@@ -1527,6 +1596,10 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     };
   };
   const renderPage = () => {
+    const batch = TYPE[tab] ? batchBarHtml(tab) : '';
+    const periodItems = dayPeriodInfo().items;
+    /* 整天一节课都没有（周末、还没录课表）就不给每个节次挂「当日无课」，那样只会吵。 */
+    const dayHasClasses = periodItems.some(item => item.schooled);
     const content = ['roster','seat','class','research'].includes(tab)?rosterHtml(tab):tab==='leave'?leaveHtml():summaryHtml();
     const periodRange = resolvePeriodRange(period);
     const byMonth=isMonthlySummary(tab);
@@ -1537,11 +1610,18 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +'<div class="aprd-filter"><div class="aprd-filter-fields">'
       +(byMonth?'<label>月份 <input type="month" id="aprd-summary-month" value="'+summaryMonth+'"></label>'
       :'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
-      +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+DEFAULT_PERIODS.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+p.label+'</option>').join('')+'</select></label>'
+      +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+periodItems.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+((p.schooled||!dayHasClasses)?'':' class="aprd-period-off"')+'>'+esc(p.label+(p.schooled||!dayHasClasses?'':'（当日无课）'))+'</option>').join('')+'</select></label>'
       +'<label>时段 <span class="aprd-time-range"><input type="time" id="aprd-start" value="'+periodRange[0]+'"><span class="aprd-time-sep">—</span><input type="time" id="aprd-end" value="'+periodRange[1]+'"></span></label>')
       +'</div></div>'
       +'<section class="aprd-card"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
-      +'<div class="aprd-panel">'+content+'</div></section></div>';
+      +'<div class="aprd-panel">'+batch+content+'</div></section></div>';
+    root.querySelector('[data-scroll-dirty]')?.addEventListener('click',()=>{
+      const row=root.querySelector('.aprd-dirty')?.closest('tr');
+      if(!row)return;
+      row.scrollIntoView({behavior:'smooth',block:'center'});
+      row.classList.add('aprd-row-flash');
+      setTimeout(()=>row.classList.remove('aprd-row-flash'),1400);
+    });
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=async()=>{
       if(busy || generating || !await flushBeforeSwitch())return;
       tab=b.dataset.tab;

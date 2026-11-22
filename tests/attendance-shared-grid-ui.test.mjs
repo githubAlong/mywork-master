@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as domain from '../js/attendance-prd-domain.mjs';
 import * as timetablePeriods from '../js/timetable-periods.mjs';
+import * as dayPeriods from '../js/attendance-day-periods.mjs';
 
 // Exercise the actual renderer and its event handlers with a small DOM/API fixture.
 // No database, account, browser storage or network is used.
@@ -60,18 +61,22 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const source=(await readFile(new URL('../js/attendance-prd.js',import.meta.url),'utf8'))
   .replace(/^import[\s\S]*?;\r?\n/gm,'').replace('export async function renderAttendancePRD','async function renderAttendancePRD');
 
-async function setup() {
+async function setup(options={}) {
   const root=new Root(), saved={seat:{id:'seat',rows:[]},class:{id:'class',rows:[]},research:{id:'research',rows:[]}};
   const teachers=[{id:'1',name:'李老师',subject:'语文',grade:'高一',active:1},
     {id:'2',name:'王老师',subject:'数学',grade:'高一',active:1}];
+  /* 课表 fixture 供「时段取自当天课表」的用例使用，默认不给课表数据。 */
+  const courses=options.courses||[], periods=options.periods||[];
   const calls=[],exportedGrids=[],toasts=[],patchCalls=[];
-  let version=0, settings={};
+  let version=0, settings=options.settings?structuredClone(options.settings):{};
   const nextVersion=()=>String(++version);
   const api={
     async get(path) {
       if(path==='/grades') return {grades:['高一','高二']};
       if(path==='/teachers') return {list:structuredClone(teachers)};
       if(path==='/me') return {user:{settings:structuredClone(settings)}};
+      if(path==='/courses') return structuredClone(courses);
+      if(path==='/periods') return structuredClone(periods);
       if(path==='/attendance') return Object.values(saved).map(table=>({id:table.id,sheet_type:table.id}));
       return structuredClone(saved[path.split('/').pop()]);
     },
@@ -117,7 +122,7 @@ async function setup() {
       return structuredClone(table);
     },
   };
-  const dependencies={...domain,...timetablePeriods,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
+  const dependencies={...domain,...timetablePeriods,...dayPeriods,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
   await render(root,{grade:'高一'});
@@ -381,4 +386,80 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
   /* 右下角导出时间写在最后一行的最右列 */
   const last=grid.at(-1);
   assert.match(last.at(-1),/^导出时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+});
+
+/* 2026-11-22：时段自动取当天课表 + 当前批次条 + 未确认变更定位 */
+const todayYmd=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
+const periodItemsOf=html=>[...html.matchAll(/<option value="(\d+)"([^>]*)>([^<]*)<\/option>/g)]
+  .map(match=>({value:match[1],off:/aprd-period-off/.test(match[2]),text:match[3]}));
+
+test('节次与时段取自当天课表：有课节次排前、无课节次标注、全天取最早到最晚',async()=>{
+  const weekday=dayPeriods.weekdayOf(todayYmd());
+  const {root}=await setup({courses:[
+    {id:'c3',weekday,period_no:3,grade:'高一',start_time:'10:00',end_time:'10:40'},
+    {id:'c1',weekday,period_no:1,grade:'高一',start_time:'08:00',end_time:'08:40'},
+    {id:'cNext',weekday:(weekday+1)%7,period_no:2,grade:'高一',start_time:'08:50',end_time:'09:30'},
+    {id:'cOther',weekday,period_no:5,grade:'高二',start_time:'11:40',end_time:'12:20'},
+  ]});
+  const items=periodItemsOf(root.innerHTML);
+  assert.deepEqual(items.slice(0,4).map(item=>item.value),['0','1','3','2']);
+  assert.equal(items.find(item=>item.value==='1').off,false);
+  assert.equal(items.find(item=>item.value==='5').off,true);
+  assert.match(items.find(item=>item.value==='5').text,/^第5节（当日无课）$/);
+  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end" value="10:40"/);
+  assert.match(root.innerHTML,/当前批次/);
+  assert.match(root.innerHTML,/时段取自当天课表 · 2 个有课节次/);
+  assert.match(root.innerHTML,/全天 08:00—10:40/);
+});
+
+test('当天完全没排课时不逐条标注无课，批次条说明用的是默认节次',async()=>{
+  const {root}=await setup();
+  assert.doesNotMatch(root.innerHTML,/当日无课/);
+  assert.match(root.innerHTML,/当日课表无排课，时段按默认节次/);
+  assert.match(root.innerHTML,/id="aprd-start" value="00:00"/);
+  assert.match(root.innerHTML,/id="aprd-end" value="23:59"/);
+});
+
+test('时段：课表给默认值，手改后以手改为准，非法区间被拦下不写脏',async()=>{
+  const weekday=dayPeriods.weekdayOf(todayYmd());
+  const {root,toasts}=await setup({courses:[
+    {id:'c1',weekday,period_no:1,grade:'高一',start_time:'08:00',end_time:'08:40'},
+  ]});
+  const repaint=async()=>{
+    await root.querySelector('[data-tab="roster"]').click();
+    await root.querySelector('[data-tab="seat"]').click();
+  };
+  await root.querySelector('#aprd-start').change('07:30');
+  await repaint();
+  assert.match(root.innerHTML,/id="aprd-start" value="07:30"/);
+  assert.match(root.innerHTML,/全天 07:30—08:40/);
+  /* 手改只落在「全天」这一档，切回第1节仍是课表给的时间 */
+  await root.querySelector('#aprd-period').change('1');
+  assert.match(root.innerHTML,/id="aprd-start" value="08:00"/);
+  assert.match(root.innerHTML,/id="aprd-end" value="08:40"/);
+  await root.querySelector('#aprd-period').change('0');
+  await root.querySelector('#aprd-end').change('06:00');
+  assert.ok(toasts.some(item=>/结束时间必须晚于开始时间/.test(item.message)));
+  assert.match(root.innerHTML,/全天 07:30—08:40/);
+});
+
+test('编辑已确认的坐班表：改一行才报未确认变更，并在那一行标出已修改',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-generate]').click();
+  assert.doesNotMatch(root.innerHTML,/未确认变更/);
+  const editSheet=root.querySelector('[data-edit-sheet]');
+  assert.ok(editSheet,'确认后应可再次编辑');
+  await editSheet.click();
+  /* 刚进编辑态、一行都没动：不能虚报变更，这是这条功能最容易被挑刺的地方。 */
+  assert.doesNotMatch(root.innerHTML,/未确认变更/);
+  assert.doesNotMatch(root.innerHTML,/已修改/);
+  await control(root,'sit').click();
+  await new Promise(resolve=>setTimeout(resolve,450));
+  assert.match(root.innerHTML,/有 1 条未确认变更/);
+  assert.match(root.innerHTML,/data-scroll-dirty/);
+  assert.match(root.innerHTML,/class="aprd-dirty">已修改/);
+  await root.querySelector('[data-generate]').click();
+  assert.doesNotMatch(root.innerHTML,/未确认变更/);
+  assert.doesNotMatch(root.innerHTML,/aprd-dirty">已修改/);
 });

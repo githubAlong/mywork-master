@@ -507,3 +507,22 @@
  .attendance-prd .aprd-import-foot-actions button{flex:1}
  .attendance-prd .aprd-png-hint{display:none}
 }
+
+/* 当前批次条 + 未确认变更（2026-11-22）：批次口径要一眼看清，差异要能在表里定位到人 */
+.attendance-prd .aprd-batch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:9px 13px;border:1px solid #e0e9f7;border-radius:10px;background:linear-gradient(180deg,#f7faff,#fff)}
+.attendance-prd .aprd-batch-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#5b6b85}
+.attendance-prd .aprd-batch-label{padding:2px 8px;border-radius:999px;background:#eaf2ff;color:#0b57d0;font-size:11px;font-weight:650}
+.attendance-prd .aprd-batch-main b{color:#172744;font-size:13px;font-weight:650}
+.attendance-prd .aprd-batch-period{color:#0b57d0;font-weight:650}
+.attendance-prd .aprd-batch-side{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.attendance-prd .aprd-batch-note{font-size:11px;color:#8794a8}
+.attendance-prd .aprd-dirty-badge{height:27px;padding:0 11px;border:1px solid #f3d3a6;border-radius:999px;background:#fff6e6;color:#96600d;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.attendance-prd .aprd-dirty-badge:hover{background:#ffefcf}
+.attendance-prd .aprd-dirty{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid #f3d3a6;border-radius:999px;background:#fff6e6;color:#96600d;font-size:10px;font-weight:650;vertical-align:middle}
+.attendance-prd .aprd-row-flash>td{animation:aprdRowFlash 1.4s ease-out}
+@keyframes aprdRowFlash{0%{background:#ffe9bd}100%{background:transparent}}
+.attendance-prd #aprd-period option.aprd-period-off{color:#a4b0c2}
+@media(max-width:760px){
+ .attendance-prd .aprd-batch{align-items:flex-start;flex-direction:column;gap:7px}
+ .attendance-prd .aprd-batch-side{width:100%;justify-content:space-between}
+}
