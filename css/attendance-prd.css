@@ -552,3 +552,15 @@
 @media(max-width:600px){
  .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -12px 12px;padding:0 12px}
 }
+
+/* =============== 学科管理弹窗（用户 11-22：学科清单独立维护，改名连带历史） =============== */
+.attendance-prd .aprd-subject-editor{width:min(520px,100%)}
+.attendance-prd .aprd-subject-editor>p{margin:0;font-size:12px;color:#7a899e;line-height:1.6}
+.attendance-prd .aprd-subject-list{border:1px solid #e1e8f2;border-radius:10px;overflow:hidden}
+.attendance-prd .aprd-subject-head,.attendance-prd .aprd-subject-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;padding:9px 12px}
+.attendance-prd .aprd-subject-head{background:#f3f6fb;color:#53627a;font-size:11px}
+.attendance-prd .aprd-subject-row{border-top:1px solid #edf1f6;font-size:12px}
+.attendance-prd .aprd-subject-row b{color:#24324a;font-weight:600}
+.attendance-prd .aprd-subject-row span{color:#7a899e}
+.attendance-prd .aprd-subject-row .aprd-actions{color:inherit}
+.attendance-prd .aprd-subject-list .aprd-empty{padding:22px 12px}

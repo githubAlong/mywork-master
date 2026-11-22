@@ -143,12 +143,10 @@ test('花名册和坐班表保留完整名单，子表固定列并显示已登�
   assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
   assert.equal(root.querySelectorAll('[data-person]').length,0);
   let workHeaders=null;
-  /* 用户 11-15 规定：坐班表是数据源、全量显示；上课表只看上课/听课；教研表只看教研/请假。 */
-  const expectedHeaders={
-    seat:['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作'],
-    class:['序号','归属部门','归属年级','姓名','学科','上课','听课人','备注','操作'],
-    research:['序号','归属部门','归属年级','姓名','学科','教研','备注','操作'],
-  };
+  /* 用户 11-22 裁决：坐班表/上课表/教研表列结构统一成坐班表那套，
+     不属于本表的格子只读回显，所以三张表的表头必须一模一样。 */
+  const unifiedHeaders=['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作'];
+  const expectedHeaders={seat:unifiedHeaders,class:unifiedHeaders,research:unifiedHeaders};
   const expectedNamesByType={seat:['李老师','王老师'],class:[],research:[]};
   const expectedControls={seat:12,class:0,research:0};
   for(const type of ['seat','class','research']) {
@@ -163,6 +161,58 @@ test('花名册和坐班表保留完整名单，子表固定列并显示已登�
     assert.equal(/保存本表/.test(root.innerHTML),false);
   }
   assert.ok(workHeaders.includes('坐班')&&workHeaders.includes('请假'));
+});
+
+test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/编辑/学科管理/确认生成',async()=>{
+  const {root}=await setup();
+  /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。 */
+  const addSelector={roster:'data-add',seat:'data-add-record',class:'data-add-record',
+    research:'data-add-record',leave:'data-add-leave',summary:'data-add-summary'};
+  for(const type of ['roster','seat','class','research','leave','summary']) {
+    await root.querySelector('[data-tab="'+type+'"]').click();
+    const html=root.innerHTML;
+    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice',addSelector[type],
+      'data-edit-sheet','data-subject-manager','data-generate'];
+    const positions=markers.map(marker=>html.indexOf(marker));
+    const missing=markers.filter((marker,index)=>positions[index]<0);
+    assert.deepEqual(missing,[],type+' 表缺少统一按钮：'+missing.join(','));
+    assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),type+' 表按钮顺序不是 学科筛选/搜索框/语音/新增/编辑/学科管理/确认生成');
+    assert.doesNotMatch(html.slice(html.indexOf('data-workspace-voice'),html.indexOf('</button>',html.indexOf('data-workspace-voice'))),/语音登记/,'按钮统一叫「语音速记」');
+  }
+});
+
+test('学科清单独立存储：没挂老师的学科也能筛选，改名连带历史考勤行',async()=>{
+  const {root}=await setup({settings:{attendanceWorkspace:{subjectLists:{高一:['物理']}}}});
+  await root.querySelector('[data-tab="seat"]').click();
+  const options=root.innerHTML.match(/<select id="aprd-subject">([\s\S]*?)<\/select>/)?.[1]||'';
+  /* 名册里根本没有物理老师，但清单存了就要能筛，这是「独立清单」和旧行为的分水岭 */
+  assert.match(options,/<option value="物理"/);
+  assert.match(options,/<option value="语文"/,'名册在用的学科不能被清单顶掉');
+  assert.match(root.innerHTML,/data-subject-manager/,'每张表都要能进学科管理');
+  /* 改名走 /subjects/rename（服务端连带迁名册与考勤行），删除走 /subjects/delete，清单本身存 prefs */
+  assert.match(source,/api\.post\('\/subjects\/rename'/);
+  assert.match(source,/api\.post\('\/subjects\/delete'/);
+  assert.match(source,/prefs\.subjectLists\?\.\[grade\]/);
+  assert.match(source,/savePrefs\(\{ subjectLists \}\)/);
+});
+
+test('按月按年查看：每人一行累计，写操作整排锁住只能回看',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-tab="seat"]').click();
+  for(const period of ['month','year']) {
+    await root.querySelector('#aprd-view-period').change(period);
+    const html=root.innerHTML;
+    assert.match(html,/累计教师/,'切到按'+period+'要有累计统计条');
+    assert.match(html,/只读回看/,'按'+period+'要标出只读');
+    for(const selector of ['data-add-record','data-edit-sheet','data-generate','data-workspace-voice'])
+      assert.match(html,new RegExp(selector+'[^>]*disabled'),'按'+period+'时 '+selector+' 必须禁用');
+    /* 只读列不再吐出可点的格子，避免在累计视图里改历史 */
+    assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
+    assert.match(html,/<label>查看 <select id="aprd-view-period">/,'查看周期在筛选行里，六张表共用');
+  }
+  await root.querySelector('#aprd-view-period').change('day');
+  assert.match(root.innerHTML,/data-workspace-voice/,'切回按日仍是当天录入视图');
+  assert.doesNotMatch(root.innerHTML,/累计教师/);
 });
 
 test('真实操作链：草稿跨页签保留，自动保存仅写本表，重新打开与花名册一致',async()=>{
@@ -187,20 +237,26 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.equal(root.querySelectorAll('[aria-disabled]').length,0);
 });
 
-test('确认坐班表后语音登记紧邻新增教师，保留行操作并隐藏确认状态字样',async()=>{
+test('确认坐班表后语音速记紧邻新增按钮，保留行操作并隐藏确认状态字样',async()=>{
   const {root,reopen,saved}=await setup();
   await root.querySelector('[data-generate]').click();
   assert.equal(saved.seat.confirm_state,'confirmed');
   const checkActions=()=>{
     assert.doesNotMatch(root.innerHTML,/已确认/);
-    assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音登记<\/button><button[^>]* data-add>/);
-    for(const selector of ['[data-add]','[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
+    assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音速记<\/button><button[^>]* data-add-record[ >]/);
+    for(const selector of ['[data-add-record]','[data-edit-sheet]','[data-subject-manager]','[data-generate]',
+      '[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
       assert.ok(root.querySelector(selector),selector);
     }
+    /* 确认后没点「编辑」之前，行内的编辑/删除与新增、确认生成一起锁住 */
+    assert.match(root.innerHTML,/<button[^>]*data-add-record[^>]*disabled/);
+    assert.match(root.innerHTML,/<button[^>]*data-edit="1"[^>]*disabled/);
   };
   checkActions();
   await reopen();
   checkActions();
+  await root.querySelector('[data-edit-sheet]').click();
+  assert.doesNotMatch(root.innerHTML,/<button[^>]*data-add-record[^>]*disabled/,'进编辑态后要能继续新增');
   await root.querySelector('[data-tab="summary"]').click();
   await root.querySelector('[data-generate]').click();
   assert.ok(root.querySelector('[data-summary-edit-row="0"]'));
