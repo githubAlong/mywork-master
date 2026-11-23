@@ -2789,16 +2789,30 @@ async function renderStudentModule(box, key) {
         <div class="tiny muted" style="margin:6px 0 10px">名单只影响「按名单名字点」这一个选项。没有名单，学生页照样能按 1~50 号点。</div>
         ${rosters.length ? `<div class="pb-list">${rosters.map((r) => {
       const n = parseNames(r.names);
-      return `<div class="pb-row">
+      return `<div class="pb-row ros-row">
             <span class="chip blue">${esc(clsName(r.grade, r.class_name))}</span>
             <span class="pb-text">${n.length ? `${n.length} 个名字` : `未导入姓名（按号码点 ${r.count || 40} 人）`}</span>
-            <span class="tiny muted">${n.slice(0, 6).join('、')}${n.length > 6 ? '…' : ''}</span>
+            <span class="tiny muted ros-preview">${n.slice(0, 6).join('、')}${n.length > 6 ? '…' : ''}</span>
+            <button class="icon-btn sm" data-ros-view="${r.id}" title="查看名单" aria-label="查看名单">${icon('eye', 13)}</button>
+            <button class="icon-btn sm" data-ros-edit="${r.id}" title="编辑班级" aria-label="编辑班级">${icon('edit', 13)}</button>
+            <button class="icon-btn sm" data-ros-del="${r.id}" title="删除班级" aria-label="删除班级">${icon('trash', 13)}</button>
           </div>`;
     }).join('')}</div>` : '<div class="empty" style="padding:16px">还没有班级名单</div>'}
       </div>`;
 
+    const reloadPick = () => renderStudentModule(box, key);
+    const findRoster = (id) => rosters.find((x) => String(x.id) === String(id));
     inner.querySelector('#pk-try')?.addEventListener('click', () => pickStudentDialog(rosters));
-    inner.querySelector('#pk-ros')?.addEventListener('click', () => openRosterDialog(rosters, () => renderStudentModule(box, key)));
+    inner.querySelector('#pk-ros')?.addEventListener('click', () => openRosterDialog(rosters, reloadPick));
+    inner.querySelectorAll('[data-ros-view]').forEach((b) => {
+      b.onclick = () => { const r = findRoster(b.dataset.rosView); if (r) rosterViewDialog(r); };
+    });
+    inner.querySelectorAll('[data-ros-edit]').forEach((b) => {
+      b.onclick = () => { const r = findRoster(b.dataset.rosEdit); if (r) rosterEditDialog(r, reloadPick); };
+    });
+    inner.querySelectorAll('[data-ros-del]').forEach((b) => {
+      b.onclick = () => { const r = findRoster(b.dataset.rosDel); if (r) deleteRoster(r, reloadPick); };
+    });
   } else if (key === 'misconduct') {
     /* —— 违纪：学生提交，老师这里查看与编辑 —— */
     const clsPairs = new Map();
@@ -3239,6 +3253,134 @@ function openRosterDialog(rosters, reload) {
       toast(e.message || '保存失败', 'err');
     }
   };
+}
+
+/* 点名页每一行的查看 / 编辑 / 删除。
+   以前名单卡片是只读的，唯一入口「管理班级名单」只能整段粘贴姓名：
+   班名写错、建错班、想单独看某个班的名单，都没有地方可点。
+   拆分逻辑与 openRosterDialog 保持一致（换行、逗号、顿号、空格都算分隔）。 */
+const ROSTER_NAME_SPLIT = /[\n,，、;；\s]+/;
+
+function splitRosterNames(text) {
+  return String(text || '').split(ROSTER_NAME_SPLIT).map((x) => x.trim()).filter(Boolean);
+}
+
+function rosterViewDialog(r) {
+  const names = parseNames(r.names);
+  const body = el(`<div class="sheet-body">
+    <div class="row wrap" style="gap:8px;align-items:center;margin-bottom:10px">
+      <span class="chip blue">${esc(clsName(r.grade, r.class_name) || '未填班名')}</span>
+      <span class="small muted">${names.length ? `${names.length} 人` : `还没导入姓名 · 点名按学号 1~${r.count || 40}`}</span>
+      <span style="flex:1"></span>
+      ${names.length ? `<button class="btn ghost sm" id="rv-copy">${icon('copy', 14)} 复制全部</button>` : ''}
+    </div>
+    ${names.length
+    ? `<div class="ros-grid">${names.map((n, i) => `<span class="ros-item"><i>${i + 1}</i><span>${esc(n)}</span></span>`).join('')}</div>`
+    : '<div class="empty" style="padding:16px">这个班还没导入姓名。点「编辑」把姓名粘进去，之后就能按名字点名。</div>'}
+    <div class="confirm-actions"><button class="btn ghost" id="rv-close">关闭</button></div>
+  </div>`);
+  const s = sheet({ title: '查看名单', body });
+  body.querySelector('#rv-close').onclick = () => s.close();
+  const copyBtn = body.querySelector('#rv-copy');
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      const text = names.join('\n');
+      try { await navigator.clipboard.writeText(text); toast(`已复制 ${names.length} 个姓名`); }
+      catch { prompt('复制下面的名单', text); }
+    };
+  }
+}
+
+function rosterEditDialog(r, reload) {
+  const names = parseNames(r.names);
+  const body = el(`<div class="sheet-body">
+    <div class="form-grid">
+      <div class="field"><label class="field-label">年级</label>
+        <input class="input" id="re-grade" value="${esc(r.grade || '')}" placeholder="如：高一"></div>
+      <div class="field"><label class="field-label">班级</label>
+        <input class="input" id="re-class" value="${esc(r.class_name || '')}" placeholder="如：1 班"></div>
+    </div>
+    <div class="field"><label class="field-label">人数</label>
+      <input class="input" id="re-count" type="number" min="1" max="200" inputmode="numeric" value="${Number(r.count) || 40}">
+      <div class="tiny muted" style="margin-top:4px">没填姓名时，学生页就按 1~这个数按号码点；填了姓名按名单人数走。</div></div>
+    <div class="field"><label class="field-label">学生名单</label>
+      <textarea class="input" id="re-names" rows="8" placeholder="一行一个姓名；也可以从 Excel 复制整列粘进来">${esc(names.join('\n'))}</textarea></div>
+    <div class="row wrap" style="gap:8px;align-items:center">
+      <input type="file" id="re-file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden>
+      <button class="btn ghost sm" id="re-pick">${icon('upload', 14)} 从 Excel / CSV 读取</button>
+      <span class="tiny muted" id="re-hint">已填 ${names.length} 个姓名</span>
+    </div>
+    <div class="confirm-actions">
+      <button class="btn ghost" id="re-cancel">取消</button>
+      <button class="btn primary" id="re-save">保存</button>
+    </div>
+  </div>`);
+  const s = sheet({ title: `编辑「${clsName(r.grade, r.class_name) || '未填班名'}」`, body });
+  const $ = (q) => body.querySelector(q);
+  const countFilled = () => {
+    const n = splitRosterNames($('#re-names').value).length;
+    $('#re-hint').textContent = `已填 ${n} 个姓名`;
+    return n;
+  };
+  $('#re-names').oninput = countFilled;
+
+  $('#re-pick').onclick = () => $('#re-file').click();
+  $('#re-file').onchange = async () => {
+    const f = $('#re-file').files?.[0];
+    if (!f) return;
+    $('#re-hint').textContent = `正在读取 ${f.name}…`;
+    try {
+      const got = await readRosterFile(f);
+      if (!got.names.length) throw new Error('这个文件里没找到姓名列，确认一下表头是不是写着「姓名」');
+      if (got.grade && !$('#re-grade').value.trim()) $('#re-grade').value = got.grade;
+      if (got.class_name && !$('#re-class').value.trim()) $('#re-class').value = got.class_name;
+      $('#re-names').value = got.names.join('\n');
+      countFilled();
+      toast(`从「${f.name}」读到 ${got.names.length} 个姓名`);
+    } catch (e) {
+      countFilled();
+      toast(e.message || '文件读取失败', 'err', 5000);
+    } finally {
+      $('#re-file').value = '';
+    }
+  };
+
+  $('#re-cancel').onclick = () => s.close();
+  $('#re-save').onclick = async () => {
+    const grade = $('#re-grade').value.trim();
+    const class_name = $('#re-class').value.trim();
+    if (!class_name) return toast('班级不能为空', 'warn');
+    const names = splitRosterNames($('#re-names').value);
+    const typed = Number($('#re-count').value);
+    /* 有姓名就以名单人数为准，没姓名才用填的人数 —— 与 PATCH 接口的默认行为一致，
+       但这里显式给，避免空名单把人数冲成 0。 */
+    const count = names.length || (typed > 0 ? Math.floor(typed) : 40);
+    const btn = $('#re-save');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      await api.patch('/rosters/' + r.id, { grade, class_name, names, count });
+      s.close(); toast('已保存'); reload?.();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '保存';
+      toast(e.message || '保存失败', 'err');
+    }
+  };
+}
+
+async function deleteRoster(r, reload) {
+  const label = clsName(r.grade, r.class_name) || '这个班';
+  const n = parseNames(r.names).length;
+  const ask = n
+    ? `删掉「${label}」？名单里的 ${n} 个姓名会一起删掉，删除后可在回收站还原。`
+    : `删掉「${label}」？删除后可在回收站还原。`;
+  if (!(await confirmDialog(ask))) return;
+  try {
+    await api.del('/rosters/' + r.id);
+    toast('已删除，可在回收站还原');
+    reload?.();
+  } catch (e) {
+    toast(e.message || '删除失败', 'err');
+  }
 }
 
 /* ================= 课件 + 课堂签到 ================= */
