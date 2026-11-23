@@ -5,7 +5,7 @@ import {
   ATTENDANCE_COLUMNS, nextTriState, leaveCoversDate, activeLeavesFor,
   deriveRosterState, calculateDailySummary, parseLeaveDuration, formatLeaveDuration, buildAttendanceExportGrid,
   deriveTableGridState, paginateExportGrid, splitAttendanceExportGrid, importAttendanceSummary, attendanceSummaryTotals,
-  summarizeAttendanceMonth, attendanceSummaryMonthBounds,
+  summarizeAttendanceMonth, attendanceSummaryMonthBounds, leaveDayParts, leaveDayPartLabel,
 } from '../js/attendance-prd-domain.mjs';
 
 test('PRD 固定六页签字段顺序', () => {
@@ -13,8 +13,8 @@ test('PRD 固定六页签字段顺序', () => {
   for (const type of ['seat','class','research']) {
     assert.deepEqual(ATTENDANCE_COLUMNS[type], ATTENDANCE_COLUMNS.roster);
   }
-  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['姓名','学科','类型','开始','结束','请假时长','备注']);
-  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.leave, ['归属部门','归属年级','姓名','学科','类型','开始','结束','请假时长','备注']);
+  assert.deepEqual(ATTENDANCE_COLUMNS.summary, ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假时长']);
 });
 
 test('三态循环保持未登记、在岗、未在岗语义', () => {
@@ -67,7 +67,7 @@ test('月汇总按日期和年级累计，优先取确认过的日表，跨月�
   assert.equal(attendanceSummaryMonthBounds('2024-02').end,'2024-02-29');
   const grid=buildAttendanceExportGrid({type:'summary',grade:'高一',summaryMonth:'2026-11',summaryRows});
   assert.equal(grid[1][0],'月汇总 · 2026-11-01 至 2026-11-30');
-  assert.deepEqual(grid[4],[1,'李老师','语文',2,4,0,0,'2天']);
+  assert.deepEqual(grid[4],[1,'高中部','高一','李老师','语文',2,4,0,0,'2天']);
 });
 
 test('请假区间按开始与结束日期覆盖当前日期', () => {
@@ -121,18 +121,32 @@ test('汇总 KPI 跨节次累计，未登记与缺勤不混为一类', () => {
   assert.equal(s.rows[0].overall,'已登记');
 });
 
-test('请假时长支持半天、上午、下午和小时小数', () => {
+test('请假时段按 24 小时制：钟点段取作息表，历史「上午/下午/整天」照样能显示', () => {
   assert.deepEqual(parseLeaveDuration('0.5','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0});
   assert.deepEqual(parseLeaveDuration('0.5','morning'), {duration:0.5,duration_unit:'morning',days:0.5,hours:0});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','morning')),'上午（0.5天）');
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','morning')),'08:00-12:20（0.5天）');
   assert.deepEqual(parseLeaveDuration('0.5','afternoon'), {duration:0.5,duration_unit:'afternoon',days:0.5,hours:0});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'下午（0.5天）');
+  assert.equal(formatLeaveDuration(parseLeaveDuration('0.5','afternoon')),'14:10-17:45（0.5天）');
   assert.deepEqual(parseLeaveDuration('1.5','hour'), {duration:1.5,duration_unit:'hour',days:0,hours:1.5});
   assert.throws(() => parseLeaveDuration('0.25','day'), /0.5天/);
-  /* 用户 11-15 要求：天支持 上午/下午/1天（原「整天」改为「1天」），月按数字填写 */
-  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
-  assert.deepEqual(parseLeaveDuration('1天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'1天'});
-  assert.equal(formatLeaveDuration(parseLeaveDuration('上午','day')),'上午');
+  /* 用户 11-22 要求：不再说上午/下午，按 24 小时钟点段填；半天=0.5 天的折算规则不变 */
+  assert.deepEqual(parseLeaveDuration('08:00-12:20','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'08:00-12:20'});
+  assert.deepEqual(parseLeaveDuration('14:10-17:45','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'14:10-17:45'});
+  assert.deepEqual(parseLeaveDuration('08:00-17:45','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('整天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('1天','day'), {duration:1,duration_unit:'day',days:1,hours:0,day_part:'08:00-17:45'});
+  assert.deepEqual(parseLeaveDuration('上午','day'), {duration:0.5,duration_unit:'day',days:0.5,hours:0,day_part:'08:00-12:20'});
+  assert.equal(formatLeaveDuration(parseLeaveDuration('下午','day')),'14:10-17:45（0.5天）');
+  assert.equal(formatLeaveDuration({day_part:'整天',days:1}),'08:00-17:45（1天）');
+  assert.equal(formatLeaveDuration({days:2,hours:0}),'2天');
+  /* 半天从作息表里最大的那段空当切开，不是写死的 12:00 */
+  assert.deepEqual(leaveDayParts([
+    {no:1,start:'09:00',end:'09:45'},{no:2,start:'10:30',end:'11:15'},{no:3,start:'15:00',end:'15:45'},
+  ]).map(part=>part.label), ['09:00-11:15','15:00-15:45','09:00-15:45']);
+  assert.deepEqual(leaveDayParts().map(part=>part.label), ['08:00-12:20','14:10-17:45','08:00-17:45']);
+  assert.equal(leaveDayPartLabel('上午'),'08:00-12:20');
+  assert.equal(leaveDayPartLabel('08:00-12:20'),'08:00-12:20');
+  assert.equal(leaveDayPartLabel(''),'');
   assert.deepEqual(parseLeaveDuration('1','month'), {duration:1,duration_unit:'month',days:30,hours:0,months:1});
   assert.equal(formatLeaveDuration(parseLeaveDuration('2','month')),'2个月');
 });
@@ -234,8 +248,8 @@ test('四类导出都保留全量名单并显示对应状态（11-12 新裁决�
   assert.match(summary[0][0],/汇总统计表/);
   assert.match(summary[1][0],/^日汇总 · 2026-11-11 /);
   assert.ok(!/应到/.test(summary[2][0]),'汇总表标题不应再出现应到');
-  assert.deepEqual(summary[3],['序号','姓名','学科','坐班','上课','听课','教研','请假时长']);
-  assert.equal(summary[4][1],'李老师');
+  assert.deepEqual(summary[3],['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假时长']);
+  assert.deepEqual(summary[4].slice(0,4),[1,'高中部','高一','李老师']);
 });
 
 test('上课表统计：有人听课才展示听课人数', () => {

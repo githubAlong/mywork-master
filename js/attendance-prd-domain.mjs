@@ -21,8 +21,10 @@ export const ATTENDANCE_COLUMNS = {
   seat: TEACHER_COLUMNS,
   class: TEACHER_COLUMNS,
   research: TEACHER_COLUMNS,
-  leave: ['姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
-  summary: ['序号', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长'],
+  /* 2026-11-22：请假表与汇总统计表补上归属部门/归属年级，和花名册四表口径一致。
+     summary 同时是导出表头，改这里要一起改 buildAttendanceExportGrid 的 summary 行。 */
+  leave: ['归属部门', '归属年级', '姓名', '学科', '类型', '开始', '结束', '请假时长', '备注'],
+  summary: ['序号', '归属部门', '归属年级', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假时长'],
 };
 
 export function nextTriState(value) {
@@ -198,6 +200,25 @@ export function matchesGridTeacher(row, teacher) {
     && String(row?.subject || '').trim() === String(teacher?.subject || '').trim();
 }
 
+/** 一行只允许一个状态（用户 11-23 要求）：按 priorityKeys 顺序挑出第一个已登记的，
+ * 其余一律清成未登记。单张表内和跨表拼出来的行都走这里，
+ * 避免出现「听课√ + 教研√」这种自相矛盾的记录。 */
+export function resolveSingleGridState(state = {}, priorityKeys = GRID_KEYS) {
+  const marked = key => state[key] === 'y' || state[key] === 'n' || state[key] === true
+    || state[key + 'Status'] === 'y' || state[key + 'Status'] === 'n';
+  const selected = priorityKeys.find(key => marked(key));
+  if (!selected) return state;
+  const next = { ...state };
+  for (const key of priorityKeys) {
+    if (key === selected) continue;
+    next[key] = 'u';
+    /* Status 变体只在本来就有时才一起清：界面取的是 listenStatus || listen，
+       凭空补一个 'u' 会把真正的勾选项盖成空白。 */
+    if (next[key + 'Status'] !== undefined) next[key + 'Status'] = 'u';
+  }
+  return next;
+}
+
 export function deriveTableGridState(teacher, type, rows, context = {}) {
   const legacy = deriveLegacyRosterState(teacher, {
     ...context, seatRows: [], classRows: [], researchRows: [],
@@ -221,9 +242,7 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
   // Historical multi-category entries display one category without rewriting history.
   /* 单张表内也按全局优先级裁决（上课 > 坐班 > 听课 > 教研），
      历史数据里一格同时留了多个状态时，保留的必须是优先级最高的那个。 */
-  const selected = ['class','sit','listen','research'].find(key => result[key] === 'y' || result[key] === 'n');
-  for (const key of GRID_KEYS) if (key !== selected) result[key] = 'u';
-  return result;
+  return resolveSingleGridState(result);
 }
 
 export function updateTeacherGrid(rows, teacher, type, period, key, value, context = {}) {
@@ -389,13 +408,55 @@ export function calculateDailySummary(context = {}) {
   return summary;
 }
 
+/* 用户 11-22 要求：时段一律按 24 小时制显示，不再说「上午/下午」。
+   半天从作息表里最大的那段空当切开（午休），空当之前是前半段、之后是后半段，
+   钟点取真实节次，不是拍脑袋写的 12:00。节次不足两段时返回空，交给调用方兜底。 */
+export function leaveDayParts(periods = DEFAULT_PERIODS) {
+  const clock = value => String(value).trim().padStart(5, '0');
+  const toMinutes = value => { const [h, m] = clock(value).split(':').map(Number); return h * 60 + m; };
+  const list = (Array.isArray(periods) ? periods : [])
+    .filter(item => /^\d{1,2}:\d{2}$/.test(String(item?.start)) && /^\d{1,2}:\d{2}$/.test(String(item?.end)));
+  if (list.length < 2) return [];
+  let cut = 1, gap = -1;
+  for (let i = 1; i < list.length; i += 1) {
+    const size = toMinutes(list[i].start) - toMinutes(list[i - 1].end);
+    if (size > gap) { gap = size; cut = i; }
+  }
+  const first = { start: clock(list[0].start), end: clock(list[cut - 1].end) };
+  const last = { start: clock(list[cut].start), end: clock(list[list.length - 1].end) };
+  return [
+    { label: first.start + '-' + first.end, days: 0.5, ...first },
+    { label: last.start + '-' + last.end, days: 0.5, ...last },
+    { label: first.start + '-' + last.end, days: 1, start: first.start, end: last.end },
+  ];
+}
+
+/* 库里还存着「上午/下午/1天」的历史记录，展示和编辑时统一换成作息表钟点段。 */
+const LEGACY_DAY_PARTS = { 上午: 0, 下午: 1, 整天: 2, '1天': 2 };
+export const LEAVE_DAY_PART_PATTERN = /^\d{2}:\d{2}-\d{2}:\d{2}$/;
+export function leaveDayPartLabel(value, periods = DEFAULT_PERIODS) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const legacy = LEGACY_DAY_PARTS[text];
+  if (legacy === undefined) return text;
+  return leaveDayParts(periods)[legacy]?.label || text;
+}
+
 export function parseLeaveDuration(amount, unit='day') {
   if (!['day','hour','month','morning','afternoon'].includes(unit)) throw new Error('请选择请假时长单位');
   if (unit === 'morning' || unit === 'afternoon') return {duration:0.5,duration_unit:unit,days:0.5,hours:0};
-  /* 天单位支持「上午/下午/1天」三个时段（用户 11-15 要求，整天改为 1天） */
-  if (unit === 'day' && ['上午','下午','整天','1天'].includes(String(amount))) {
-    const days = ['整天','1天'].includes(String(amount)) ? 1 : 0.5;
-    return {duration:days,duration_unit:'day',days,hours:0,day_part:days===1?'1天':String(amount)};
+  const text = String(amount).trim();
+  /* 按天请假只给作息表的三段钟点（前半段 / 后半段 / 全天），0.5 天与 1 天的折算规则不变 */
+  if (unit === 'day' && (text in LEGACY_DAY_PARTS || LEAVE_DAY_PART_PATTERN.test(text))) {
+    const label = leaveDayPartLabel(text) || text;
+    const hit = leaveDayParts().find(item => item.label === label);
+    const span = LEAVE_DAY_PART_PATTERN.test(label)
+      ? (() => { const [from, to] = [label.slice(0, 5), label.slice(6, 11)];
+        const mins = (Number(to.slice(0, 2)) * 60 + Number(to.slice(3, 5))) - (Number(from.slice(0, 2)) * 60 + Number(from.slice(3, 5)));
+        return mins >= 8 * 60 ? 1 : 0.5; })()
+      : 0.5;
+    const days = hit ? hit.days : (text === '整天' || text === '1天' ? 1 : span);
+    return {duration:days,duration_unit:'day',days,hours:0,day_part:label};
   }
   const value=Number(amount);
   if (String(amount).trim()==='' || !Number.isFinite(value) || value<=0) throw new Error('请假时长必须大于0，不能为负数');
@@ -405,11 +466,15 @@ export function parseLeaveDuration(amount, unit='day') {
   return {duration:value,duration_unit:unit,days:unit==='day'?value:0,hours:unit==='hour'?value:0};
 }
 export function formatLeaveDuration(record) {
-  /* 历史数据的「整天」统一展示为「1天」（用户 11-15 要求） */
-  if (record?.day_part === '整天') return '1天';
-  if (record?.day_part) return record.day_part;
-  if (record?.duration_unit === 'morning') return '上午（0.5天）';
-  if (record?.duration_unit === 'afternoon') return '下午（0.5天）';
+  const days = Number(record?.days) || 0;
+  /* 时段按 24 小时制显示（用户 11-22 要求）：历史「上午/下午/整天」也换成作息表钟点段，
+     后面的天数保留，否则只看钟点看不出这是一半天还是一整天。 */
+  if (record?.day_part) {
+    const label = leaveDayPartLabel(record.day_part);
+    return days ? label + '（' + Number(Number(days).toFixed(2)) + '天）' : label;
+  }
+  if (record?.duration_unit === 'morning') return leaveDayParts()[0].label + '（0.5天）';
+  if (record?.duration_unit === 'afternoon') return leaveDayParts()[1].label + '（0.5天）';
   if (record?.duration_unit === 'month') {
     const months=Number(record.months ?? record.duration ?? 0);
     return Number(Number(months).toFixed(2))+'个月';
@@ -599,13 +664,16 @@ const exportRowData = row => row?.data && typeof row.data === 'object' ? row.dat
    用户 11-12 裁决：导出要让每位教师的状态都能看到，空白表格没有意义。 */
 const exportStatusLabel = value => value === 'y' ? '✓' : value === 'n' ? '✗' : '未登记';
 const exportName = row => String(row?.name || row?.teacher || '').trim();
-const exportLeavePeriod = record => String(record?.period || record?.time_period || record?.part_of_day || record?.period_label || '').trim();
+/* 旧数据把时段存在 period，PRD 版存在 day_part（作息表钟点段），导出都要认。 */
+const exportLeavePeriod = record => String(record?.period || record?.time_period || record?.part_of_day
+  || record?.period_label || leaveDayPartLabel(record?.day_part) || '').trim();
 const exportLeaveDuration = record => {
   const raw = Number(record?.duration) || 0;
   const days = Number(record?.days ?? (record?.duration_unit === 'hour' ? 0 : raw)) || 0;
   const hours = Number(record?.hours ?? (record?.duration_unit === 'hour' ? raw : 0)) || 0;
   if (days > 0 || hours > 0) return formatLeaveDuration({ days, hours });
-  if (['上午', '下午'].includes(exportLeavePeriod(record))) return '0.5天';
+  const period = exportLeavePeriod(record);
+  if (['上午', '下午'].includes(period) || leaveDayParts().slice(0, 2).some(item => item.label === period)) return '0.5天';
   return '未填写';
 };
 
@@ -870,8 +938,13 @@ export function buildAttendanceExportGrid({
     const summary = Array.isArray(summaryRows)
       ? attendanceSummaryTotals(summaryRows)
       : calculateDailySummary({ teachers: people, seatRows, classRows, researchRows, leaveRecords, date });
+    /* 汇总行不一定带 teacherId（历史确认结果里没有这个字段），所以 id 优先、姓名兜底。 */
+    const teacherById = new Map((Array.isArray(teachers) ? teachers : [])
+      .filter(Boolean).map(teacher => [String(teacher.id), teacher]));
+    const rowTeacher = row => teacherById.get(String(row.teacherId)) || teacherByName.get(String(row.name || '').trim());
     const rows = summary.rows.map((row, index) => [
-      index + 1, row.name, row.subject, row.seatPresent, row.classes, row.listens,
+      index + 1, departmentOf(rowTeacher(row)), gradeOf(rowTeacher(row), row),
+      row.name, row.subject, row.seatPresent, row.classes, row.listens,
       row.research, formatLeaveDuration({ days: row.leaveDays, hours: row.leaveHours }),
     ]);
     /* 用户 11-15 需求：导出统一去掉「应到人数」 */

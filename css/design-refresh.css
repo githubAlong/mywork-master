@@ -164,3 +164,51 @@ button, input, textarea, select { font-family: inherit; }
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* ===== 点名页 · 班级名单行内操作 + 完整名单网格 ===== */
+.ros-row { gap: 6px; }
+.ros-row .ros-preview {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ros-row .icon-btn { flex: none; }
+.ros-row .icon-btn:last-child:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+@media (max-width: 760px) {
+  .ros-row { flex-wrap: wrap; }
+  .ros-row .ros-preview { order: 9; flex: 1 1 100%; max-width: 100%; }
+}
+.ros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px;
+  max-height: 46vh;
+  padding: 2px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.ros-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--bg-sunken, #ececf2);
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+}
+.ros-item i {
+  flex: none;
+  min-width: 15px;
+  font-style: normal;
+  font-size: 11px;
+  text-align: right;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.ros-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

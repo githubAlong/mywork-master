@@ -180,7 +180,8 @@
 .attendance-prd .aprd-filter input,.attendance-prd .aprd-filter select{height:32px;border:1px solid #dce5f1;border-radius:8px;padding:0 9px;background:#fff;color:#263650;font:inherit;font-size:12px}
 .attendance-prd .aprd-filter input:focus,.attendance-prd .aprd-filter select:focus{outline:none;border-color:#6b9cff;box-shadow:0 0 0 3px rgba(22,93,255,.09)}
 .attendance-prd .aprd-filter input[type=date]{width:132px}
-.attendance-prd .aprd-filter input[type=time]{width:96px}
+/* 时段是 24 小时文本框（原生 time 控件在中文环境渲染成「上午 08:00」，lang 改不动），宽度按 5 个字符给 */
+.attendance-prd .aprd-filter .aprd-hhmm{width:74px;padding:0 6px;text-align:center;font-variant-numeric:tabular-nums}
 .attendance-prd .aprd-time-range{display:inline-flex;align-items:center;gap:6px}
 .attendance-prd .aprd-time-sep{color:#98a6ba}
 .attendance-prd .aprd-filter-actions{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
@@ -267,7 +268,7 @@
 @media(max-width:600px){
  .attendance-prd .aprd-head-title h2{font-size:18px}
  .attendance-prd .aprd-filter-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
- .attendance-prd .aprd-filter input[type=date],.attendance-prd .aprd-filter input[type=time]{width:100%}
+ .attendance-prd .aprd-filter input[type=date],.attendance-prd .aprd-filter .aprd-hhmm{width:100%}
  .attendance-prd .aprd-time-range{width:100%}
  .attendance-prd .aprd-time-range input{flex:1;min-width:0}
  .attendance-prd .aprd-filter-actions{flex-wrap:wrap}
@@ -335,7 +336,8 @@
 .attendance-prd .aprd-table-wrap thead th{background:#f7f9fc;color:#74839a;font-weight:600;font-size:12px;padding:12px 10px;border-bottom:1px solid #e6ecf5;white-space:nowrap}
 .attendance-prd .aprd-table-wrap tbody td{padding:10px}
 .attendance-prd .aprd-table-wrap tbody tr:nth-child(even){background:#fff}
-.attendance-prd .aprd-table-wrap tbody td:first-child{color:#94a1b4}
+/* 序号列淡色：用类而不是 td:first-child，因为请假表没有序号列，首列是归属部门。 */
+.attendance-prd .aprd-table-wrap tbody td.aprd-serial{color:#94a1b4}
 
 /* 生成班表：下拉按钮，选项里标出当前选择 */
 .attendance-prd .aprd-filter-actions .aprd-generate-btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#354965;font-size:13px;cursor:pointer}
@@ -507,3 +509,58 @@
  .attendance-prd .aprd-import-foot-actions button{flex:1}
  .attendance-prd .aprd-png-hint{display:none}
 }
+
+/* 当前批次条 + 未确认变更（2026-11-22）：批次口径要一眼看清，差异要能在表里定位到人 */
+.attendance-prd .aprd-batch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:9px 13px;border:1px solid #e0e9f7;border-radius:10px;background:linear-gradient(180deg,#f7faff,#fff)}
+.attendance-prd .aprd-batch-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#5b6b85}
+.attendance-prd .aprd-batch-label{padding:2px 8px;border-radius:999px;background:#eaf2ff;color:#0b57d0;font-size:11px;font-weight:650}
+.attendance-prd .aprd-batch-main b{color:#172744;font-size:13px;font-weight:650}
+.attendance-prd .aprd-batch-period{color:#0b57d0;font-weight:650}
+.attendance-prd .aprd-batch-side{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.attendance-prd .aprd-batch-note{font-size:11px;color:#8794a8}
+.attendance-prd .aprd-dirty-badge{height:27px;padding:0 11px;border:1px solid #f3d3a6;border-radius:999px;background:#fff6e6;color:#96600d;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+.attendance-prd .aprd-dirty-badge:hover{background:#ffefcf}
+.attendance-prd .aprd-dirty{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid #f3d3a6;border-radius:999px;background:#fff6e6;color:#96600d;font-size:10px;font-weight:650;vertical-align:middle}
+.attendance-prd .aprd-row-flash>td{animation:aprdRowFlash 1.4s ease-out}
+@keyframes aprdRowFlash{0%{background:#ffe9bd}100%{background:transparent}}
+.attendance-prd #aprd-period option.aprd-period-off{color:#a4b0c2}
+@media(max-width:760px){
+ .attendance-prd .aprd-batch{align-items:flex-start;flex-direction:column;gap:7px}
+ .attendance-prd .aprd-batch-side{width:100%;justify-content:space-between}
+}
+
+/* ============================================================
+   2026-11-22 批量导入 / 批量导出上移到卡片右上角（与页签同一行）：
+   操作不能直接塞进 .aprd-tabs —— 那是 overflow-x:auto 的横滚容器，
+   导出面板向下展开会被裁掉，所以外面套一行、只让页签自己滚。
+   ============================================================ */
+.attendance-prd .aprd-tabs-row{display:flex;align-items:center;gap:14px;margin:0 0 14px;border-bottom:1px solid #e4ebf5}
+.attendance-prd .aprd-tabs-row .aprd-tabs{flex:1 1 auto;min-width:0;margin:0;padding:0;border-bottom:0}
+.attendance-prd .aprd-card .aprd-tabs-row{margin:0 -16px 14px;padding:0 16px}
+.attendance-prd .aprd-card .aprd-tabs-row .aprd-tabs{margin:0;padding:0}
+.attendance-prd .aprd-tab-actions{margin-left:auto}
+.attendance-prd .aprd-tab-actions button{height:34px;padding:0 13px;border:1px solid #dce5f1;border-radius:8px;background:#fff;color:#3f526d;font-size:12px;cursor:pointer;white-space:nowrap}
+.attendance-prd .aprd-tab-actions button:hover{border-color:#b9d2ff;color:#165dff}
+.attendance-prd .aprd-tab-actions .aprd-export-toggle{display:inline-flex;align-items:center;gap:6px}
+@media(max-width:760px){
+ /* 装得下就和页签同一行，放不下才让操作整组换到第二行（页签自己横滚）。 */
+ .attendance-prd .aprd-tabs-row{flex-wrap:wrap}
+ .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -16px 12px;padding:0 16px}
+ /* 窄屏上这一组贴右缘，导出面板必须跟着向右对齐展开，否则会顶出视口。 */
+ .attendance-prd .aprd-tab-actions .aprd-export-menu{right:0;left:auto;max-width:calc(100vw - 32px)}
+}
+@media(max-width:600px){
+ .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -12px 12px;padding:0 12px}
+}
+
+/* =============== 学科管理弹窗（用户 11-22：学科清单独立维护，改名连带历史） =============== */
+.attendance-prd .aprd-subject-editor{width:min(520px,100%)}
+.attendance-prd .aprd-subject-editor>p{margin:0;font-size:12px;color:#7a899e;line-height:1.6}
+.attendance-prd .aprd-subject-list{border:1px solid #e1e8f2;border-radius:10px;overflow:hidden}
+.attendance-prd .aprd-subject-head,.attendance-prd .aprd-subject-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;padding:9px 12px}
+.attendance-prd .aprd-subject-head{background:#f3f6fb;color:#53627a;font-size:11px}
+.attendance-prd .aprd-subject-row{border-top:1px solid #edf1f6;font-size:12px}
+.attendance-prd .aprd-subject-row b{color:#24324a;font-weight:600}
+.attendance-prd .aprd-subject-row span{color:#7a899e}
+.attendance-prd .aprd-subject-row .aprd-actions{color:inherit}
+.attendance-prd .aprd-subject-list .aprd-empty{padding:22px 12px}

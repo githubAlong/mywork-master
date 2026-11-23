@@ -7,6 +7,7 @@ const output = path.join(root, 'dist');
 const files = [
   '_headers',
   'index.html',
+  'app.html',
   'manifest.webmanifest',
   'sw.js',
   'app.js',
