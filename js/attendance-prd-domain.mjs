@@ -200,6 +200,25 @@ export function matchesGridTeacher(row, teacher) {
     && String(row?.subject || '').trim() === String(teacher?.subject || '').trim();
 }
 
+/** 一行只允许一个状态（用户 11-23 要求）：按 priorityKeys 顺序挑出第一个已登记的，
+ * 其余一律清成未登记。单张表内和跨表拼出来的行都走这里，
+ * 避免出现「听课√ + 教研√」这种自相矛盾的记录。 */
+export function resolveSingleGridState(state = {}, priorityKeys = GRID_KEYS) {
+  const marked = key => state[key] === 'y' || state[key] === 'n' || state[key] === true
+    || state[key + 'Status'] === 'y' || state[key + 'Status'] === 'n';
+  const selected = priorityKeys.find(key => marked(key));
+  if (!selected) return state;
+  const next = { ...state };
+  for (const key of priorityKeys) {
+    if (key === selected) continue;
+    next[key] = 'u';
+    /* Status 变体只在本来就有时才一起清：界面取的是 listenStatus || listen，
+       凭空补一个 'u' 会把真正的勾选项盖成空白。 */
+    if (next[key + 'Status'] !== undefined) next[key + 'Status'] = 'u';
+  }
+  return next;
+}
+
 export function deriveTableGridState(teacher, type, rows, context = {}) {
   const legacy = deriveLegacyRosterState(teacher, {
     ...context, seatRows: [], classRows: [], researchRows: [],
@@ -223,9 +242,7 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
   // Historical multi-category entries display one category without rewriting history.
   /* 单张表内也按全局优先级裁决（上课 > 坐班 > 听课 > 教研），
      历史数据里一格同时留了多个状态时，保留的必须是优先级最高的那个。 */
-  const selected = ['class','sit','listen','research'].find(key => result[key] === 'y' || result[key] === 'n');
-  for (const key of GRID_KEYS) if (key !== selected) result[key] = 'u';
-  return result;
+  return resolveSingleGridState(result);
 }
 
 export function updateTeacherGrid(rows, teacher, type, period, key, value, context = {}) {

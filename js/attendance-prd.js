@@ -13,7 +13,7 @@ import {
   DEFAULT_PERIODS, LEAVE_TYPES, ATTENDANCE_COLUMNS, buildAttendanceExportGrid, parseLeaveDuration, formatLeaveDuration,
   nextTriState, activeLeavesFor, deriveRosterState, calculateDailySummary,
   matchesAttendancePeriod, deriveTableGridState, updateTeacherGrid, mergeTeacherGridRows, matchesGridTeacher, paginateExportGrid,
-  splitAttendanceExportGrid,
+  splitAttendanceExportGrid, resolveSingleGridState,
   SUMMARY_COUNT_FIELDS, attendanceSummaryTotals, attendanceSummaryMonthBounds, summarizeAttendanceMonth,
   updateAttendanceSummaryRow, importAttendanceSummary, leaveDayParts, leaveDayPartLabel,
 } from './attendance-prd-domain.mjs';
@@ -30,6 +30,10 @@ const GRID_STATE_COLUMNS = { seat:['sit','class','listen','research','leave'], c
    不属于本表的格子只读回显当天坐班总表的状态，避免出现第二条写入路径。 */
 const SHEET_STATE_COLUMNS = GRID_STATE_COLUMNS.seat;
 const GRID_STATE_LABELS = { sit:'坐班', class:'上课', listen:'听课', research:'教研', leave:'请假' };
+/* 用户 11-23 要求：一个人同一节只能有一个状态。四列勾选项按这个优先级裁决，
+   和 attendance-prd-domain.mjs 里单表内的顺序保持一致，谁先看谁后看都算得出同一个赢家。 */
+const GRID_STATE_PRIORITY = ['class', 'sit', 'listen', 'research'];
+const GRID_STATE_OWNERS = { sit:['seat'], class:['seat','class'], listen:['seat','class'], research:['seat','research'] };
 const TYPE = { seat:'seat', class:'class', research:'research' };
 const SHEET_LABELS = { seat:'坐班表', class:'上课表', research:'教研表', leave:'请假表', summary:'汇总统计表' };
 const TODAY = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
@@ -1391,6 +1395,64 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     }
     return next;
   };
+  /* 请假可能记在坐班表、教研表的下拉里，也可能只在请假总表里。
+     挡勾选项要看的是「这一节他请没请假」，不能只看本表那一条记录。 */
+  const rowLeaveOf = teacher => String(deriveRosterState(teacher, {
+    leaveRecords, date, period,
+    seatRows: getDraftRows('seat'), classRows: getDraftRows('class'), researchRows: getDraftRows('research'),
+  }).leave || '');
+  /* 五列全局互斥（用户 11-23 要求）：本表勾了某一项，其他三项在归属表里一并清掉。
+     updateTeacherGrid 的互斥只管单张表，跨表管不着 —— 上课表勾了听课、坐班表还留着教研，
+     两张表各说各的，导出和统计也跟着错。清完要落库，并告诉他旧表多了未确认变更。 */
+  const clearOtherGridStates = (teacher, currentType, key) => {
+    const cleared = [];
+    const owners = new Set();
+    for (const [otherKey, tableTypes] of Object.entries(GRID_STATE_OWNERS)) {
+      if (otherKey === key) continue;
+      for (const owner of tableTypes) {
+        if (owner === currentType) continue;
+        const own = deriveTableGridState(teacher, owner, getDraftRows(owner), { leaveRecords, date, period });
+        if (own[otherKey] !== 'y' && own[otherKey] !== 'n') continue;
+        updateWorksheet(teacher, owner, otherKey, 'u');
+        cleared.push({ type: owner, key: otherKey });
+        owners.add(owner);
+      }
+    }
+    return { cleared, owners };
+  };
+  const saveClearedGridOwners = async owners => {
+    try {
+      for (const owner of owners) await persistDraft(owner, { reload: false });
+    } catch (error) {
+      toast('旧状态清理保存失败：' + attendanceErrorText(error), 'err', 5000);
+    }
+  };
+  const applyGridExclusiveStates = async (teacher, currentType, key, value) => {
+    if (value !== 'y' && value !== 'n') return;
+    const { cleared, owners } = clearOtherGridStates(teacher, currentType, key);
+    if (!cleared.length) return;
+    await saveClearedGridOwners(owners);
+    const names = cleared.map(item => SHEET_LABELS[item.type] + '的' + GRID_STATE_LABELS[item.key]);
+    toast(teacher.name + '：已清掉' + names.join('、') + '，本时段只保留' + GRID_STATE_LABELS[key]
+      + '（' + [...owners].map(owner => SHEET_LABELS[owner]).join('、') + '有未确认变更，点确认生成后同步）', 'warn', 6000);
+  };
+  /* 请假和四个勾选项也互斥：选了请假类型，本时段勾过的一律清掉，
+     不然请假记录还在、勾也留着，导出会把两样都算上。
+     updateTeacherGrid 在 key 属于状态列时会把其余状态列一起清空，写 'class' 就是整行清勾。 */
+  const clearGridStatesForLeave = async (teacher, currentType) => {
+    const owners = new Set(GRID_STATE_PRIORITY.flatMap(key => GRID_STATE_OWNERS[key]));
+    const dirty = new Set();
+    for (const owner of owners) {
+      const own = deriveTableGridState(teacher, owner, getDraftRows(owner), { leaveRecords, date, period });
+      if (!GRID_STATE_PRIORITY.some(key => own[key] === 'y' || own[key] === 'n')) continue;
+      updateWorksheet(teacher, owner, 'class', 'u');
+      /* 只落真正改过的表：getDraftRows('seat') 会给缺的人补空行，
+         没改也去 persistDraft 就等于凭空往坐班表塞空记录。 */
+      if (owner !== currentType) dirty.add(owner);
+    }
+    if (dirty.size) await saveClearedGridOwners(dirty);
+    return dirty;
+  };
   const worksheetEntries = (type, useSeatDraft=false, showAll=false) => {
     const draftRows = getDraftRows(type);
     const context = {leaveRecords,date,period};
@@ -1504,7 +1566,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       ? new Map(worksheetEntries('seat', isEditing('seat'), true).map(({ teacher, state }) => [String(teacher.id), state]))
       : null;
     const viewStateOf = (teacher, state) => {
-      if (!seatStates) return state;
+      /* 五列全局互斥（用户 11-23 要求）：一行只留一个状态。
+         坐班表自己就是总表，按 上课 > 坐班 > 听课 > 教研 裁决即可。 */
+      if (!seatStates) return resolveSingleGridState(state, GRID_STATE_PRIORITY);
       const merged = { ...(seatStates.get(String(teacher.id)) || {}), listeners: state.listeners };
       /* 本表自己的列（连同记 y/n 的 *Status 变体）一律用本表数据：
          坐班表刚勾、还没确认生成时，子表这一格不能先显示成已登记。 */
@@ -1512,7 +1576,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         merged[key] = state[key];
         if (key === 'listen' || key === 'research') merged[key + 'Status'] = state[key + 'Status'];
       }
-      return merged;
+      /* 子表里本表勾的排前面，坐班总表回显的排后面：
+         上课表刚勾了听课、坐班表还留着教研时，这一行显示的是他手上这次勾选。 */
+      return resolveSingleGridState(merged, [
+        ...GRID_STATE_PRIORITY.filter(key => nativeKeys.includes(key)),
+        ...GRID_STATE_PRIORITY.filter(key => !nativeKeys.includes(key)),
+      ]);
     };
     const editableKey = key => editable && nativeKeys.includes(key);
     /* 花名册只维护教师名单：考勤状态不展示，但保留一列可直接填写的备注（用户 11-15 要求）。 */
@@ -1549,8 +1618,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const label = value === 'y' ? '√' : value === 'n' ? '×' : '空白';
         const stateText = value === 'y' ? '正常' : value === 'n' ? '异常' : '未登记';
         const aria = 'aria-label="'+esc(teacher.name+' '+({class:'上课',sit:'坐班',listen:'听课',research:'教研'}[key])+'：'+stateText)+'"';
+        /* 点格子接着「屏幕上这一格」往下循环，不能按合并前的原始值走：
+           五列互斥后别的状态已经被压成空白，按原始值点会变成点一下就出 ×。 */
+        const shownAttr = ' data-grid-value="'+value+'"';
         if (!editableKey(key)) return '<span class="aprd-mark '+value+(value==='u'?' ap-placeholder':'')+'" '+aria+'>'+(value==='u'?'—':label)+'</span>';
-        return '<button type="button" class="aprd-select '+value+'" data-grid-person="'+esc(teacher.id)+'" data-grid-key="'+key+'" '+aria
+        return '<button type="button" class="aprd-select '+value+'" data-grid-person="'+esc(teacher.id)+'" data-grid-key="'+key+'"'+shownAttr+' '+aria
           +'><span>'+label+'</span><i class="aprd-caret"></i></button>';
       };
       const listen = shown.listenStatus || (shown.listen === true ? 'y' : shown.listen);
@@ -1800,11 +1872,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     ], { teacher: String(teachers[0]?.id || ''), remark: '' }, async data => {
       const teacher = teachers.find(item => String(item.id) === String(data.teacher));
       if (!teacher) throw new Error('要选一位教师');
+      const leaveText = rowLeaveOf(teacher);
+      if (leaveText) throw new Error(teacher.name + ' 本时段已请假（' + leaveText + '），请先在请假表取消请假');
       const remark = String(data.remark || '').trim();
       editingSheet = editKey(type);
       updateWorksheet(teacher, type, key, 'y');
       if (remark) updateWorksheet(teacher, type, 'remark', remark);
       scheduleAutoSave(type);
+      await applyGridExclusiveStates(teacher, type, key, 'y');
       paint();
       toast('已登记 ' + teacher.name + ' 的' + ADD_ACTIONS[type][1] + '，确认后才会生成', 'ok');
     });
@@ -2132,17 +2207,30 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const draft=getDraftRows(tab);
         const state = tab==='seat' ? deriveTableGridState(teacher,tab,draft,{leaveRecords,date,period})
           : worksheetState(teacher,tab,draft);
-        const value = nextTriState(state[key]);
-        update(value); paint(); scheduleAutoSave(tab);
+        const value = nextTriState(control.dataset.gridValue || state[key]);
+        const leaveText = rowLeaveOf(teacher);
+        /* 请假记录跨整天，不能替他悄悄取消：这一节已经请假的人要勾别的状态，
+           先让他去请假表把请假改掉，不然勾和请假会同时算进导出。 */
+        if (value !== 'u' && leaveText) {
+          toast(teacher.name+' 本时段已请假（'+leaveText+'），要改成'+GRID_STATE_LABELS[key]+'请先在请假表取消请假','warn',5000);
+          return;
+        }
+        update(value);
+        await applyGridExclusiveStates(teacher, tab, key, value);
+        paint(); scheduleAutoSave(tab);
       };
       /* 备注列直接用行内输入框，写完（回车或失焦）即保存到本表的 __teacherGrid。 */
       else if (key === 'remark') control.addEventListener('change', () => {
         if(generating)return;
         update(String(control.value??'').trim()); scheduleAutoSave(tab);
       });
-      else if (key === 'leave') control.addEventListener('change', () => {
+      else if (key === 'leave') control.addEventListener('change', async () => {
         if(generating)return;
-        update(control.value);scheduleAutoSave(tab);paint();
+        const value=String(control.value??'');
+        update(value);
+        /* 请假和勾是同一件事的两种说法：登记了请假，这一节就不能再算上课/坐班/听课/教研。 */
+        if (value) await clearGridStatesForLeave(teacher, tab);
+        scheduleAutoSave(tab);paint();
       });
       else control.addEventListener('change',() => {update(control.value);scheduleAutoSave(tab);});
     });
@@ -2154,8 +2242,18 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const options=[{value:'u',label:'空白'},{value:'y',label:'√'},{value:'n',label:'×'}];
       const fields=keys.map(key=>({key,label:key==='listen'?'听课人':GRID_STATE_LABELS[key],type:'select',options}));
       openEditor('编辑考勤记录 · '+teacher.name,[...fields,{key:'remark',label:'备注'}],state,async data=>{
+        const leaveText = rowLeaveOf(teacher);
+        /* 只挡「这次把勾改出来」：存量里本来就带着勾、又只想改备注的人，不能不让他保存。 */
+        if (leaveText && keys.some(key=>data[key]!==state[key]&&(data[key]==='y'||data[key]==='n'))) {
+          throw new Error(teacher.name+' 本时段已请假（'+leaveText+'），请先在请假表取消请假');
+        }
         for(const key of [...keys,'remark'])if(data[key]!==state[key])updateWorksheet(teacher,type,key,data[key]);
         await persistDraft(type,{reload:false});
+        /* 弹窗里一次能改两列（上课表有上课+听课人），落盘后按本表真实状态
+           找出留下来的那一项，再去别的表清掉同一时段的旧勾。 */
+        const after = deriveTableGridState(teacher, type, getDraftRows(type), { leaveRecords, date, period });
+        const winner = GRID_STATE_PRIORITY.find(key=>after[key]==='y'||after[key]==='n');
+        if (winner) await applyGridExclusiveStates(teacher, type, winner, after[winner]);
         editConfirmedSheet();
         paint();
       });
