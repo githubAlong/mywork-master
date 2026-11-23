@@ -736,7 +736,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     });
     const totalWidth=widths.reduce((sum,value)=>sum+value,0);
     const headingBlocks=[];
-    if(title)headingBlocks.push({text:title,font:'bold 24px "Microsoft YaHei",sans-serif',color:'#10203a',gap:28,rule:true});
+    if(title)headingBlocks.push({text:title,font:'bold 24px "Microsoft YaHei",sans-serif',color:'#10203a',gap:28});
     if(subtitle)headingBlocks.push({text:subtitle,font:'600 14px "Microsoft YaHei",sans-serif',color:'#16263c',gap:26});
     if(stats)headingBlocks.push({text:stats,font:'12.5px "Microsoft YaHei",sans-serif',color:'#2b3b53',gap:26});
     /* 抬头区高度按实际标题行数算：标题 46 起步，行距 28/26/26，底部留 6 */
@@ -760,7 +760,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       headingBlocks.forEach(block=>{
         ctx.fillStyle=block.color;ctx.font=block.font;
         ctx.fillText(block.text,W/2,lineY);
-        if(block.rule){ctx.fillStyle='#2a6bf2';ctx.fillRect(W/2-58,lineY+13,116,2.5);}
         lineY+=block.gap;
       });
       if(headingBlocks.length){
@@ -773,7 +772,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         ctx.fillStyle='#eef3fa';ctx.fillRect(x,y,widths[index],rowH);
         ctx.strokeStyle='#b7c6db';ctx.lineWidth=1.4;
         ctx.strokeRect(x+0.7,y+0.7,widths[index]-1.4,rowH-1.4);
-        ctx.fillStyle='#34445d';ctx.font='bold '+tableFont;
+        ctx.fillStyle='#000';ctx.font='bold '+tableFont;
         ctx.textAlign='center';
         ctx.fillText(String(label),x+widths[index]/2,y+31);x+=widths[index];
       });
@@ -783,7 +782,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
           ctx.fillStyle=rowIndex%2?'#f9fbfe':'#fff';ctx.fillRect(x,y,widths[index],rowH);
           ctx.strokeStyle='#cbd7e7';ctx.lineWidth=1.2;
           ctx.strokeRect(x+0.6,y+0.6,widths[index]-1.2,rowH-1.2);
-          ctx.fillStyle='#34445d';ctx.font=tableFont;
+          ctx.fillStyle='#000';ctx.font=tableFont;
           ctx.textAlign='center';
           ctx.fillText(String(value??'').slice(0,32),x+widths[index]/2,y+31);x+=widths[index];
         });
