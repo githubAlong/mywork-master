@@ -16,6 +16,7 @@ import {
   splitAttendanceExportGrid, resolveSingleGridState,
   SUMMARY_COUNT_FIELDS, attendanceSummaryTotals, attendanceSummaryMonthBounds, summarizeAttendanceMonth,
   updateAttendanceSummaryRow, importAttendanceSummary, leaveDayParts, leaveDayPartLabel,
+  LEAVE_TIME_UNITS, LEAVE_TIME_PARTS, normalizeLeaveTime, formatLeaveTime, leaveTimeFromRecord,
 } from './attendance-prd-domain.mjs';
 
 const TABS = [
@@ -494,6 +495,19 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   /* 表内登记的请假自动进请假总表：一个格子对应一条可追溯记录。
      清空格子删掉对应记录，手写的请假记录不受影响；同一个格子重复登记只更新不新增。 */
   const gridLeaveId = (tableId, person, atPeriod) => ['grid', tableId, atPeriod, String(person||'').trim()].join(':');
+  /* 某位教师当前这一节生效的请假记录：请假表手写的整日记录、表内生成的分节记录都认，
+     分节记录优先（它跟着这一节走）。请假时间列从这里回显。 */
+  const leaveRecordOf = (teacher) => {
+    const name = String(teacher?.name || '').trim();
+    if (!name) return null;
+    const scoped = activeLeavesFor(leaveRecords, date, grade).filter(record => {
+      if (String(record.name || record.teacher || '').trim() !== name) return false;
+      if (record.source !== 'grid') return true;
+      const at = Number(record.source_period ?? 0);
+      return at === 0 || at === Number(period);
+    });
+    return scoped.find(record => record.source === 'grid') || scoped[0] || null;
+  };
   const leavesForSelection = (selectedDate = date) => activeLeavesFor(leaveRecords,selectedDate,grade).filter(record=>
     period===0 || record.source!=='grid' || Number(record.source_period)===0 || Number(record.source_period)===period);
   const syncGridLeaves = async (types) => {
@@ -515,10 +529,21 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const id=gridLeaveId(table.id,teacher.name,period);
         const existing=next.get(id);
         seen.add(id);
-        if(existing?.type===leaveType)continue;
-        next.set(id, existing ? {...existing,type:leaveType} : {
+        /* 请假时间（用户 11-24）：格子里填了小时/天/月就按它折算，没填按整天算。
+           折算结果同时写进 days/hours/months，汇总和导出只认这几个字段。 */
+        const time=normalizeLeaveTime(mark?.leave_time);
+        const durationFields={
+          days:time?time.days:1, hours:time?time.hours:0, months:time?time.months:0,
+          duration_unit:time?time.duration_unit:'day', duration:time?time.amount:1,
+          day_part:time?time.day_part:'',
+          leave_time:time?{unit:time.unit,amount:time.amount,part:time.part}:null,
+        };
+        const sameTime=String(existing?.leave_time?JSON.stringify(existing.leave_time):'')
+          ===String(durationFields.leave_time?JSON.stringify(durationFields.leave_time):'');
+        if(existing?.type===leaveType&&sameTime)continue;
+        next.set(id, existing ? {...existing,type:leaveType,...durationFields} : {
           id,grade,name:teacher.name,subject:teacher.subject||'',type:leaveType,
-          start_date:date,end_date:date,days:1,duration_unit:'day',status:'已批',remark:mark.remark||'',
+          start_date:date,end_date:date,...durationFields,status:'已批',remark:mark.remark||'',
           source:'grid',source_table:table.id,source_period:period,
         });
         changed=true;
@@ -1572,10 +1597,13 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       ]);
     };
     const editableKey = key => editable && nativeKeys.includes(key);
-    /* 花名册只维护教师名单：考勤状态不展示，但保留一列可直接填写的备注（用户 11-15 要求）。 */
+    /* 花名册只维护教师名单：考勤状态不展示，但保留一列可直接填写的备注（用户 11-15 要求）。
+       三张考勤表在「请假」后面多一列「请假时间」（用户 11-24 要求）。 */
+    const stateHeaders = activeStateKeys.flatMap(key => key === 'leave'
+      ? [GRID_STATE_LABELS[key], '请假时间'] : [GRID_STATE_LABELS[key]]);
     const columns = type === 'roster'
       ? ['序号','归属部门','归属年级','姓名','学科','备注','操作']
-      : ['序号','归属部门','归属年级','姓名','学科',...activeStateKeys.map(key=>GRID_STATE_LABELS[key]),'备注','操作'];
+      : ['序号','归属部门','归属年级','姓名','学科',...stateHeaders,'备注','操作'];
     /* 花名册改成「查看态 + 编辑态」：没进编辑态时姓名/学科/备注只读、新增与删除锁住，
        改完点「确认生成」交回查看态，和另外几张表的操作节奏对齐。 */
     const canWrite = type === 'roster' ? isEditing('roster') : editable;
@@ -1618,12 +1646,35 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const leave = editableKey('leave') ? '<span class="aprd-leave-wrap'+(view.leave?' on':'')+'"><select class="aprd-leave-select '+(view.leave?'on':'')+'" data-grid-person="'+esc(teacher.id)+'" data-grid-key="leave" aria-label="'+esc(teacher.name+' 请假')+'">'
         +['',...new Set([...LEAVE_TYPES,view.leave].filter(Boolean))].map(value=>'<option value="'+esc(value)+'" '+(view.leave===value?'selected':'')+'>'+esc(value||'无')+'</option>').join('')+'</select><i class="aprd-caret" aria-hidden="true"></i></span>'
         : (view.leave?'<span class="aprd-mark leave">'+esc(view.leave)+'</span>':'<span class="aprd-mark ap-placeholder">—</span>');
+      /* 请假时间（用户 11-24）：小时 / 天（上午·下午·全天）/ 月，数字 + 单位两个控件。
+         值按「本格子填过的 → 当天请假记录 → 默认全天」取，没登记请假的人这一格只显示「—」。 */
+      const leaveTimeCell = (() => {
+        const current = normalizeLeaveTime(state.leave_time)
+          || leaveTimeFromRecord(leaveRecordOf(teacher))
+          || { unit:'day', amount:1, part:'full' };
+        if (!editableKey('leave') || !view.leave) {
+          const text = view.leave ? formatLeaveTime(current) : '';
+          return text
+            ? '<span class="aprd-mark leave">'+esc(text)+'</span>'
+            : '<span class="aprd-mark ap-placeholder">—</span>';
+        }
+        const byDay = current.unit === 'day';
+        return '<span class="aprd-lt">'
+          +'<input class="aprd-lt-num" type="number" min="0.5" step="0.5" inputmode="decimal" data-leave-amount="'+esc(teacher.id)+'"'
+          +' value="'+escAttr(byDay?'':current.amount)+'"'+(byDay?' hidden':'')+' aria-label="'+escAttr(teacher.name+' 请假时长')+'">'
+          +'<select class="aprd-lt-unit" data-leave-unit="'+esc(teacher.id)+'" aria-label="'+escAttr(teacher.name+' 请假时长单位')+'">'
+          +LEAVE_TIME_UNITS.map(unit=>'<option value="'+escAttr(unit.value)+'"'+(current.unit===unit.value?' selected':'')+'>'+esc(unit.label)+'</option>').join('')
+          +'</select>'
+          +'<select class="aprd-lt-part" data-leave-part="'+esc(teacher.id)+'" aria-label="'+escAttr(teacher.name+' 请假时段')+'"'+(byDay?'':' hidden')+'>'
+          +LEAVE_TIME_PARTS.map(part=>'<option value="'+escAttr(part.value)+'"'+(current.part===part.value?' selected':'')+'>'+esc(part.label)+'</option>').join('')
+          +'</select></span>';
+      })();
       /* 备注列直接用行内输入框，默认空白，点进去就能写（用户 11-15 要求）。 */
       const remark = editable
         ? '<input type="text" class="aprd-note-input" data-grid-person="'+esc(teacher.id)+'" data-grid-key="remark" value="'+escAttr(state.remark||'')+'" placeholder="备注" aria-label="'+escAttr(teacher.name+' 备注')+'">'
         : '<span class="aprd-remark">'+esc(savedRemark||state.remark||'—')+'</span>';
       const stateCells = activeStateKeys.map(key => {
-        if (key === 'leave') return '<td>'+leave+'</td>';
+        if (key === 'leave') return '<td>'+leave+'</td><td class="aprd-lt-cell">'+leaveTimeCell+'</td>';
         if (key === 'listen') return '<td>'+mark('listen',listen)
           +(type==='class' && shown.listeners?.length ? ' '+esc(shown.listeners.join('、')) : '')+'</td>';
         if (key === 'research') return '<td>'+mark('research',research)+'</td>';
@@ -1966,6 +2017,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         +'<td class="aprd-name">'+esc(row.name)+'</td><td>'+esc(row.subject||'')+'</td>'
         +'<td>'+countOf(row.seatPresent)+'</td><td>'+countOf(row.classes)+'</td>'
         +'<td>'+countOf(row.listens)+'</td><td>'+countOf(row.research)+'</td>'
+        +'<td><span class="aprd-remark">—</span></td>'
         +'<td>'+esc(formatLeaveDuration({days:row.leaveDays,hours:row.leaveHours}))+'</td>'
         +'<td><span class="aprd-remark">—</span></td>'
         +'<td><div class="aprd-actions"><button type="button" class="aprd-op" disabled>编辑</button></div></td></tr>';
@@ -2219,6 +2271,41 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         scheduleAutoSave(tab);paint();
       });
       else control.addEventListener('change',() => {update(control.value);scheduleAutoSave(tab);});
+    });
+    /* 请假时间（用户 11-24）：数字 + 单位，单位选「天」时数字换成上午/下午/全天。
+       改哪个控件都就地折算成天数存回本格子，确认生成时再落进请假记录。
+       三个控件按教师 id 关联，不靠父容器取值 —— 单元格重绘时少一层依赖。 */
+    root.querySelectorAll('[data-leave-unit]').forEach(unit => {
+      const id = unit.dataset.leaveUnit;
+      const num = root.querySelectorAll('[data-leave-amount="'+id+'"]')[0];
+      const part = root.querySelectorAll('[data-leave-part="'+id+'"]')[0];
+      const teacher = teachers.find(item => String(item.id) === String(id));
+      if (!teacher || !num || !part || !TYPE[tab] || generating) return;
+      const syncMode = () => {
+        const byDay = unit.value === 'day';
+        num.hidden = byDay; num.disabled = byDay;
+        part.hidden = !byDay; part.disabled = !byDay;
+        /* 从「天」切到「小时/月」时数字框是空的（天不填数字），补个 1 上去，
+           否则 Number('') 变 0 直接被拦成「要大于 0」，用户还得再点一次。 */
+        if (!byDay && !String(num.value ?? '').trim()) num.value = '1';
+      };
+      const commit = () => {
+        const input = unit.value === 'day'
+          ? { unit:'day', part:part.value }
+          : { unit:unit.value, amount:Number(num.value) };
+        const normalized = normalizeLeaveTime(input);
+        if (!normalized) {
+          toast(unit.value === 'month' ? '请假月数要大于 0' : '请假小时数要大于 0','warn');
+          paint();
+          return;
+        }
+        updateWorksheet(teacher, tab, 'leave_time', normalized);
+        scheduleAutoSave(tab);
+        paint();
+      };
+      unit.addEventListener('change',() => { syncMode(); commit(); });
+      num.addEventListener('change', commit);
+      part.addEventListener('change', commit);
     });
     root.querySelectorAll('[data-edit-work-record]').forEach(button=>button.onclick=()=>{
       const type=tab, teacher=teachers.find(item=>String(item.id)===button.dataset.editWorkRecord);
