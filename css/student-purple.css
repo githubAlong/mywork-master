@@ -587,3 +587,123 @@ body.stu-workbench {
     height: 19px;
   }
 }
+
+/* ==========================================================================
+   视觉精修（2026-11-24 封版后）—— 只调视觉 token 与层级，不动 DOM/功能。
+   ========================================================================== */
+
+/* ---------- 1. 卡片：细化层次，圆角统一 ---------- */
+.stu-workbench .card {
+  border-radius: 16px;
+  border-color: var(--sp-border);
+}
+.stu-workbench .card-title {
+  font-weight: 700;
+  letter-spacing: -.15px;
+}
+.stu-workbench .stu-hi {
+  font-weight: 750;
+  letter-spacing: -.4px;
+}
+
+/* ---------- 2. 左导航激活：浅紫底 + 左侧指示条 ---------- */
+@media (min-width: 1024px) {
+  .stu-workbench .s-tabs {
+    gap: 5px;
+    padding-top: 16px;
+  }
+  .stu-workbench .s-tabs button {
+    position: relative;
+    font-size: 14px;
+    padding: 11px 14px;
+  }
+  .stu-workbench .s-tabs button.on {
+    background: var(--sp-accent-soft);
+    font-weight: 700;
+  }
+  .stu-workbench .s-tabs button.on::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--sp-accent);
+  }
+  .stu-workbench .s-tabs button.on svg {
+    color: var(--sp-accent);
+  }
+}
+
+/* ---------- 3. 任务紫卡：降饱和、内部信息分组 ---------- */
+.stu-workbench .stu-task-card {
+  border-radius: 20px;
+  background: linear-gradient(155deg,
+    color-mix(in srgb, var(--sp-grad-1) 88%, #ffffff),
+    color-mix(in srgb, var(--sp-grad-2) 92%, #000000));
+}
+.stu-workbench .stu-task-card .card-title {
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -.2px;
+}
+.stu-workbench .stu-task-card .st-card-body {
+  padding: 14px 16px;
+}
+.stu-workbench .stu-task-card .btn.primary {
+  font-weight: 700;
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--sp-accent-2) 70%, transparent);
+}
+
+/* ---------- 4. 点名表单：标签清晰 + 聚焦光圈 + 分段选中 ---------- */
+.stu-workbench .field-label {
+  font-weight: 700;
+  color: var(--sp-ink-2);
+}
+.stu-workbench :is(.input, select.input, textarea.input) {
+  border-radius: 11px;
+  transition: border-color .18s, box-shadow .18s;
+}
+.stu-workbench :is(.input, select.input, textarea.input):focus {
+  border-color: var(--sp-accent);
+  box-shadow: 0 0 0 3px var(--sp-accent-soft);
+}
+.stu-workbench .seg {
+  border-radius: 12px;
+}
+.stu-workbench .seg button.on {
+  font-weight: 700;
+  color: var(--sp-accent);
+  box-shadow: var(--shadow-s);
+}
+.stu-workbench .pk-nr,
+.stu-workbench .pick-num {
+  font-weight: 650;
+}
+
+/* ---------- 5. 结果区空状态：虚线柔卡 + 提示图标 ---------- */
+.stu-workbench .pick-stage {
+  border: 1px dashed color-mix(in srgb, var(--sp-accent) 24%, var(--sp-border));
+  background: color-mix(in srgb, var(--sp-accent) 5%, var(--sp-bg));
+  border-radius: 16px;
+}
+.stu-workbench .pick-win {
+  letter-spacing: -1.8px;
+  font-weight: 800;
+}
+
+/* ---------- 6. 按钮与焦点态 ---------- */
+.stu-workbench .btn.primary {
+  transition: transform .18s cubic-bezier(.34,1.4,.64,1), box-shadow .18s;
+}
+.stu-workbench .btn.primary:hover {
+  transform: translateY(-1px);
+}
+.stu-workbench :is(.btn, .s-tabs button, .seg button, .input, select):focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stu-workbench .btn.primary { transition: none; }
+}

@@ -1,0 +1,106 @@
+/* ==========================================================================
+   教师端 · 视觉精修覆盖层（2026-11-24 封版后）
+   --------------------------------------------------------------------------
+   只调视觉 token 与层级：字重/字距、圆角与细边、投影、聚焦悬停、空状态。
+   不改任何 DOM 结构、功能、数据、交互；保留现有蓝色系与 iOS 风。
+   加载顺序：必须排在 design-refresh.css 之后（booted 列表末尾）。
+   深色：沿用 app.css 的 html[data-theme=dark] token，本层只做少量补偿。
+   ========================================================================== */
+
+/* ---------- 1. 基础层级：标题重、辅助轻，字距收紧 ---------- */
+.page-title { font-weight: 750; letter-spacing: -.45px; }
+.card-title { font-weight: 700; letter-spacing: -.15px; }
+.greet-text { font-weight: 750; letter-spacing: -.5px; }
+.greet-sub { color: var(--text-3); font-weight: 500; }
+
+/* 正文里的辅助数字保持等宽对齐，避免表格跳字 */
+.chip, .hero-stats b, .list-row-number, td.num, .mono { font-variant-numeric: tabular-nums; }
+
+/* ---------- 2. 卡片：统一圆角 + 半透明细边 + 淡蓝投影 ---------- */
+.card {
+  border-radius: var(--r-m);
+  border-color: color-mix(in srgb, var(--primary) 9%, var(--line));
+  box-shadow: var(--shadow-s), 0 8px 22px -18px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+html[data-theme="dark"] .card {
+  border-color: var(--line);
+  box-shadow: var(--shadow-s);
+}
+/* 列表行之间用更淡的分隔线，去掉发灰的硬边 */
+.list-row, .hc-body .item, .today-row { border-color: color-mix(in srgb, var(--line) 75%, transparent); }
+
+/* ---------- 3. 每日一句：英文斜体大字，中文与作者弱化 ---------- */
+.quote-top .quote-en,
+.quote-en {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -.1px;
+}
+.quote-top .quote-zh,
+.quote-zh { color: var(--text-2); font-weight: 450; }
+.quote-by { font-weight: 500; }
+html[data-theme="dark"] .clk-card .quote-zh,
+html[data-theme="dark"] .clk-card .quote-by { color: var(--text-3); }
+
+/* ---------- 4. 时钟：等宽大字 + 秒数强调 ---------- */
+.clk-card .clock { font-weight: 700; letter-spacing: -2.5px; }
+.clk-card .clock .hm { letter-spacing: -2.5px; }
+.clk-card .clock .sec { font-weight: 700; }
+.clk-card .clock-date b, .clock-date .wd-badge { font-variant-numeric: tabular-nums; }
+
+/* ---------- 5. 胶囊：更Compact 的浅色徽标 ---------- */
+.chip { font-weight: 650; border-radius: 8px; height: 24px; padding: 0 9px; font-size: 11.5px; }
+
+/* ---------- 6. 交互态：聚焦光圈、按钮悬停抬升 ---------- */
+:is(.btn, .icon-btn, .chip-btn, .seg button, .nav-item, .s-tabs button):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+.btn.primary { transition: transform .18s cubic-bezier(.34,1.4,.64,1), box-shadow .18s; }
+.btn.primary:hover { transform: translateY(-1px); }
+.btn.primary:active { transform: translateY(0) scale(.98); }
+.icon-btn:hover { background: var(--primary-weak); color: var(--primary); }
+
+/* ---------- 7. 空状态：柔和卡片而非空白 ---------- */
+.empty { color: var(--text-3); }
+.empty .em {
+  display: grid; place-items: center;
+  width: 46px; height: 46px; margin: 0 auto 10px;
+  border-radius: 14px;
+  background: var(--card-2);
+  color: var(--text-3);
+  font-size: 22px;
+}
+
+/* ---------- 8. 登录页：标题更紧、卡片更柔 ---------- */
+.auth-hero h1 { font-weight: 820; letter-spacing: -1.4px; line-height: 1.16; }
+.auth-hero p.auth-slogan { font-weight: 550; letter-spacing: .4px; }
+.auth-card { border-radius: 26px; box-shadow: 0 24px 70px -30px rgba(49,96,166,.22); }
+.auth-feat i { border-radius: 18px; }
+.auth-input input:focus { outline: 2px solid color-mix(in srgb, #2871f2 30%, transparent); outline-offset: 1px; }
+html[data-theme="dark"] .auth-main { background: linear-gradient(145deg, #0f1420 0%, #131b2b 100%); }
+html[data-theme="dark"] .auth-hero h1 { color: #eaf2ff; }
+html[data-theme="dark"] .auth-hero p.auth-slogan { color: #a9c4e8; }
+html[data-theme="dark"] .auth-feat { color: #c7d9f0; }
+html[data-theme="dark"] .auth-copy { color: #7d93b2; }
+html[data-theme="dark"] .auth-card {
+  background: rgba(28,34,48,.86);
+  border-color: rgba(255,255,255,.10);
+  color: var(--text);
+}
+html[data-theme="dark"] .auth-tabs button { color: #93a7c4; }
+html[data-theme="dark"] .auth-input input { background: rgba(255,255,255,.05); color: #eef4ff; border-color: rgba(255,255,255,.14); }
+html[data-theme="dark"] .auth-input input::placeholder { color: #7389a8; }
+
+/* ---------- 9. 手机端微调：保证触摸区与留白 ---------- */
+@media (max-width: 720px) {
+  .card { border-radius: 14px; }
+  .chip { height: 26px; }
+  .quote-top .quote-en, .quote-en { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary { transition: none; }
+}
