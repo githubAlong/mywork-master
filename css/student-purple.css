@@ -1,0 +1,589 @@
+/* ==========================================================================
+   学生端 · 紫色外观（设计稿 c1a6879 的视觉语言）
+   --------------------------------------------------------------------------
+   这套文件只做「换皮」，不含任何业务逻辑：
+   1) 先在 .stu-workbench 上重定义 app.css 那套通用变量（--bg/--card/--text/
+      --primary/--line…）。页面里所有 .card / .btn / .input / .chip 都是变量
+      驱动的，所以改这一层，正文观感整体就换过来了，不用逐个组件写。
+   2) 再把设计稿里独有的东西补上：淡紫页底、顶部「头像 + 问候」、手机底部
+      页签、桌面左侧导航、今日任务渐变主卡。
+   3) 深色跟随系统（prefers-color-scheme），取设计稿 dark 主题的色值。
+
+   加载顺序：必须排在 student-workbench.css 之后（同优先级时后来者胜）。
+   ========================================================================== */
+
+.stu-workbench {
+  /* —— 设计稿色板（浅色默认） —— */
+  --sp-page: #f0eef7;
+  --sp-bg: #ffffff;
+  --sp-panel: #f4f2fa;
+  --sp-panel-3: #eae7f4;
+  --sp-border: rgba(30, 26, 60, .08);
+  --sp-border-strong: rgba(30, 26, 60, .16);
+  --sp-ink-1: #14122b;
+  --sp-ink-2: #3d3a55;
+  --sp-ink-3: #6f6b88;
+  --sp-accent: #6d5ae0;
+  --sp-accent-deep: #5743c7;
+  --sp-accent-soft: rgba(109, 90, 224, .10);
+  --sp-accent-line: rgba(109, 90, 224, .28);
+  --sp-accent-2: #d98324;
+  --sp-accent-2-soft: rgba(217, 131, 36, .14);
+  --sp-grad-1: #6d5ae0;
+  --sp-grad-2: #5743c7;
+  --sp-shadow: 0 1px 2px rgba(20, 18, 43, .05), 0 8px 20px -6px rgba(20, 18, 43, .08),
+    0 28px 60px -24px rgba(20, 18, 43, .12);
+  --sp-rail: 236px;
+
+  /* —— 覆盖 app.css 的通用变量：正文组件自动跟着变 —— */
+  --bg: var(--sp-page);
+  --bg-elev: var(--sp-bg);
+  --bg-sunken: var(--sp-panel);
+  --card: var(--sp-bg);
+  --card-2: var(--sp-panel);
+  --text: var(--sp-ink-1);
+  --text-2: var(--sp-ink-2);
+  --text-3: var(--sp-ink-3);
+  --line: var(--sp-border);
+  --line-2: var(--sp-border-strong);
+  --primary: var(--sp-accent);
+  --primary-weak: var(--sp-accent-soft);
+  --primary-deep: var(--sp-accent-deep);
+  --amber: var(--sp-accent-2);
+  --amber-weak: var(--sp-accent-2-soft);
+  --green: #2c7a62;
+  --green-weak: rgba(44, 122, 98, .12);
+  --red: #c0453c;
+  --red-weak: rgba(192, 69, 60, .10);
+  --purple: var(--sp-accent);
+  --shadow-s: 0 1px 2px rgba(20, 18, 43, .05);
+  --shadow-m: 0 8px 20px -6px rgba(20, 18, 43, .10);
+  --shadow-l: 0 28px 60px -24px rgba(20, 18, 43, .18);
+  --r-s: 10px;
+  --r-m: 14px;
+  --r-l: 16px;
+  --r-xl: 22px;
+  /* 旧样式表里页面头用的品牌蓝 */
+  --stu-header: var(--sp-accent);
+  /* 旧样式表里卡片内浅色底（资料行、任务正文框等） */
+  --stu-surface: var(--sp-panel);
+}
+
+@media (prefers-color-scheme: dark) {
+  .stu-workbench {
+    --sp-page: #17171d;
+    --sp-bg: #202028;
+    --sp-panel: #26262f;
+    --sp-panel-3: #2c2c36;
+    --sp-border: rgba(255, 255, 255, .08);
+    --sp-border-strong: rgba(255, 255, 255, .16);
+    --sp-ink-1: #f2f0f8;
+    --sp-ink-2: #c9c5d6;
+    --sp-ink-3: #9490a6;
+    --sp-accent: #8b7cff;
+    --sp-accent-deep: #6d5ae0;
+    --sp-accent-soft: rgba(139, 124, 255, .14);
+    --sp-accent-line: rgba(139, 124, 255, .30);
+    --sp-accent-2: #e8a25c;
+    --sp-accent-2-soft: rgba(232, 162, 92, .16);
+    --sp-grad-1: #5a48c9;
+    --sp-grad-2: #3f328f;
+    --sp-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 24px -8px rgba(0, 0, 0, .5);
+    --green: #5fbf9c;
+    --red: #ff8a80;
+  }
+}
+
+/* ---------- 页底 / 基础排版 ---------- */
+body.stu-workbench {
+  background: var(--sp-page);
+  color: var(--sp-ink-1);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ---------- 顶部：头像 + 问候（手机上就是页面头） ---------- */
+.stu-workbench .stu-headwrap {
+  display: none;
+}
+
+.stu-workbench .stu-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 18px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--sp-page) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+}
+
+.stu-workbench .stu-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--sp-accent-2);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 0 0 0 3px var(--sp-accent-2-soft);
+}
+
+.stu-workbench .stu-greet {
+  flex: 1;
+  min-width: 0;
+}
+
+.stu-workbench .stu-hi {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--sp-ink-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stu-workbench .stu-sub {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--sp-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 内容区 ---------- */
+.stu-workbench .s-wrap {
+  max-width: none;
+  margin: 0;
+  padding: 4px 16px calc(64px + env(safe-area-inset-bottom, 0px) + 22px);
+}
+
+.stu-workbench .s-head {
+  display: none;
+}
+
+.stu-workbench .card {
+  border: 1px solid var(--sp-border);
+  border-radius: 16px;
+  background: var(--sp-bg);
+  box-shadow: var(--sp-shadow);
+}
+
+.stu-workbench .card-pad {
+  padding: 18px 18px;
+}
+
+.stu-workbench #s-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stu-workbench #s-body > .card {
+  margin: 0;
+}
+
+/* ---------- 页签：手机 = 底部栏 ---------- */
+.stu-workbench .s-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  background: color-mix(in srgb, var(--sp-bg) 94%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-top: 1px solid var(--sp-border);
+  border-radius: 0;
+  box-shadow: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.stu-workbench .s-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.stu-workbench .s-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: auto;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sp-ink-3);
+  background: none;
+  box-shadow: none;
+  border-radius: 12px;
+}
+
+.stu-workbench .s-tabs button.on {
+  background: none;
+  color: var(--sp-accent);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.stu-workbench .s-tabs button svg {
+  width: 21px;
+  height: 21px;
+}
+
+/* ---------- 今日任务：紫色渐变主卡 ---------- */
+.stu-workbench .stu-task-card {
+  /* 卡内把「文字/分隔线」变量翻成白色系，卡内所有子元素（含内联 style
+     引用 var(--line) 的那条分隔线）自动跟着变，不用逐个选择器兜。 */
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, .78);
+  --text-3: rgba(255, 255, 255, .70);
+  --line: rgba(255, 255, 255, .22);
+  --primary: #ffffff;
+  --primary-weak: rgba(255, 255, 255, .16);
+  --stu-surface: rgba(255, 255, 255, .12);
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  /* 旧样式表给这张卡写了 min-height:420px（桌面 350px）撑版式，
+     换成渐变主卡后那截空白很难看，让内容自己决定高度。 */
+  min-height: 0;
+  background: linear-gradient(160deg, var(--sp-grad-1), var(--sp-grad-2));
+  color: #fff;
+  box-shadow: 0 18px 40px -22px color-mix(in srgb, var(--sp-accent-deep) 80%, transparent);
+}
+
+/* 主卡内的标题区分隔和正文框：白描边、半透明白底 */
+.stu-workbench .stu-task-card .stu-section-head {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom-color: rgba(255, 255, 255, .22);
+}
+
+.stu-workbench .stu-task-card .st-card-body {
+  margin-bottom: 14px;
+  border-color: rgba(255, 255, 255, .26);
+  background: rgba(255, 255, 255, .12);
+  border-radius: 12px;
+}
+
+.stu-workbench .stu-task-card .stu-empty svg {
+  border-color: rgba(255, 255, 255, .26);
+  background: rgba(255, 255, 255, .10);
+}
+
+/* 右上角一抹高光，避免大块纯色发闷 */
+.stu-workbench .stu-task-card::after {
+  content: "";
+  position: absolute;
+  top: -70px;
+  right: -50px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, .20), transparent 68%);
+  pointer-events: none;
+}
+
+.stu-workbench .stu-task-card .card-title {
+  color: #fff;
+  font-size: 15.5px;
+}
+
+.stu-workbench .stu-task-card .st-text,
+.stu-workbench .stu-task-card .st-list li,
+.stu-workbench .stu-task-card .st-card-body {
+  color: rgba(255, 255, 255, .94);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.stu-workbench .stu-task-card .btn.ghost {
+  border-color: rgba(255, 255, 255, .34);
+  background: rgba(255, 255, 255, .14);
+  color: #fff;
+}
+
+.stu-workbench .stu-task-card .btn.ghost:hover {
+  background: rgba(255, 255, 255, .22);
+}
+
+.stu-workbench .stu-task-card .btn.primary {
+  border: 0;
+  background: var(--sp-accent-2);
+  color: #fff;
+  box-shadow: none;
+}
+
+.stu-workbench .stu-task-card .btn.primary:hover {
+  background: color-mix(in srgb, var(--sp-accent-2) 86%, #000);
+}
+
+/* 主卡里的空状态也跟着变白 */
+.stu-workbench .stu-task-card .stu-empty {
+  color: rgba(255, 255, 255, .62);
+}
+
+.stu-workbench .stu-task-card .stu-empty b {
+  color: rgba(255, 255, 255, .92);
+}
+
+.stu-workbench .stu-task-card .stu-empty svg {
+  stroke: rgba(255, 255, 255, .5);
+}
+
+/* ---------- 表单 / 按钮 ---------- */
+.stu-workbench .btn {
+  border-radius: 10px;
+  font-weight: 600;
+  border-color: var(--sp-border-strong);
+}
+
+.stu-workbench .btn.primary {
+  border: 0;
+  background: linear-gradient(160deg, var(--sp-grad-1), var(--sp-grad-2));
+  color: #fff;
+  box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--sp-accent) 60%, transparent);
+}
+
+.stu-workbench .btn.primary:hover {
+  background: linear-gradient(160deg, var(--sp-grad-1), var(--sp-accent-deep));
+}
+
+.stu-workbench .btn.soft {
+  background: var(--sp-accent-soft);
+  color: var(--sp-accent);
+  border: 0;
+}
+
+.stu-workbench .input,
+.stu-workbench select.input,
+.stu-workbench textarea.input {
+  border-radius: 10px;
+  border-color: var(--sp-border-strong);
+  background: var(--sp-bg);
+}
+
+.stu-workbench .input:focus,
+.stu-workbench select.input:focus {
+  border-color: var(--sp-accent);
+  box-shadow: 0 0 0 3px var(--sp-accent-soft);
+}
+
+/* ---------- 点名 / 盲盒 / 签到 里写死蓝色渐变的地方 ---------- */
+.stu-workbench .pick-num {
+  background: linear-gradient(160deg, var(--sp-grad-1), var(--sp-grad-2));
+  border-radius: 20px;
+  box-shadow: 0 12px 26px -14px color-mix(in srgb, var(--sp-accent) 70%, transparent);
+}
+
+.stu-workbench .s-logo {
+  background: linear-gradient(135deg, var(--sp-grad-1), var(--sp-accent-2));
+}
+
+.stu-workbench .ck-me {
+  background: var(--sp-accent-soft);
+  border-radius: 12px;
+}
+
+.stu-workbench .chip.blue {
+  background: var(--sp-accent-soft);
+  color: var(--sp-accent);
+}
+
+/* ---------- 弹层 ---------- */
+.stu-workbench .stu-modal {
+  background: rgba(15, 15, 30, .48);
+  backdrop-filter: blur(3px);
+}
+
+.stu-workbench .stu-modal-card {
+  border-radius: 22px;
+  background: var(--sp-bg);
+  color: var(--sp-ink-1);
+  box-shadow: 0 30px 70px -20px rgba(20, 18, 43, .45);
+}
+
+.stu-workbench .stu-modal-head {
+  border-bottom-color: var(--sp-border);
+}
+
+.stu-workbench .stu-modal-head button {
+  color: var(--sp-ink-3);
+}
+
+/* ---------- 桌面（≥1024px）：左侧导航 + 内容区 ---------- */
+@media (min-width: 1024px) {
+  body.stu-workbench {
+    display: grid;
+    grid-template-columns: var(--sp-rail) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+
+  /* 左侧栏整条底色：用固定定位的伪元素铺满，避免 header 与 nav 两段底色断开 */
+  body.stu-workbench::before {
+    content: "";
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--sp-rail);
+    background: var(--sp-bg);
+    border-right: 1px solid var(--sp-border);
+    z-index: 0;
+  }
+
+  /* 品牌头 */
+  .stu-workbench .stu-headwrap {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    z-index: 2;
+  }
+
+  .stu-workbench .stu-top {
+    padding: 26px 22px 8px;
+    gap: 11px;
+    background: none;
+    color: var(--sp-ink-1);
+  }
+
+  .stu-workbench .stu-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+    background: linear-gradient(135deg, var(--sp-grad-1), var(--sp-grad-2));
+    color: #fff;
+    font-size: 16px;
+  }
+
+  .stu-workbench .stu-title {
+    font-size: 15.5px;
+    font-weight: 800;
+    color: var(--sp-ink-1);
+    letter-spacing: .2px;
+  }
+
+  /* 页签 → 左侧导航列表 */
+  .stu-workbench .s-tabs {
+    position: sticky;
+    top: 0;
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    height: auto;
+    padding: 12px 14px 24px;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    overflow: visible;
+    z-index: 2;
+  }
+
+  .stu-workbench .s-tabs button {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 11px 13px;
+    border-radius: 12px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--sp-ink-2);
+  }
+
+  .stu-workbench .s-tabs button svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .stu-workbench .s-tabs button:hover {
+    background: var(--sp-panel);
+  }
+
+  .stu-workbench .s-tabs button.on {
+    background: var(--sp-accent-soft);
+    color: var(--sp-accent);
+    font-weight: 700;
+  }
+
+  /* 问候区落在内容列顶部 */
+  .stu-workbench .stu-topbar {
+    grid-column: 2;
+    grid-row: 1;
+    position: static;
+    padding: 26px 40px 6px;
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .stu-workbench .stu-avatar {
+    width: 46px;
+    height: 46px;
+    font-size: 18px;
+  }
+
+  .stu-workbench .stu-hi {
+    font-size: 20px;
+  }
+
+  /* 内容 */
+  .stu-workbench .s-wrap {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 14px 40px 56px;
+    max-width: 1160px;
+  }
+
+  .stu-workbench #s-body {
+    gap: 16px;
+  }
+
+  /* 桌面保持单列通栏：功能和以前一样一张卡铺满内容区，
+     不为了两列把点名这种表单挤成半屏（右侧留一大片空白反而难用）。 */
+  .stu-workbench #s-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stu-workbench .card-pad {
+    padding: 20px 22px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .stu-workbench .s-wrap {
+    padding-right: 56px;
+  }
+}
+
+/* 手机上 6 个页签挤，字号再小一档 */
+@media (max-width: 380px) {
+  .stu-workbench .s-tabs button {
+    font-size: 10px;
+  }
+
+  .stu-workbench .s-tabs button svg {
+    width: 19px;
+    height: 19px;
+  }
+}

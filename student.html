@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>学生工作台</title>
+<title>课堂小助手</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#f0eef7">
 <!-- 标签页图标用「课」，配色和页内 .s-logo 那条蓝紫渐变一致。
      学生页原本没有 favicon 声明，浏览器会去请求仓库里不存在的 /favicon.ico，
      标签上只剩一个通用地球图标。内联 SVG 不用新增二进制文件，也不用进 sw 清单。 -->
@@ -82,8 +82,11 @@
   .pick-names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
   .pick-win.sm { font-size: 26px; display: inline-block; padding: 8px 16px; border-radius: 14px;
     background: var(--primary); color: #fff; letter-spacing: -.5px; animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
-  /* 点名（第 19 条）：人数/点几个 两个输入并排 */
-  .pk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* 点名：年级/班级、人数/点几个 都是两列并排。
+     minmax(0,1fr) 不能省：input 的固有宽度比栅格列宽，用 1fr 会撑出卡片。 */
+  .pk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pk-grid > .field { min-width: 0; }
+  .pk-grid :is(input, select) { width: 100%; min-width: 0; box-sizing: border-box; }
   .pk-mode { display: flex; width: 100%; }
   .pk-mode button { flex: 1; }
   .pk-mode button[disabled] { opacity: .42; cursor: not-allowed; }
@@ -123,7 +126,7 @@
   html[data-theme=dark] .box-lv.l3 { color: #ff453a; }
   .box-who { font-size: 13px; color: var(--text-2); margin-top: 10px; position: relative; z-index: 1; }
 
-  /* ---------- 学生工作台顶部条（按设计稿） ---------- */
+  /* ---------- 课堂小助手顶部条（按设计稿） ---------- */
   .stu-headwrap { position: relative; }
   .stu-top { display: flex; align-items: center; gap: 12px; padding: 15px 22px;
     background: #1677ff; color: #fff; }
@@ -154,14 +157,27 @@
 </style>
 <link rel="stylesheet" href="css/design-refresh.css">
 <link rel="stylesheet" href="css/student-workbench.css">
+<!-- 紫色外观覆盖层：必须排在 student-workbench.css 之后（同优先级后加载者胜） -->
+<link rel="stylesheet" href="css/student-purple.css">
 </head>
 <body class="stu-workbench">
+<!-- 手机上不显示这条（紫色设计稿没有独立标题栏，只有头像 + 问候）；
+     桌面 ≥1024px 它就是左侧栏顶部的品牌头。 -->
 <header class="stu-headwrap">
   <div class="stu-top">
     <div class="stu-logo" aria-hidden="true">学</div>
-    <h1 class="stu-title">学生工作台</h1>
+    <h1 class="stu-title">课堂小助手</h1>
   </div>
 </header>
+<div class="stu-topbar">
+  <div class="stu-avatar" id="stu-avatar" aria-hidden="true">学</div>
+  <div class="stu-greet">
+    <div class="stu-hi" id="stu-hi">课堂小助手</div>
+    <div class="stu-sub" id="stu-sub">正在加载…</div>
+  </div>
+</div>
+<!-- 页签单独放，不塞进 #s-app：它要在手机上变成底部栏、桌面上变成左侧导航 -->
+<nav class="s-tabs" id="s-nav" aria-label="课堂小助手功能" hidden></nav>
 <main class="s-wrap" id="s-app"><div class="empty" role="status">加载中…</div></main>
 <script type="module">
 import './js/editable-choices.js';
@@ -308,7 +324,7 @@ function visibleTabs() {
 async function init() {
   try { data = await api(`/public/link/${code}`); }
   catch (e) { $('#s-app').innerHTML = `<div class="card card-pad empty"><div class="em">${ICON.lock}</div>${esc(e.message)}</div>`; return; }
-  document.title = '学生工作台';
+  document.title = '课堂小助手';
   availTabs = visibleTabs();
   /* 带 tab 的链接直接打开对应页签。通用链接优先打开有内容的模块。 */
   const wanted = new URLSearchParams(location.search).get('tab');
@@ -325,8 +341,53 @@ const TAB_DEF = {
   misconduct: { icon: ICON.alert, label: '违纪' },
   bulletin: { icon: ICON.chat, label: '留言板' },
 };
-function paint() {
+/* 页头「头像 + 问候」：姓名只有学生自己签到过才在本地存着（recall），
+   没签到过就退成「同学」，不编造名字。班级同理，优先取本机偏好 / 当前任务。 */
+function paintShell() {
+  const me = recall();
+  const raw = String(me?.name || '').trim();
+  const hour = new Date().getHours();
+  const hi = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 13 ? '中午好'
+    : hour < 18 ? '下午好' : '晚上好';
+  const who = raw ? `${hi}，${raw}` : hi;
+  const avatar = raw ? raw[0] : '学';
+  const cls = myClass();
+  const tasks = (data?.selfstudyTasks || []).filter((t) => t.class_scope === 'all' || t.class_label === cls);
+  const bits = [];
+  if (cls) bits.push(cls);
+  bits.push(tasks.length ? `今天有 ${tasks.length} 项任务` : '老师发布后这里会更新');
+  const sub = bits.join(' · ');
+  const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  setText('stu-avatar', avatar);
+  setText('stu-hi', who);
+  setText('stu-sub', sub);
+  /* 桌面左栏的品牌头也用同一个首字，省得两块头像不一致 */
+  const logo = document.querySelector('.stu-logo');
+  if (logo) logo.textContent = '学';
+}
+
+function paintNav() {
+  const nav = document.getElementById('s-nav');
+  if (!nav) return;
   if (!availTabs.length) {
+    nav.hidden = true;
+    nav.innerHTML = '';
+    return;
+  }
+  nav.innerHTML = availTabs.map((t) => {
+    const d = TAB_DEF[t];
+    return `<button type="button" data-t="${t}" class="${tab === t ? 'on' : ''}" aria-pressed="${tab === t}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
+  }).join('');
+  nav.hidden = false;
+  nav.querySelectorAll('[data-t]').forEach((b) => {
+    b.onclick = () => { tab = b.dataset.t; cur = null; paint(); };
+  });
+}
+
+function paint() {
+  paintShell();
+  if (!availTabs.length) {
+    paintNav();
     $('#s-app').innerHTML = `<div class="card card-pad">
       <div class="stu-empty" style="margin:40px auto 10px">
         <b style="font-size:19px">正在来的路上</b>
@@ -336,15 +397,9 @@ function paint() {
     return;
   }
   if (!availTabs.includes(tab)) tab = availTabs[0];
-  $('#s-app').innerHTML = `
-    <nav class="s-tabs" aria-label="学生工作台功能">
-      ${availTabs.map((t) => {
-        const d = TAB_DEF[t];
-        return `<button type="button" data-t="${t}" class="${tab === t ? 'on' : ''}" aria-pressed="${tab === t}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
-      }).join('')}
-    </nav>
-    <div id="s-body"></div>`;
-  document.querySelectorAll('[data-t]').forEach((b) => { b.onclick = () => { tab = b.dataset.t; cur = null; paint(); }; });
+  paintNav();
+  /* #s-body 每次重画，各 paint* 里都用 $('#s-body') 取，所以这里保留这层壳 */
+  $('#s-app').innerHTML = '<div id="s-body"></div>';
   if (tab === 'selfstudy') paintSelfstudy();
   if (tab === 'checkin') paintCheckin();
   if (tab === 'material') paintMaterials();
@@ -743,74 +798,198 @@ async function paintMaterialDetail() {
     $('#s-body').innerHTML = `<div class="card card-pad">${esc(e.message)}</div>`;
   }
 }
-/* ---------- 点名：选班级 → 点一下 → 滚出名字 ---------- */
+/* ---------- 点名：选年级班级 → 按名单 / 按号码点 → 滚出名字 ---------- */
 const ROLL_ME = 'wb_pick_';
 function paintRoll() {
-  /* 【第 19 条】以前这里有一道硬拦截：没有班级名单就直接「老师还没有设置班级名单」，
-     整页什么都不给。可老师最常见的用法恰恰是「报个班号，从 1 号点到 50 号」——
-     根本不需要名单。名单现在只是「按名字点」这个可选项的数据来源，
-     没有名单就默认走按号码，页面照常可用。 */
+  /* 【按班点名】老师报的是「高二 12 班」，学生这边得先能选到年级和班级：
+     选好班才拿得到这个班的花名册（按名单点名），没花名册就退回 1..人数（按号码点名）。
+     两个坑：
+     1) 课表里班级叫「高二12班」，花名册里叫「12班」，同一个班两种写法 → 用班级号对齐；
+     2) 老师预置的班可能不在课表里 → 班级留一个「其他（手动填写）」兜底。 */
   const rosters = data.rosters || [];
-  const liveCls = (data.roll && data.roll[0]) || null;
-  const first = (liveCls && rosters.find((r) => String(r.id) === String(liveCls.roster_id)))
-    || rosters[0]
-    || { id: 0, grade: '', class_name: '', names: [], count: 0 };
-  /* 【第 19 条：点名改成填人数 + 点几个，按号码点】
-     原来只能从老师预置的名单里选班，名单没建就没得点；
-     「同时点 N 人」藏在右上角一个不起眼的数字框里；点的永远是名字。
-     老师实际用法通常是：随便报个班号，从 1 号点到 50 号，点 3 个。
-     现在只填人数和点几个，默认按号码点；班级和最近常用班已按反馈去掉，
-     姓名模式退化为使用老师当前名单（有名单时可选）。 */
-  const names0 = (first.names || []).filter(Boolean);
-  const hasNames = names0.length > 0;
-  const cnt0 = Math.max(1, Math.min(200, Number(first.count) || first.roster_count || names0.length || 40));
+  const clsKey = (grade, cls) => {
+    let t = String(cls || '').trim();
+    const g = String(grade || '').trim();
+    if (g && t.startsWith(g)) t = t.slice(g.length).trim();
+    const num = t.match(/\d+/);
+    return g + '#' + (num ? num[0] : t.toLowerCase());
+  };
+  const pairs = [];
+  const seenKey = new Set();
+  [...(data?.classes || []), ...rosters].forEach((r) => {
+    const grade = String(r?.grade || '').trim();
+    const class_name = String(r?.class_name || '').trim();
+    if (!grade && !class_name) return;
+    const k = clsKey(grade, class_name);
+    if (seenKey.has(k)) return;
+    seenKey.add(k);
+    pairs.push({ grade, class_name });
+  });
+  const gradeList = [...new Set(pairs.map((p) => p.grade).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+  const classesOf = (grade) => pairs.filter((p) => p.grade === grade).map((p) => p.class_name)
+    .sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+  const rosterOf = (grade, cls) => rosters.find((r) => clsKey(r.grade, r.class_name) === clsKey(grade, cls)) || null;
+  const namesOf = (r) => (r?.names || []).map((n) => String(n ?? '').trim()).filter(Boolean);
+  const countOf = (r, names) => Math.max(1, Math.min(200, Number(r?.count) || names.length || 40));
+
+  /* 默认班：上次点过的班 → 本机偏好/当前任务的班 → 课表里第一个带名单的班 */
+  const saved = prefs();
+  const auto = (() => {
+    const text = String(saved.cls || '').trim() || myClass();
+    const t = String(text || '').trim();
+    if (!t) return { grade: '', class_name: '' };
+    const hit = pairs.find((p) => clsName(p.grade, p.class_name) === t || p.class_name === t);
+    if (hit) return hit;
+    const parts = t.split(/[·.\s]+/).filter(Boolean);
+    return parts.length >= 2 ? { grade: parts[0], class_name: parts.slice(1).join(' ') } : { grade: '', class_name: t };
+  })();
+  let curGrade = String(saved.roll_grade || '');
+  if (!gradeList.includes(curGrade)) curGrade = gradeList.includes(auto.grade) ? auto.grade : (gradeList[0] || '');
+  let curClass = String(saved.roll_cls || '');
+  if (!classesOf(curGrade).includes(curClass)) {
+    curClass = classesOf(curGrade).includes(auto.class_name) ? auto.class_name : '';
+  }
+  if (!curClass) {
+    const list = classesOf(curGrade);
+    curClass = list.find((c) => namesOf(rosterOf(curGrade, c)).length) || list[0] || auto.class_name || '';
+  }
+  let roster = rosterOf(curGrade, curClass);
+  let names = namesOf(roster);
+  /* 有名单就默认按名单点名（名单才是「这个班」），没有就按号码 */
+  let mode = names.length ? 'name' : 'no';
+  const noClasses = !pairs.length;
 
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="pk-grid">
+      <div class="field"><label class="field-label" for="pk-grade">年级</label>
+        ${noClasses
+          ? `<input class="input" id="pk-grade" placeholder="例如：高二" value="${esc(curGrade)}">`
+          : `<select class="input" id="pk-grade">
+              <option value="">请选择年级</option>
+              ${gradeList.map((g) => `<option${g === curGrade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
+            </select>`}
+      </div>
+      <div class="field"><label class="field-label" for="pk-cls">班级</label>
+        ${noClasses
+          ? `<input class="input" id="pk-cls" placeholder="例如：12班" value="${esc(curClass)}">`
+          : `<select class="input" id="pk-cls">
+              ${classesOf(curGrade).map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+              <option value="__other__">其他（手动填写）</option>
+            </select>
+            <input class="input" id="pk-cls-custom" placeholder="例如：12班" style="display:none;margin-top:8px">`}
+      </div>
+    </div>
+    <div class="tiny muted" id="pk-roster-tip" style="margin-top:8px"></div>
+    <div class="field" style="margin-top:12px">
+      <div class="field-label" id="pk-mode-label">抽取方式</div>
+      <div class="seg pk-mode" role="group" aria-labelledby="pk-mode-label">
+        <button data-mode="name" class="${mode === 'name' ? 'on' : ''}" ${names.length ? '' : 'disabled'}>按名单点名</button>
+        <button data-mode="no" class="${mode === 'no' ? 'on' : ''}">按号码点名</button>
+      </div>
+    </div>
+    <div class="pk-grid" style="margin-top:12px">
       <div class="field"><label class="field-label" for="pk-total">总人数</label>
-        <input class="input" id="pk-total" type="number" inputmode="numeric" min="1" max="200" value="${cnt0}"></div>
+        <input class="input" id="pk-total" type="number" inputmode="numeric" min="1" max="200" value="${countOf(roster, names)}"></div>
       <div class="field"><label class="field-label" for="pk-num">抽取人数</label>
         <input class="input" id="pk-num" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
     </div>
-    <div class="field" style="margin-top:4px">
-      <div class="field-label" id="pk-mode-label">抽取方式</div>
-      <div class="seg pk-mode" role="group" aria-labelledby="pk-mode-label">
-        <button class="on" data-mode="no">按号码</button>
-        <button data-mode="name" ${hasNames ? '' : 'disabled title="还没有名单，导入名单后才能按名字点"'}>按名单名字</button>
-      </div>
-    </div>
     <label class="pk-nr"><input type="checkbox" id="pk-norepeat"><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
     <button class="btn primary block" id="go" style="height:56px;font-size:17px;margin-top:14px">${ICON.dice} 开始点名</button>
-    <div class="pick-stage"><div class="pick-roll" id="stage"></div></div>
+    <div class="pick-stage"><div class="pick-roll" id="stage"><span class="tiny muted" style="font-size:14px;font-weight:500;letter-spacing:0;text-align:center;display:block;padding:0 18px">点「开始点名」，名字会在这里滚出来</span></div></div>
     <div id="history" class="tiny muted" style="text-align:center;min-height:18px"></div>
   </div>`;
 
-  let mode = 'no';
-  let norepeat = false;
-  let pool = [];        // 不重复模式下「还没点到过」的
-  let poolKey = '';     // 人数|模式，变了就重置池子
-
-  const totalOf = () => Math.max(1, Math.min(200, Number($('#pk-total').value) || 1));
-  // 池子：号码是 1..人数；名字是名单（人数框跟着名单长度走）
-  const allOf = () => {
-    if (mode === 'name' && hasNames) return names0.slice();
-    const n = totalOf();
-    return Array.from({ length: n }, (_, i) => String(i + 1));
+  const gradeEl = $('#pk-grade');
+  const clsEl = $('#pk-cls');
+  const clsCustomEl = $('#pk-cls-custom');
+  const segBtns = [...$('#s-body').querySelectorAll('[data-mode]')];
+  const nameBtn = segBtns.find((x) => x.dataset.mode === 'name');
+  const readGrade = () => String(gradeEl?.value || '').trim();
+  const readCls = () => {
+    if (!clsEl) return '';
+    const v = String(clsEl.value || '');
+    return v === '__other__' ? String(clsCustomEl?.value || '').trim() : v.trim();
   };
-  const keyOf = () => `${mode}|${mode === 'name' ? names0.length : totalOf()}`;
+
+  let norepeat = false;
+  /* 模式是用户自己点的，还是系统因为「这个班没名单」临时降级的？
+     降级的不算数：换到有名单的班要自动回到按名单点名。 */
+  let modePicked = false;
+  let pool = [];        // 不重复模式下「还没点到过」的
+  let poolKey = '';     // 班级|人数|模式，变了就重置池子
+  const totalOf = () => Math.max(1, Math.min(200, Number($('#pk-total').value) || 1));
+  // 池子：名单模式是花名册；号码模式是 1..人数
+  const allOf = () => (mode === 'name' && names.length
+    ? names.slice()
+    : Array.from({ length: totalOf() }, (_, i) => String(i + 1)));
+  const keyOf = () => `${mode}|${clsKey(readGrade(), readCls())}|${mode === 'name' ? names.length : totalOf()}`;
   const resetPool = (force = false) => {
     const k = keyOf();
     if (!force && k === poolKey) return;
     poolKey = k; pool = allOf();
   };
 
-  // 模式切换
-  $('#s-body').querySelectorAll('[data-mode]').forEach((b) => {
+  /* 换班之后：名单、总人数、按钮可用性、池子全跟着重来 */
+  const applyClass = () => {
+    roster = rosterOf(curGrade, curClass);
+    names = namesOf(roster);
+    if (!names.length) mode = 'no';
+    else if (!modePicked) mode = 'name';
+    segBtns.forEach((x) => x.classList.toggle('on', x.dataset.mode === mode));
+    if (nameBtn) {
+      nameBtn.disabled = !names.length;
+      nameBtn.title = names.length ? '' : '这个班还没有名单，导入名单后才能按名单点名';
+    }
+    $('#pk-total').value = mode === 'name' ? names.length : countOf(roster, names);
+    resetPool(true);
+    $('#history').textContent = '';
+    const tip = $('#pk-roster-tip');
+    if (tip) {
+      tip.textContent = names.length
+        ? `${clsName(curGrade, curClass)} · 名单 ${names.length} 人，可以按名单点名`
+        : (curGrade || curClass
+          ? `${clsName(curGrade, curClass)} 还没有花名册，先按号码点名（自己填总人数）`
+          : '先选年级和班级');
+    }
+    savePref('roll_grade', curGrade);
+    savePref('roll_cls', curClass);
+  };
+
+  gradeEl.onchange = () => {
+    curGrade = readGrade();
+    if (clsEl && clsEl.tagName === 'SELECT') {
+      const list = classesOf(curGrade);
+      curClass = list.find((c) => namesOf(rosterOf(curGrade, c)).length) || list[0] || '';
+      clsEl.innerHTML = list.map((c) => `<option${c === curClass ? ' selected' : ''}>${esc(c)}</option>`).join('')
+        + '<option value="__other__">其他（手动填写）</option>';
+      if (clsCustomEl) { clsCustomEl.value = ''; clsCustomEl.style.display = 'none'; }
+    } else {
+      curClass = readCls();
+    }
+    applyClass();
+  };
+  if (clsEl && clsEl.tagName === 'SELECT') {
+    clsEl.onchange = () => {
+      const custom = clsEl.value === '__other__';
+      if (clsCustomEl) {
+        clsCustomEl.style.display = custom ? '' : 'none';
+        if (!custom) clsCustomEl.value = '';
+      }
+      curClass = readCls();
+      applyClass();
+    };
+  }
+  if (clsCustomEl) clsCustomEl.oninput = () => { curClass = readCls(); applyClass(); };
+
+  // 模式切换：按名单点名放在前面，默认就选它
+  segBtns.forEach((b) => {
     b.onclick = () => {
       if (b.disabled) return;
       mode = b.dataset.mode;
-      $('#s-body').querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
-      if (mode === 'name') $('#pk-total').value = names0.length;
+      modePicked = true;
+      segBtns.forEach((x) => x.classList.toggle('on', x === b));
+      if (mode === 'name') $('#pk-total').value = names.length;
       resetPool(true);
       $('#history').textContent = norepeat ? `已点 0/${pool.length}，点完自动洗牌` : '';
     };
@@ -821,7 +1000,7 @@ function paintRoll() {
     $('#history').textContent = norepeat ? `已点 0/${pool.length}，点完自动洗牌重新开始` : '';
   };
   $('#pk-total').oninput = () => { if (norepeat) resetPool(); };
-  resetPool(true);
+  applyClass();
 
   $('#go').onclick = () => {
     resetPool();
@@ -835,6 +1014,7 @@ function paintRoll() {
     }
     if (norepeat) pool = pool.filter((x) => !picks.includes(x));
     const label = (v) => (mode === 'name' ? v : v + ' 号');
+    const where = clsName(curGrade, curClass);
 
     const btn = $('#go');
     btn.disabled = true;
@@ -857,10 +1037,10 @@ function paintRoll() {
         try { navigator.vibrate?.([40, 60, 90]); } catch {}
         if (norepeat) {
           $('#history').textContent = pool.length
-            ? `已点 ${whole.length - pool.length}/${whole.length} 人，还剩 ${pool.length} 人`
-            : '全班都点过了，下次点击自动洗牌重来';
+            ? `${where} 已点 ${whole.length - pool.length}/${whole.length} 人，还剩 ${pool.length} 人`
+            : `${where} 全班都点过了，下次点击自动洗牌重来`;
         } else {
-          $('#history').textContent = `从 ${whole.length} ${mode === 'name' ? '个名字' : '个号码'}里点了 ${picks.length} 个`;
+          $('#history').textContent = `${where} 从 ${whole.length} ${mode === 'name' ? '个名字' : '个号码'}里点了 ${picks.length} 个`;
         }
       }
     }, 62);
