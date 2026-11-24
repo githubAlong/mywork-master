@@ -4,7 +4,7 @@ import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
 import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
-import { daySchooledPeriods, dayTimeRange, orderPeriods, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
+import { daySchooledPeriods, dayTimeRange, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
@@ -182,17 +182,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const derived = dayTimeRange(times) || ['00:00','23:59'];
     const edited = periodTimeEdits[[date,currentScheduleType(),grade,0].join('|')];
     return edited ? [edited.start || derived[0], edited.end || derived[1]] : derived;
-  };
-  const dayPeriodInfo = () => {
-    const schooled = daySchooledPeriodsOf();
-    return {
-      schooled,
-      items: orderPeriods(DEFAULT_PERIODS, schooled),
-      /* 当天完全没有排课（周末、节假日、这个年级没课）时不假装是课表口径。 */
-      note: schooled.length
-        ? '时段取自当天课表 · ' + schooled.length + ' 个有课节次'
-        : '当日课表无排课，时段取作息表 ' + DEFAULT_PERIODS.length + ' 个节次',
-    };
   };
   let busy = false;
   const loadMonth = async () => {
@@ -1529,7 +1518,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     return dirty;
   };
   const batchBarHtml = (type) => {
-    const info = dayPeriodInfo();
     const range = resolvePeriodRange(period);
     const periodLabel = period === 0 ? '全天'
       : (DEFAULT_PERIODS.find(item => Number(item.no) === period)?.label || ('第' + period + '节'));
@@ -1540,7 +1528,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       + '<span class="aprd-batch-period">' + esc(periodLabel) + ' ' + esc(range[0] + '—' + range[1]) + '</span></div>'
       + '<div class="aprd-batch-side">'
       + (dirtyCount ? '<button type="button" class="aprd-dirty-badge" data-scroll-dirty>有 ' + dirtyCount + ' 条未确认变更</button>' : '')
-      + '<span class="aprd-batch-note">' + esc(info.note) + '</span></div></div>';
+      + '</div></div>';
   };
   /* 批量导入/批量导出挂在卡片右上角的页签行上，可导出条数只有各张表自己算得出来，
      所以由各页签的 builder 往 tabCorner 交一份，renderPage 拼页签行时取用。 */
@@ -2008,9 +1996,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const renderPage = () => {
     const rangeView = isRangeView(tab);
     const batch = rangeView ? rangeBatchHtml() : (TYPE[tab] ? batchBarHtml(tab) : '');
-    const periodItems = dayPeriodInfo().items;
-    /* 整天一节课都没有（周末、还没录课表）就不给每个节次挂「当日无课」，那样只会吵。 */
-    const dayHasClasses = periodItems.some(item => item.schooled);
+    const periodItems = DEFAULT_PERIODS;
     /* 月汇总还在加载时 builder 会提前返回，不会交右上角的操作，所以每次重新渲染先清空。 */
     tabCorner = '';
     const content = isRangeView(tab) ? rangeHtml(tab)
@@ -2028,7 +2014,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       +(byMonth?'<label>月份 <input type="month" id="aprd-summary-month" value="'+summaryMonth+'"></label>'
       :byYear?'<label>年份 <input type="number" id="aprd-view-year" min="2000" max="2199" step="1" value="'+viewYear+'"></label>'
       :'<label>日期 <input type="date" id="aprd-date" value="'+date+'"></label>'
-      +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+periodItems.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+((p.schooled||!dayHasClasses)?'':' class="aprd-period-off"')+'>'+esc(p.label+(p.schooled||!dayHasClasses?'':'（当日无课）'))+'</option>').join('')+'</select></label>'
+      +'<label>节次 <select id="aprd-period"><option value="0" '+(period===0?'selected':'')+'>全天</option>'+periodItems.map(p=>'<option value="'+p.no+'" '+(p.no===period?'selected':'')+'>'+esc(p.label)+'</option>').join('')+'</select></label>'
       /* 时段不再用 <input type=time>：浏览器按系统语言渲染成「上午 08:00 / 下午 06:35」，
          lang 属性也扭不过来（用户 11-22 要求一律 24 小时显示），改成自己校验的文本框。 */
       +'<label>时段 <span class="aprd-time-range">'
