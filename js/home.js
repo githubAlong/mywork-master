@@ -1,6 +1,7 @@
 import { resolvePlace, locationWarning } from './weather-location.mjs';
 import { DEFAULT_PLACE, lookupLocalPlaces, placeNames, todayMetrics, hoursForDate, weekRows } from './weather-view.mjs';
 import { api, el, esc, toast, sheet, confirmDialog, promptDialog, ymd, pad2, WD_CN, WD_SHORT, fmtTime, fmtDateTime, relDay, parseDT, countdown, speak, stopSpeak, colorOf, ls, exportUrl, download, addToSystemCalendar } from './core.js';
+import { clsShort } from './grade-class.mjs';
 import { registerView, state, icon, go, render, refreshUnread, paintUnread, onViewLeave } from './ui.js';
 import { syncDay, DAY_SYNC } from './homelayout.js';
 import { mount as mountGrid, resetLayout as resetGridLayout, pullCloud as pullLayoutCloud, setTemporaryHeight as setGridTemporaryHeight } from './homegrid.js';
@@ -214,11 +215,15 @@ async function loadWeather(force = false) {
     + '&hourly=temperature_2m,weather_code,precipitation_probability'
     + '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,wind_speed_10m_max'
     + '&timezone=auto&forecast_days=7';
-  /* 取数地址按环境拆开：测试环境走同源 /wx/forecast（Pages Function 代取），
-     绕开部分网络对 api.open-meteo.com 的直连重置；其它环境/代理不可用时回落到直连。
-     两个地址都失败才算天气没拿到，避免「一处被墙就整卡空白」。 */
+  /* 取数通道按可达性排：先天气代理，再直连 open-meteo，两条都失败才算没拿到。
+     GitHub Pages 跑不了 Pages Function，所以同源 /wx/forecast 只在 CF Pages 测试域用；
+     其它站点（A/B 两个 GitHub Pages）走已部署的 my-workbench-test.pages.dev 代理，
+     绕开部分网络对 api.open-meteo.com 的浏览器直连重置（net::ERR_EMPTY_RESPONSE）。 */
+  const WX_PROXY = 'https://my-workbench-test.pages.dev/wx/forecast';
   const sources = [];
-  if (/\.pages\.dev$/i.test(location.hostname)) sources.push(`${location.origin}/wx/forecast?${query}`);
+  sources.push(/\.pages\.dev$/i.test(location.hostname)
+    ? `${location.origin}/wx/forecast?${query}`
+    : `${WX_PROXY}?${query}`);
   sources.push(`https://api.open-meteo.com/v1/forecast?${query}`);
   let r = null;
   for (const url of sources) {
@@ -410,17 +415,27 @@ async function geocodeCity(kw) {
     [kw2 + '县', kw2 + '区', kw2 + '市'].forEach((term) => terms.add(term));
   }
 
+  /* 城市搜索同样按可达性排：先地名代理，再直连 open-meteo，两条都失败才当没查到。
+     GitHub Pages 跑不了 Pages Function，非 pages.dev 域指向已部署的
+     my-workbench-test.pages.dev/wx/geocode，绕开浏览器对
+     geocoding-api.open-meteo.com 的直连重置。 */
+  const GEO_PROXY = 'https://my-workbench-test.pages.dev/wx/geocode';
+  const qs = (t) => `name=${encodeURIComponent(t)}&count=20&language=zh&format=json`;
   const grab = async (term) => {
-    try {
-      const url = 'https://geocoding-api.open-meteo.com/v1/search?name='
-        + encodeURIComponent(term) + '&count=20&language=zh&format=json';
-      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!response.ok) return [];
-      const data = await response.json();
-      return Array.isArray(data?.results) ? data.results : [];
-    } catch {
-      return [];
+    const urls = [];
+    urls.push((/\.pages\.dev$/i.test(location.hostname)
+      ? `${location.origin}/wx/geocode`
+      : GEO_PROXY) + `?${qs(term)}`);
+    urls.push(`https://geocoding-api.open-meteo.com/v1/search?${qs(term)}`);
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (Array.isArray(data?.results)) return data.results;
+      } catch { /* 这条通道不通，换下一条 */ }
     }
+    return [];
   };
 
   let rows = (await Promise.all([...terms].map(grab))).flat();
@@ -1452,7 +1467,7 @@ function renderTodayCourses(coursesOverride = null, lessonsOverride = null, date
       <span class="course-bar" style="background:${colorOf(course.class_name)}"></span>
       <span class="course-time">${esc(String(course.start_time || '').slice(0, 5))}<br><span class="muted">${esc(String(course.end_time || '').slice(0, 5))}</span></span>
       <div class="course-main">
-        <div class="course-name">${esc(course.class_name)} <span class="small muted">${esc(course.subject)} · 第${esc(course.period_no)}节</span></div>
+        <div class="course-name">${esc(clsShort(course.grade, course.class_name))} <span class="small muted">${esc(course.subject)} · 第${esc(course.period_no)}节</span></div>
         <div class="course-meta">
           <span class="course-room">${esc(course.room || '')}</span>
           <span class="course-state state-${status}">${labels[status]}</span>

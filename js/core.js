@@ -163,8 +163,16 @@ export function el(html, root = document) {
   return node;
 }
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-/* 班级名：库里常存"高二(5)班"、年级也是"高二"，直接拼会重复成"高二 高二(5)班"。
-   约定：班级名已包含年级时只用班级名，否则才补上年份前缀。 */
+/* ==================== 年级 / 班级：全站统一口径 ====================
+   规则本身在 js/grade-class.mjs（零依赖纯模块，localapi / localdb 也要用），
+   这里只做转出，页面继续从 core.js 引，不用改 import 路径。 */
+export {
+  normGrade, inferGrade, normClass, clsShort, clsPair, clsStore,
+  GRADE_ORDER, gradeRank, makeClsLabeler,
+} from './grade-class.mjs';
+
+/* 旧接口，保留兼容：库里常存"高二(5)班"、年级也是"高二"，
+   直接拼会重复成"高二 高二(5)班"。新代码请用 clsShort / clsPair。 */
 export const clsName = (grade, cls) => {
   const g = String(grade || '').trim();
   const c = String(cls || '').trim();
@@ -380,7 +388,7 @@ if (typeof window !== 'undefined') {
    表现就是「点了确认没反应」（第 2 条）。
    改成每开一层 +1，永远保证最后打开的在最上面。 */
 let zBase = 200;
-export function sheet({ title = '', body = '', footer = '', wide = false, onMount, onClose, cls = '' }) {
+export function sheet({ title = '', body = '', footer = '', wide = false, onMount, onClose, onBeforeClose, cls = '' }) {
   const wrap = el(`<div class="sheet-mask">
     <div class="sheet ${wide ? 'sheet-wide' : ''} ${cls}">
       <div class="sheet-head">
@@ -399,7 +407,11 @@ export function sheet({ title = '', body = '', footer = '', wide = false, onMoun
   requestAnimationFrame(() => wrap.classList.add('in'));
   let closed = false;
   const close = () => {
-    if (closed) return; closed = true;
+    if (closed) return;
+    /* 关窗前给调用方一次否决权（名单改了一半被手滑关掉，得能拦一下）。
+       只认严格的 false，其它返回值一律放行，免得没传钩子时把弹层锁死。 */
+    if (onBeforeClose?.() === false) return;
+    closed = true;
     wrap.classList.remove('in');
     setTimeout(() => {
       wrap.remove();
