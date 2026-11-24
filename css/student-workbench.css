@@ -298,6 +298,93 @@ html[data-theme="dark"] .stu-workbench {
   white-space: pre-wrap;
 }
 
+/* ══ 桌面（≥1024px）：左侧导航栏 + 内容区 ══
+   页签本来长在内容区顶部，桌面横向空间富余，把它挪到左侧当导航栏：
+   顶部标题栏变成侧栏头部，按钮改成左对齐竖排，内容区右移让开侧栏。
+   760–1023 与手机仍是原来的顶部页签，不受影响。 */
+@media (min-width: 1024px) {
+  .stu-workbench {
+    --stu-rail: 228px;
+  }
+
+  /* 顶部标题栏 → 左侧栏头部 */
+  .stu-workbench .stu-headwrap {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--stu-rail);
+    z-index: 30;
+    background: var(--card);
+    border-right: 1px solid var(--line);
+    box-shadow: none;
+  }
+
+  .stu-workbench .stu-top {
+    max-width: none;
+    margin: 0;
+    padding: 22px 20px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+  }
+
+  .stu-workbench .stu-logo {
+    background: var(--stu-header);
+    color: #fff;
+  }
+
+  .stu-workbench .stu-title {
+    font-size: 15.5px;
+    color: var(--text);
+  }
+
+  /* 页签 → 左侧导航栏 */
+  .stu-workbench .s-tabs {
+    position: fixed;
+    left: 0;
+    top: 78px;
+    bottom: 0;
+    width: var(--stu-rail);
+    z-index: 31;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 4px 14px 22px;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow-y: auto;
+  }
+
+  .stu-workbench .s-tabs button {
+    flex: 0 0 auto;
+    height: 44px;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 14.5px;
+  }
+
+  .stu-workbench .s-tabs button.on {
+    box-shadow: none;
+  }
+
+  /* 内容区让开左侧栏 */
+  .stu-workbench .s-wrap {
+    max-width: none;
+    margin: 0;
+    padding: 26px 36px 56px calc(var(--stu-rail) + 36px);
+  }
+
+  .stu-workbench #s-body {
+    max-width: 1080px;
+  }
+}
+
 @media (max-width: 620px) {
   .stu-workbench .s-wrap {
     padding-top: 18px;
