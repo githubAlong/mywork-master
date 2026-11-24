@@ -8,3 +8,4 @@ deploy at 2026-11-24T11:06Z — remove greeting task count (wb-v395)
 deploy at 2026-11-24T11:16Z — realtime reconnect backoff fix (wb-v396)
 trigger student update tip v397
 trigger final bugfix v398
+trigger ui-polish v399
