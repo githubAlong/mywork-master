@@ -187,6 +187,7 @@ function joinAll(at) {
    同时拿它当健康检查：连续两次都发不出去（ws 不是 OPEN），直接重连。 */
 const HEARTBEAT_MS = 25000;
 const STALE_MS = 70000;   // 超过 70 秒什么都没收到，认为连接已经死了
+const LIVE_GRACE_MS = 5000;  // 亮绿灯后至少要稳住 5 秒，才算一次成功连接
 
 function startHeartbeat() {
   clearTimers();
@@ -228,10 +229,21 @@ function handleOne(m) {
   switch (m.event) {
     /* 心跳回执：收到才算"真的通"。刚连上时 status 先给 live 会闪一下假绿灯 */
     case 'phx_reply':
-      st.lastBeat = Date.now();
-      if (st.status !== 'live') {
-        st.tries = 0;
-        setStatus('live');
+      /* 关键：phx_reply 有 ok / error 两种。
+         token 失效、表没加进发布时服务端回的是 error——它同样是"通了消息"，
+         但**不是"连上了"**。以前不分青红皂白一律当成功：清 tries、亮绿灯，
+         于是每轮都回到 0ms 立即重连，浏览器每条都打一行 WebSocket failed，
+         一个页面能刷出上千条红字。error 只报给状态点，绝不重置退避。 */
+      if (m.payload?.status === 'ok') {
+        st.lastBeat = Date.now();
+        /* 这里不清 tries：要等 isLived() 确认这条连接真的稳住了。
+           否则"回一条 ok 就断"的坏连接每轮都把退避打回 0ms。 */
+        if (st.status !== 'live') setStatus('live');
+      } else if (m.payload?.status === 'error') {
+        emit('wb:realtime-denied', {
+          topic: m.topic,
+          message: m.payload?.response?.message || m.payload?.message || '',
+        });
       }
       return;
 
@@ -291,6 +303,9 @@ let _want = false;   // 是否处于"应该连着"的状态（登录了、配置
 
 export function start() {
   _want = true;
+  /* 新一轮会话（登录 / 换账号 / 页面回前台）给足重试次数，
+     否则上一次连不上攒够次数后，即使网络好了也不会再试。 */
+  st.tries = 0;
   reconnect();
 }
 
@@ -302,9 +317,26 @@ export function stop() {
 
 /* 重连：指数退避 1s → 2s → 4s → 8s → 最多 30s。
    不无限快重试的原因是：Supabase 免费额度对连接数有上限，
-   真断了（比如欠费）时疯狂重连只会让情况更糟。 */
-function reconnect(reason) {
+   真断了（比如欠费）时疯狂重连只会让情况更糟。
+
+   连续 MAX_TRIES 次都连不上就停手：浏览器每次 WebSocket 握手失败都会
+   自己往控制台打一条红字，JS 拦不住，无限重连就是无限刷屏。
+   停手后页面功能照常，网络恢复 / 页面回前台 / 重新登录会重新给一轮机会。 */
+const MAX_TRIES = 6;
+/* 真通且稳住 5 秒才算一次成功连接。刚收到 ok 回执就断的那种不算——
+   浏览器/代理掐 WSS 时每轮都会先回一个 ok 再关，按回执清零等于没退避。 */
+const isLived = () => st.status === 'live' && st.since > 0 && Date.now() - st.since >= LIVE_GRACE_MS;
+function reconnect(reason, fresh = false) {
   if (!_want) return;
+  /* onclose 进来时 status 还是 live；从这里统一判"刚才那次算不算通" */
+  if (isLived()) st.tries = 0;
+  if (fresh) st.tries = 0;
+  if (st.tries >= MAX_TRIES) {
+    hardClose();
+    setStatus('error');
+    console.info('[realtime] 连续 ' + st.tries + ' 次连不上，暂停自动重连（页面功能不受影响）');
+    return;
+  }
   hardClose();
   setStatus('error');
   st.tries += 1;
@@ -356,13 +388,14 @@ async function connect() {
 
   ws.onclose = () => {
     if (st.ws !== ws) return;      // 已经被新一轮连接替换掉了，忽略旧的回调
-    /* 只有真的"通过"（收到 phx_reply、status 到 live）才清零重连次数。
-       原来用"距连接尝试满 10 秒"当判据是错的：握手挂住但从不推回包的连接
-       （被墙 / realtime 未发布这张表）每轮都满 10 秒后才关闭，tries 被反复
-       清零，于是永远走 reconnect 里 tries===1 的 0ms 分支，疯狂重连刷屏。
-       改按 status 判：没真通就不清零，退避才会正常爬到 30 秒上限。 */
-    if (st.status === 'live') st.tries = 0;
-    reconnect('连接关闭');
+    /* 只有"真通了而且稳住了一会儿"才清零重连次数。
+       两个坑都要躲开：
+       1) 以前按"距连接尝试满 10 秒"判：握手挂住但从不推包的连接每轮都满
+          10 秒才关，tries 被反复清零，永远走 0ms 分支；
+       2) 只按 status==='live' 判也不够：有些网络先回一条 ok 回执、随即
+          立刻断开（浏览器/代理掐 WSS 的典型表现），每轮刚亮绿灯就重置，
+          同样无限 0ms 重连。加 LIVE_GRACE_MS 门槛：活过 5 秒才算真通。 */
+    reconnect('连接关闭');   // 是否算"真通过"由 reconnect 里的 isLived() 统一判
   };
 }
 
@@ -413,10 +446,10 @@ try {
     if (!_want) return;
     if (st.ws && st.ws.readyState === 1) {
       /* 还在连，探活一下；心跳没响应才重连 */
-      if (st.lastBeat && Date.now() - st.lastBeat > HEARTBEAT_MS * 3) reconnect('网络恢复，但心跳过期');
+      if (st.lastBeat && Date.now() - st.lastBeat > HEARTBEAT_MS * 3) reconnect('网络恢复，但心跳过期', true);
       return;
     }
-    reconnect('网络恢复');
+    reconnect('网络恢复', true);
   });
 } catch { }
 
@@ -426,7 +459,7 @@ try {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !_want) return;
     const ws = st.ws;
-    if (!ws || ws.readyState !== 1) { reconnect('页面回到前台，连接已断'); return; }
-    if (st.status === 'live' && Date.now() - st.lastBeat > STALE_MS) reconnect('页面回到前台，心跳超时');
+    if (!ws || ws.readyState !== 1) { reconnect('页面回到前台，连接已断', true); return; }
+    if (st.status === 'live' && Date.now() - st.lastBeat > STALE_MS) reconnect('页面回到前台，心跳超时', true);
   });
 } catch { }
