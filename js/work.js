@@ -623,7 +623,7 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
       <div class="le-pick-h">${pickLabel} <span class="le-pick-s">${pickHint}</span></div>
       <div class="le-pick-list">${todayCourses.map((c, i) => `<button class="le-pick-i" data-ci="${i}">
         <span class="lpi-p">第${c.period_no}节</span>
-        <span class="lpi-c">${esc(c.class_name || '')}</span>
+        <span class="lpi-c">${esc(clsShort(c.grade, c.class_name))}</span>
         <span class="lpi-t">${esc(c.start_time || '')}</span>
       </button>`).join('')}</div>
     </div>` : ''}
@@ -631,7 +631,8 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
     <div class="form-grid">
       <div class="field"><label class="field-label">日期</label><input class="input" type="date" id="date" value="${esc(row?.date || today)}"></div>
       <div class="field"><label class="field-label">节次</label><select class="input" id="period">${[1,2,3,4,5,6,7,8,9,10].map((n) => `<option ${row?.period_no === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-      <div class="field"><label class="field-label">班级</label><input class="input" id="class" value="${esc(row?.class_name || '')}"></div>
+      <div class="field"><label class="field-label">年级</label><input class="input" id="grade" value="${esc(normGrade(row?.grade) || inferGrade(row?.class_name))}" placeholder="比如：高二"></div>
+      <div class="field"><label class="field-label">班级</label><input class="input" id="class" value="${esc(normClass(row?.class_name, row?.grade))}" placeholder="比如：5班"></div>
       <div class="field"><label class="field-label">科目</label><input class="input" id="subject" value="${esc(row?.subject || '')}"></div>
       <div class="field"><label class="field-label">开始时间</label><input class="input" type="time" id="st" value="${esc(row?.start_time || '')}"></div>
       <div class="field"><label class="field-label">结束时间</label><input class="input" type="time" id="et" value="${esc(row?.end_time || '')}"></div>
@@ -692,7 +693,9 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
   const s = sheet({ title: isNew ? '记一节课' : '编辑上课记录', body, wide: true });
   const $ = (q) => body.querySelector(q);
   /* 班级框直接给课表里的班级候选，选完不用再手打；取不到候选也能直接输入。 */
-  classPickerAuto($('#class'));
+  /* 年级 + 班级两列分开存：以前只有班级一列，选完存「高二5班」，
+     编辑回来只能看到一串连写、年级也没单独展示。 */
+  classPickerAuto($('#class'), { gradeInput: $('#grade') });
   let type = curType;
 
   const syncType = () => {
@@ -804,7 +807,9 @@ async function lessonEditor(row, reload, month, price = DEFAULT_PRICE) {
     if (!type) return;
     const payload = {
       date: $('#date').value, period_no: Number($('#period').value),
-      class_name: $('#class').value, subject: $('#subject').value,
+      class_name: normClass($('#class').value, $('#grade').value),
+      grade: normGrade($('#grade').value) || inferGrade($('#class').value) || null,
+      subject: $('#subject').value,
       start_time: $('#st').value, end_time: $('#et').value,
       sub_type: type,
       peer_name: type === 'normal' ? '' : peer,
