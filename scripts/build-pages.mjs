@@ -15,7 +15,9 @@ const files = [
   'teacher.html',
   'student.bundle.js',
 ];
-const directories = ['assets', 'css', 'icons', 'js', 'previews'];
+/* tools/ 也要进 dist：tools/normalize-class.html 是历史班级数据清洗页，
+   老师要在线上直接打开用；不加进来线上就是 404。 */
+const directories = ['assets', 'css', 'icons', 'js', 'previews', 'tools'];
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
