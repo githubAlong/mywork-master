@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v396-realtime-backoff';
+const CACHE = 'wb-v397-student-update-tip';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -168,6 +168,14 @@ self.addEventListener('activate', (e) => {
     const cs = await self.clients.matchAll({ type: 'window' });
     cs.forEach((c) => c.postMessage({ type: 'WB_SW_UPDATED', cache: CACHE }));
   })());
+});
+
+/* 页面主动查版本：main.js 从 v388 起就在 ready 后发 WB_PING 唤醒 waiting 的 SW，
+   但这里一直没有应答，查询等于石沉大海。补上应答后，学生端能拿它当兜底——
+   activate 广播万一丢在后台/切换瞬间，下次页面起来问一句就知道自己是不是旧版。 */
+self.addEventListener('message', (e) => {
+  if (e.data?.type !== 'WB_PING') return;
+  e.source?.postMessage({ type: 'WB_VERSION', cache: CACHE });
 });
 
 /* 【兜底页】

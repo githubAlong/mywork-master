@@ -159,6 +159,29 @@
 <link rel="stylesheet" href="css/student-workbench.css">
 <!-- 紫色外观覆盖层：必须排在 student-workbench.css 之后（同优先级后加载者胜） -->
 <link rel="stylesheet" href="css/student-purple.css">
+<style>
+  /* 【新版本提示条】只有真的换了版本才出现，点一下就地刷新到新版。
+     发布靠递增 sw.js 里的 CACHE 版本号触发：SW 装好后广播 WB_SW_UPDATED，
+     页面收到就和启动时记下的版本对比，不同才提示，避免一进来就打扰。 */
+  .wb-update-tip { display: none; position: fixed; z-index: 80;
+    left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    width: min(92vw, 420px); padding: 12px 14px; box-sizing: border-box;
+    align-items: center; gap: 10px; cursor: pointer;
+    background: linear-gradient(135deg, #6d5ae0, #5743c7); color: #fff;
+    border-radius: 14px; box-shadow: 0 10px 30px rgba(80,60,170,.35);
+    font: 600 14px/1.4 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+  .wb-update-tip.on { display: flex; }
+  .wb-update-tip .wb-u-ico { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px;
+    display: grid; place-items: center; background: rgba(255,255,255,.2); font-size: 15px; }
+  .wb-update-tip .wb-u-txt { flex: 1; }
+  .wb-update-tip .wb-u-btn { flex: 0 0 auto; padding: 6px 12px; border-radius: 9px;
+    background: #fff; color: #5743c7; font-size: 13px; font-weight: 700; }
+  .wb-update-tip .wb-u-x { flex: 0 0 auto; border: 0; background: transparent; color: rgba(255,255,255,.8);
+    font-size: 18px; line-height: 1; padding: 2px 4px; cursor: pointer; }
+  @media (min-width: 1024px) {
+    .wb-update-tip { left: auto; right: 24px; bottom: 24px; transform: none; }
+  }
+</style>
 </head>
 <body class="stu-workbench">
 <!-- 手机上不显示这条（紫色设计稿没有独立标题栏，只有头像 + 问候）；
@@ -1421,6 +1444,80 @@ function paintBulletin() {
 }
 
 init();
+</script>
+<!-- 新版本提示条：脚本在下方动态填入文案并绑定点击刷新 -->
+<div class="wb-update-tip" id="wb-update-tip" role="status" aria-live="polite">
+  <span class="wb-u-ico" aria-hidden="true">↑</span>
+  <span class="wb-u-txt">课堂小助手有新版本了，点右边更新</span>
+  <span class="wb-u-btn">更新</span>
+  <button class="wb-u-x" type="button" aria-label="暂时不更新">×</button>
+</div>
+<script>
+/* 【新版本自动提示】
+   教师端 app.html 早就有这套（收到 WB_SW_UPDATED 就刷新），学生端之前完全没有，
+   于是改了代码发布后，学生开着页面看到的还是旧版，得手动强刷。补上同样的监听：
+   - sw.js 只有真的换版（activate）才广播 WB_SW_UPDATED，收到就提示，不依赖基线；
+   - 广播万一丢在后台/切换瞬间，再靠定时 WB_PING 问当前版本兜底——发现和自己
+     启动时记下的版本不同也提示；
+   - 用 localStorage 按版本去重，同一个版本只打扰一次，不打断正在点的名。
+   本地开发不注册 SW（否则旧缓存会把 dev 代码挡住）。 */
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  if (['localhost', '127.0.0.1'].includes(location.hostname)) return;
+
+  var tip = document.getElementById('wb-update-tip');
+  if (!tip) return;
+  var myCache = null;      // 本页启动时问到的版本，仅用于 ping 兜底比对
+  var decided = false;     // 本页已经提示过一次，不再打扰
+  var KEY = 'wb_stu_sw_seen';
+
+  function seen(cache) {
+    try { return localStorage.getItem(KEY) === cache; } catch (e) { return false; }
+  }
+  function showTip(cache) {
+    if (decided || !cache || seen(cache)) return;
+    decided = true;
+    try { localStorage.setItem(KEY, cache); } catch (e) {}
+    tip.classList.add('on');
+  }
+  function askVersion(worker) {
+    if (!worker) return;
+    try { worker.postMessage({ type: 'WB_PING' }); } catch (e) {}
+  }
+
+  tip.addEventListener('click', function (e) {
+    if (e.target.closest('.wb-u-x')) return;
+    location.reload();
+  });
+  var x = tip.querySelector('.wb-u-x');
+  if (x) x.addEventListener('click', function (e) {
+    e.stopPropagation();
+    tip.classList.remove('on');
+  });
+
+  /* 主链路：SW 换版 activate 时广播，只有真换了版本才会发 */
+  navigator.serviceWorker.addEventListener('message', function (e) {
+    var d = e.data || {};
+    if (d.type === 'WB_SW_UPDATED') showTip(d.cache || 'sw-' + Date.now());
+    else if (d.type === 'WB_VERSION') {
+      if (myCache === null) myCache = d.cache;
+      else if (d.cache !== myCache) showTip(d.cache);
+    }
+  });
+
+  navigator.serviceWorker.ready.then(function (reg) {
+    askVersion(navigator.serviceWorker.controller || reg.active);
+    if (reg.waiting) showTip('waiting-' + Date.now());
+    /* 每 10 分钟主动问一次：广播丢在后台/切换瞬间时靠它兜底，
+       和教师端 main.js 的定时 update 保持同一节奏。 */
+    setInterval(function () {
+      reg.update().catch(function () {});
+      askVersion(navigator.serviceWorker.controller || reg.active);
+    }, 10 * 60 * 1000);
+  }).catch(function () {});
+
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function () {});
+})();
 </script>
 </body>
 </html>
