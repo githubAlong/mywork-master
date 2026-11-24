@@ -14,8 +14,9 @@ export const DEFAULT_PERIODS = [
 
 export const LEAVE_TYPES = ['事假', '病假', '婚假', '丧假', '产假', '公假', '调休', '公出'];
 
-/* 2026-11-14：列顺序按用户要求改为 坐班 / 上课 / 听课 / 教研 / 请假。 */
-const TEACHER_COLUMNS = Object.freeze(['序号', '归属部门', '归属年级', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假', '备注', '操作']);
+/* 2026-11-14：列顺序按用户要求改为 坐班 / 上课 / 听课 / 教研 / 请假。
+   2026-11-24：请假后面补「请假时间」（小时/天·上午下午全天/月），三张表口径一致。 */
+const TEACHER_COLUMNS = Object.freeze(['序号', '归属部门', '归属年级', '姓名', '学科', '坐班', '上课', '听课', '教研', '请假', '请假时间', '备注', '操作']);
 export const ATTENDANCE_COLUMNS = {
   roster: TEACHER_COLUMNS,
   seat: TEACHER_COLUMNS,
@@ -246,7 +247,7 @@ export function deriveTableGridState(teacher, type, rows, context = {}) {
 }
 
 export function updateTeacherGrid(rows, teacher, type, period, key, value, context = {}) {
-  if (!GRID_TYPES.includes(type) || ![...GRID_KEYS, 'leave', 'remark'].includes(key)) {
+  if (!GRID_TYPES.includes(type) || ![...GRID_KEYS, 'leave', 'leave_time', 'remark'].includes(key)) {
     throw new Error('无效的考勤表或字段');
   }
   let row = rows.find(item => !rowData(item).__deleted && matchesGridTeacher(item, teacher));
@@ -485,6 +486,86 @@ export function formatLeaveDuration(record) {
   return parts.join(' / ') || '0天';
 }
 
+/* ================= 请假时间（坐班/上课/教研三张表的独立一列） ================= */
+/* 用户 11-24 要求：请假列后面加一列「请假时间」，三种填法——
+     · 小时：几小时就输几（2、3…）
+     · 天　：上午 / 下午 / 全天
+     · 月　：几个月就输几
+   表格里存的是用户选的那一份 {unit, amount, part}，同时带上折算好的
+   days/hours/months/duration_unit/day_part —— 展示只认标签，汇总与导出只认天数，
+   两条路不互相推算，避免 0.5 天和「上午」各算一套。 */
+export const LEAVE_TIME_UNITS = [
+  { value: 'hour', label: '小时' },
+  { value: 'day', label: '天' },
+  { value: 'month', label: '月' },
+];
+export const LEAVE_TIME_PARTS = [
+  { value: 'morning', label: '上午' },
+  { value: 'afternoon', label: '下午' },
+  { value: 'full', label: '全天' },
+];
+export function normalizeLeaveTime(input, periods = DEFAULT_PERIODS) {
+  if (!input || typeof input !== 'object') return null;
+  const unit = String(input.unit || '');
+  /* 天档位随时记着：切到小时/月再切回来，还得是刚才选的上午/下午/全天，
+     不能因为中间按小时存过一次就回落成上午。 */
+  const keptPart = LEAVE_TIME_PARTS.some(item => item.value === String(input.part || ''))
+    ? String(input.part) : 'full';
+  if (unit === 'day') {
+    const part = LEAVE_TIME_PARTS.find(item => item.value === keptPart) || LEAVE_TIME_PARTS[2];
+    const index = part.value === 'morning' ? 0 : part.value === 'afternoon' ? 1 : 2;
+    const label = leaveDayParts(periods)[index]?.label || '';
+    return {
+      unit: 'day', amount: part.value === 'full' ? 1 : 0.5, part: part.value,
+      duration_unit: part.value === 'full' ? 'day' : part.value,
+      duration: part.value === 'full' ? 1 : 0.5,
+      days: part.value === 'full' ? 1 : 0.5, hours: 0, months: 0, day_part: label,
+    };
+  }
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (unit === 'month') {
+    return {
+      unit: 'month', amount, part: keptPart, duration_unit: 'month', duration: amount,
+      days: Number((amount * 30).toFixed(2)), hours: 0, months: amount, day_part: '',
+    };
+  }
+  if (unit !== 'hour') return null;
+  return { unit: 'hour', amount, part: keptPart, duration_unit: 'hour', duration: amount, days: 0, hours: amount, months: 0, day_part: '' };
+}
+export function formatLeaveTime(value) {
+  if (!value) return '';
+  if (value.unit === 'day') {
+    const part = LEAVE_TIME_PARTS.find(item => item.value === value.part) || LEAVE_TIME_PARTS[2];
+    return part.label;
+  }
+  const amount = Number(value.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  return Number(amount.toFixed(2)) + (value.unit === 'month' ? '个月' : '小时');
+}
+/* 请假记录 → 表格控件值。请假表里手写的记录没有 leave_time，按 duration_unit 反推：
+   上午/下午直接对得上，day + day_part 的按作息表前后半段判断，剩下的一律算全天。 */
+export function leaveTimeFromRecord(record, periods = DEFAULT_PERIODS) {
+  if (!record) return null;
+  const stored = normalizeLeaveTime(record.leave_time, periods);
+  if (stored) return stored;
+  const unit = record.duration_unit;
+  if (unit === 'hour') {
+    const amount = Number(record.hours ?? record.duration ?? 0);
+    return amount > 0 ? { unit: 'hour', amount, part: 'full' } : null;
+  }
+  if (unit === 'month') {
+    const amount = Number(record.months ?? record.duration ?? 0);
+    return amount > 0 ? { unit: 'month', amount, part: 'full' } : null;
+  }
+  if (unit === 'morning' || unit === 'afternoon') return { unit: 'day', amount: 0.5, part: unit };
+  const parts = leaveDayParts(periods);
+  const label = leaveDayPartLabel(record.day_part, periods);
+  if (label && parts[0] && label === parts[0].label) return { unit: 'day', amount: 0.5, part: 'morning' };
+  if (label && parts[1] && label === parts[1].label) return { unit: 'day', amount: 0.5, part: 'afternoon' };
+  return { unit: 'day', amount: 1, part: 'full' };
+}
+
 export const SUMMARY_COUNT_FIELDS = [
   ['seatPresent', '坐班'], ['classes', '上课'], ['listens', '听课'], ['research', '教研'],
 ];
@@ -652,8 +733,8 @@ export function paginateExportGrid(grid, rowsPerPage = 18) {
 }
 
 const EXPORT_HEADERS = Object.freeze({
-  roster: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注'],
-  seat: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注'],
+  roster: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注'],
+  seat: ['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注'],
   class: ['序号','归属部门','归属年级','姓名','学科','班级','节次','上课时间','上课状态','听课教师','备注'],
   research: ['序号','归属部门','归属年级','姓名','学科','教研时间','地点','主持人','签到状态','备注'],
   leave: ['序号','归属部门','归属年级','姓名','学科','请假类型','开始日期','结束日期','时段','请假时长','备注'],
@@ -723,6 +804,12 @@ export function buildAttendanceExportGrid({
         const record = grid[String(no)];
         if (!record || !Object.prototype.hasOwnProperty.call(record, key)) continue;
         touched = true;
+        /* 请假时间是对象（{unit, amount, part} + 折算字段），不能 String() 成 [object Object] */
+        if (key === 'leave_time') {
+          const time = normalizeLeaveTime(record[key]);
+          if (time) return { touched: true, value: time };
+          continue;
+        }
         const value = String(record[key] ?? '').trim();
         if (value) return { touched: true, value };
       }
@@ -797,11 +884,15 @@ export function buildAttendanceExportGrid({
         item.type || '请假', exportLeavePeriod(item), exportLeaveDuration(item),
       ].filter(Boolean).join(' ')).join('；');
       const gridLeave = gridCell(teacher, 'leave');
+      const gridLeaveTime = gridCell(teacher, 'leave_time');
       const gridRemark = gridCell(teacher, 'remark');
       const meta = teacherMeta?.[String(teacher.id)] || {};
       /* 行内填写的请假类型优先；没填过才回退到请假页记录。
          没填就留空，不再写「无」（用户 11-15 裁决：空白代表没有请假）。 */
       const leaveValue = gridLeave.value || (gridLeave.touched ? '' : leaveText);
+      /* 请假时间：行内填的优先，没填过再用请假记录里的时长 */
+      const leaveTimeText = leaves.map(item => formatLeaveTime(leaveTimeFromRecord(item))).filter(Boolean).join('；');
+      const leaveTimeValue = formatLeaveTime(gridLeaveTime.value) || (gridLeaveTime.touched ? '' : leaveTimeText);
       const remarkValue = gridRemark.value || meta.remark || teacher.remark || teacher.note || '';
       const onLeave = !!leaveValue;
       const statusOf = {
@@ -817,7 +908,7 @@ export function buildAttendanceExportGrid({
           index + 1, departmentOf(teacher), gradeOf(teacher), name, teacher.subject || '',
           winner || onLeave ? cell('sit') : '未登记',
           cell('class'), cell('listen'), cell('research'),
-          leaveValue, remarkValue,
+          leaveValue, leaveTimeValue, remarkValue,
         ],
       };
     });
@@ -856,8 +947,11 @@ export function buildAttendanceExportGrid({
         return !grade || recordGrade === String(grade);
       });
       const gridLeave = gridCell(teacher, 'leave');
+      const gridLeaveTime = gridCell(teacher, 'leave_time');
       const leaveValue = gridLeave.value || (gridLeave.touched ? ''
         : leaves.map(item => item.type || '请假').join('；'));
+      const leaveTimeValue = formatLeaveTime(gridLeaveTime.value)
+        || (gridLeaveTime.touched ? '' : leaves.map(item => formatLeaveTime(leaveTimeFromRecord(item))).filter(Boolean).join('；'));
       const onLeave = !!leaveValue;
       const statusOf = {
         sit: aggregate('sit'), class: aggregate('class'),
@@ -869,7 +963,7 @@ export function buildAttendanceExportGrid({
         leaveRecords, date, period: periodNumbers[0],
       }).remark;
       const remarkValue = ownRemark || meta.remark || teacher.remark || teacher.note || '';
-      return { winner, onLeave, statusOf, leaveValue, teacher, remarkValue };
+      return { winner, onLeave, statusOf, leaveValue, leaveTimeValue, teacher, remarkValue };
     });
     const count = key => entries.filter(entry => entry.winner === key && entry.statusOf[key] === 'y').length;
     const leaveCount = entries.filter(entry => entry.onLeave).length;
@@ -888,7 +982,7 @@ export function buildAttendanceExportGrid({
         String(entry.teacher.name || '').trim(), entry.teacher.subject || '',
         ...(type === 'class'
           ? [label('class'), ...(showListen ? [label('listen')] : [])]
-          : [label('research'), ...(showLeave ? [entry.leaveValue] : [])]),
+          : [label('research'), ...(showLeave ? [entry.leaveValue, entry.leaveTimeValue] : [])]),
         entry.remarkValue,
       ];
     });
@@ -902,7 +996,7 @@ export function buildAttendanceExportGrid({
       '序号', '归属部门', '归属年级', '姓名', '学科',
       ...(type === 'class'
         ? ['上课', ...(showListen ? ['听课'] : [])]
-        : ['教研', ...(showLeave ? ['请假'] : [])]),
+        : ['教研', ...(showLeave ? ['请假', '请假时间'] : [])]),
       '备注',
     ];
     return [...heading(statsLine), headers, ...rows];

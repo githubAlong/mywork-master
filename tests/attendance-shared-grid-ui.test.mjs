@@ -137,7 +137,7 @@ test('坐班表、上课表、教研表名单与列一模一样，花名册只�
   const headers=()=>[...root.innerHTML.matchAll(/<th>(.*?)<\/th>/g)].map(match=>match[1]);
   const names=()=>[...root.innerHTML.matchAll(/<td class="aprd-name">([^<]*)/g)].map(match=>match[1]);
   /* 用户 11-15 需求：默认进入坐班表（数据源），优先展示全状态 */
-  assert.deepEqual(headers(),['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作']);
+  assert.deepEqual(headers(),['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注','操作']);
   await root.querySelector('[data-tab="roster"]').click();
   const rosterHeaders=headers(),expectedNames=names();
   /* 用户 11-15 裁决：花名册只维护教师名单，考勤状态列全部隐藏；操作前保留一列可填写的备注 */
@@ -147,7 +147,7 @@ test('坐班表、上课表、教研表名单与列一模一样，花名册只�
   let workHeaders=null;
   /* 用户 11-22 裁决：坐班表/上课表/教研表一模一样——列结构统一成坐班表那套，
      名单也跟着花名册全量列，不属于本表的格子只读回显。 */
-  const unifiedHeaders=['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','备注','操作'];
+  const unifiedHeaders=['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注','操作'];
   const expectedHeaders={seat:unifiedHeaders,class:unifiedHeaders,research:unifiedHeaders};
   const allNames=['李老师','王老师'];
   const expectedNamesByType={seat:allNames,class:allNames,research:allNames};
@@ -408,6 +408,36 @@ test('确认后才生成当节请假记录，重新确认更新同一条',async(
   assert.match(root.innerHTML,/<td>病假<\/td>/);
   await root.querySelector('#aprd-period').change('7');
   assert.equal(root.querySelectorAll('[data-edit-leave]').length,0);
+});
+
+test('请假时间：座班表填 2 小时，确认后请假记录按小时折算',async()=>{
+  /* 用户 11-24 需求：请假列后面加「请假时间」，小时输几就是几，天选上午/下午/全天，月输几就是几个月。 */
+  const {root}=await setup();
+  await root.querySelector('[data-tab="seat"]').click();
+  await root.querySelector('#aprd-period').change('3');
+  await control(root,'leave').change('事假');
+  /* 默认是「天·全天」；切到小时后数字框自动补 1，再改成 2 */
+  await root.querySelector('[data-leave-unit="1"]').change('hour');
+  await root.querySelector('[data-leave-amount="1"]').change('2');
+  await root.querySelector('[data-generate]').click();
+  await root.querySelector('[data-tab="leave"]').click();
+  assert.match(root.innerHTML,/事假/);
+  assert.match(root.innerHTML,/2小时/,'确认生成的请假记录要按小时记，不能算成整天');
+  assert.doesNotMatch(root.innerHTML,/1天/);
+});
+
+test('请假时间：天这一档留上午/下午/全天三选，选上午折算 0.5 天',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-tab="seat"]').click();
+  await control(root,'leave').change('病假');
+  const part=root.querySelector('[data-leave-part="1"]');
+  assert.equal(part.value,'full','默认全天');
+  await part.change('morning');
+  await root.querySelector('[data-generate]').click();
+  await root.querySelector('[data-tab="leave"]').click();
+  /* 请假表沿用 11-22 的 24 小时制口径，上午=作息表前半段（0.5 天） */
+  assert.match(root.innerHTML,/病假/);
+  assert.match(root.innerHTML,/0\.5天/);
 });
 
 test('表内登记的请假只作用在登记的那一节，不会被带到其他节次',async()=>{

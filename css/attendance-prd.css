@@ -564,3 +564,21 @@
 .attendance-prd .aprd-subject-row span{color:#7a899e}
 .attendance-prd .aprd-subject-row .aprd-actions{color:inherit}
 .attendance-prd .aprd-subject-list .aprd-empty{padding:22px 12px}
+
+/* ============================================================
+   2026-11-24：请假时间列（小时 / 天·上午下午全天 / 月）
+   一格两控件：数字 + 单位；单位选「天」时数字框换成时段下拉，
+   所以两个控件都用 [hidden] 切换而不是重建 DOM（重建会丢焦点）。
+   ============================================================ */
+.attendance-prd .aprd-lt{display:inline-flex;align-items:center;gap:4px}
+.attendance-prd .aprd-lt [hidden]{display:none!important}
+.attendance-prd .aprd-lt .aprd-lt-num{width:58px;min-width:58px;height:28px;padding:0 6px;border:1px solid #dfe6f0;border-radius:6px;background:#fff;color:#3b475c;font-size:12px;text-align:center}
+.attendance-prd .aprd-lt .aprd-lt-unit,
+.attendance-prd .aprd-lt .aprd-lt-part{height:28px;padding:0 4px;border:1px solid #dfe6f0;border-radius:6px;background:#fff;color:#3b475c;font-size:12px;cursor:pointer}
+.attendance-prd .aprd-lt .aprd-lt-num:focus,
+.attendance-prd .aprd-lt .aprd-lt-unit:focus,
+.attendance-prd .aprd-lt .aprd-lt-part:focus{outline:none;border-color:#8fb8ff;box-shadow:0 0 0 2px rgba(22,93,255,.12)}
+.attendance-prd .aprd-lt-num::-webkit-outer-spin-button,
+.attendance-prd .aprd-lt-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.attendance-prd .aprd-lt-num{-moz-appearance:textfield;appearance:textfield}
+.attendance-prd .aprd-lt-cell{white-space:nowrap}
