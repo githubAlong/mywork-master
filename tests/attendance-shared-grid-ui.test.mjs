@@ -526,7 +526,7 @@ const todayYmd=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shangha
 const periodItemsOf=html=>[...html.matchAll(/<option value="(\d+)"([^>]*)>([^<]*)<\/option>/g)]
   .map(match=>({value:match[1],off:/aprd-period-off/.test(match[2]),text:match[3]}));
 
-test('节次与时段取自当天课表：有课节次排前、无课节次标注、全天取最早到最晚',async()=>{
+test('节次按自然顺序列出，不展示当天是否有课；全天时段仍取当天最早到最晚',async()=>{
   const weekday=dayPeriods.weekdayOf(todayYmd());
   const {root}=await setup({courses:[
     {id:'c3',weekday,period_no:3,grade:'高一',start_time:'10:00',end_time:'10:40'},
@@ -535,21 +535,20 @@ test('节次与时段取自当天课表：有课节次排前、无课节次标�
     {id:'cOther',weekday,period_no:5,grade:'高二',start_time:'11:40',end_time:'12:20'},
   ]});
   const items=periodItemsOf(root.innerHTML);
-  assert.deepEqual(items.slice(0,4).map(item=>item.value),['0','1','3','2']);
-  assert.equal(items.find(item=>item.value==='1').off,false);
-  assert.equal(items.find(item=>item.value==='5').off,true);
-  assert.match(items.find(item=>item.value==='5').text,/^第5节（当日无课）$/);
+  /* 考勤登记的是其他老师的坐班/听课/教研，和自己当天有没有课无关，
+     所以节次下拉固定按节次号排序，既不置顶有课节次，也不标「当日无课」。 */
+  assert.deepEqual(items.map(item=>item.value),['0','1','2','3','4','5','6','7','8','9']);
+  assert.equal(items.some(item=>item.off),false);
+  assert.doesNotMatch(root.innerHTML,/当日无课|有课节次/);
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
   assert.match(root.innerHTML,/id="aprd-end"[^>]*value="10:40"/);
   assert.match(root.innerHTML,/当前批次/);
-  assert.match(root.innerHTML,/时段取自当天课表 · 2 个有课节次/);
   assert.match(root.innerHTML,/全天 08:00—10:40/);
 });
 
-test('当天完全没排课时不逐条标注无课，全天时段退到作息表节次而不是 00:00—23:59',async()=>{
+test('当天完全没排课时时段退到作息表节次而不是 00:00—23:59',async()=>{
   const {root}=await setup();
-  assert.doesNotMatch(root.innerHTML,/当日无课/);
-  assert.match(root.innerHTML,/当日课表无排课，时段取作息表 9 个节次/);
+  assert.doesNotMatch(root.innerHTML,/当日无课|有课节次/);
   /* 第1节 08:00 起、第9节 18:35 止（作息表缺失时的夏令时兜底口径） */
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
   assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
@@ -564,7 +563,7 @@ test('课表年级写「高一」、考勤年级名「高一年级」时仍算�
     {id:'c2',weekday,period_no:7,grade:'高一年级',start_time:'16:00',end_time:'16:45'},
     {id:'c3',weekday,period_no:4,grade:'高二年级',start_time:'10:50',end_time:'11:30'},
   ]});
-  assert.match(root.innerHTML,/时段取自当天课表 · 2 个有课节次/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:50"/);
   assert.match(root.innerHTML,/全天 08:50—16:45/);
 });
 
