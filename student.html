@@ -173,7 +173,7 @@
   <div class="stu-avatar" id="stu-avatar" aria-hidden="true">学</div>
   <div class="stu-greet">
     <div class="stu-hi" id="stu-hi">课堂小助手</div>
-    <div class="stu-sub" id="stu-sub">正在加载…</div>
+    <div class="stu-sub" id="stu-sub" style="display:none"></div>
   </div>
 </div>
 <!-- 页签单独放，不塞进 #s-app：它要在手机上变成底部栏、桌面上变成左侧导航 -->
@@ -351,16 +351,15 @@ function paintShell() {
     : hour < 18 ? '下午好' : '晚上好';
   const who = raw ? `${hi}，${raw}` : hi;
   const avatar = raw ? raw[0] : '学';
-  const cls = myClass();
-  const tasks = (data?.selfstudyTasks || []).filter((t) => t.class_scope === 'all' || t.class_label === cls);
-  const bits = [];
-  if (cls) bits.push(cls);
-  bits.push(tasks.length ? `今天有 ${tasks.length} 项任务` : '老师发布后这里会更新');
-  const sub = bits.join(' · ');
+  /* 副标题只留班级，不再报「今天有 N 项任务」——
+     那条数的是老师发过的任务，不代表今天真要上的课，学生看着莫名其妙。 */
+  const sub = String(myClass() || '').trim();
   const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
   setText('stu-avatar', avatar);
   setText('stu-hi', who);
   setText('stu-sub', sub);
+  const subEl = document.getElementById('stu-sub');
+  if (subEl) subEl.style.display = sub ? '' : 'none';
   /* 桌面左栏的品牌头也用同一个首字，省得两块头像不一致 */
   const logo = document.querySelector('.stu-logo');
   if (logo) logo.textContent = '学';
