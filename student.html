@@ -79,6 +79,12 @@
   .pick-win { font-size: 46px; font-weight: 750; line-height: 1.12; letter-spacing: -1.5px;
     color: var(--primary); animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
   @keyframes pop { 0% { transform: scale(.55); opacity: 0 } 100% { transform: scale(1); opacity: 1 } }
+  /* 教材详情读取较慢时的加载指示：一个转圈 + 文案，避免用户对着静止的「加载中…」干等 */
+  .wb-load { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 120px; }
+  .wb-load .wb-spin { width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--sp-accent-line, rgba(109,90,224,.28)); border-top-color: var(--sp-accent, #6d5ae0);
+    animation: wb-spin .8s linear infinite; }
+  @keyframes wb-spin { to { transform: rotate(360deg); } }
   .pick-names { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
   .pick-win.sm { font-size: 26px; display: inline-block; padding: 8px 16px; border-radius: 14px;
     background: var(--primary); color: #fff; letter-spacing: -.5px; animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
@@ -629,7 +635,7 @@ function paintPasscodeGate(tip) {
     <div class="tiny" id="pc-msg" style="color:var(--red);margin-top:8px" hidden></div>
     <button class="btn primary block" id="pc-go" style="margin-top:12px">打开资料</button>
   </div>`;
-  const say = (msg) => { const tipEl = $('#pc-msg'); tipEl.textContent = msg; tipEl.hidden = !msg; };
+  const say = (msg) => { const tipEl = $('#pc-msg'); if (!tipEl) return; tipEl.textContent = msg; tipEl.hidden = !msg; };
   say(tip || '');
   $('#pc-back').onclick = () => { cur = null; paint(); };
   const input = $('#pc-in'), go = $('#pc-go');
@@ -699,11 +705,24 @@ function sanitizeDoc(html) {
   return tpl.innerHTML;
 }
 async function paintMaterialDetail() {
-  $('#s-body').innerHTML = '<div class="card card-pad small muted">加载中…</div>';
+  /* 抓住这次渲染的 s-body 节点：切页签时 paint() 会换掉整层壳，
+     异步回来如果旧节点已脱离文档就直接放弃，不能把新页签的内容覆盖成教材详情。 */
+  const myBody = $('#s-body');
+  if (!myBody) return;
+  const alive = () => myBody.isConnected && myBody === $('#s-body');
+  const loadingMarkup = '<div class="card card-pad small muted wb-load"><span class="wb-spin" aria-hidden="true"></span><span id="wb-load-txt">正在读取资料列表…</span></div>';
+  myBody.innerHTML = loadingMarkup;
+  /* 资料多时接口要几秒；超过 8 秒给一句安慰话，说明还在路上、不是卡死。
+     只碰提示文字，不动请求本身，也不自动取消——慢网下仍会正常出结果。 */
+  const slowTimer = setTimeout(() => {
+    const el = $('#wb-load-txt'); if (el) el.textContent = '资料比较多，还在读取，请稍候…';
+  }, 8000);
   const passcode = passcodeFor(cur);
   try {
     const d = await api(`/public/link/${code}/materials/${cur}` + (passcode ? '?passcode=' + encodeURIComponent(passcode) : ''));
-    $('#s-body').innerHTML = `<div class="card card-pad">
+    clearTimeout(slowTimer);
+    if (!alive()) return;
+    myBody.innerHTML = `<div class="card card-pad">
       <button class="btn ghost sm" id="back">‹ 返回列表</button>
       <h2 style="margin:12px 0 4px;font-size:19px">${esc(d.material.title)}</h2>
       <div class="tiny muted">${esc(d.material.descr || '')}</div>
@@ -770,7 +789,8 @@ async function paintMaterialDetail() {
             : kind === 'audio' ? `<audio src="${pvURL}" controls preload="metadata"></audio>`
               : kind === 'docx' ? '<div class="pv-doc" id="pv-doc">正在解析文档…</div>'
                 : `<iframe src="${pvURL}" title="${esc(name)}"></iframe>`;
-        $('#s-body').innerHTML = `<div class="card card-pad">
+        if (!alive()) return;
+        myBody.innerHTML = `<div class="card card-pad">
           <div class="row wrap" style="gap:8px">
             <button class="btn ghost sm" id="pv-back">‹ 返回资料</button>
             <span style="flex:1"></span>
@@ -815,9 +835,11 @@ async function paintMaterialDetail() {
     document.querySelectorAll('[data-dl]').forEach((b) => { b.onclick = () => saveAs(b, b.dataset.dl, b.dataset.name); });
     document.getElementById('back').onclick = () => { cur = null; paint(); };
   } catch (e) {
+    clearTimeout(slowTimer);
     /* 老师中途改过口令：本机记的那份已经作废，回到输入框重新要一次。 */
     if (e?.needPasscode) { forgetPasscode(cur); return paintPasscodeGate('这份资料需要口令，请先输入'); }
-    $('#s-body').innerHTML = `<div class="card card-pad">${esc(e.message)}</div>`;
+    if (!alive()) return;
+    myBody.innerHTML = `<div class="card card-pad">${esc(e.message)}</div>`;
   }
 }
 /* ---------- 点名：选年级班级 → 按名单 / 按号码点 → 滚出名字 ---------- */
@@ -1258,7 +1280,9 @@ function paintMisconduct() {
       <button class="btn primary" id="mc-send">提交</button>
     </div>
   </div>`;
-  const tip = (msg, bad) => { const t = $('#mc-tip'); t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  /* 异步提交期间用户可能已经切到别的页签，paint() 会把 #mc-tip 连同整张卡换掉。
+     拿不到元素就直接返回——提交本身已经成功，没必要对着已销毁的 DOM 抛 TypeError。 */
+  const tip = (msg, bad) => { const t = $('#mc-tip'); if (!t) return; t.textContent = msg; t.style.color = bad ? 'var(--red)' : 'var(--green)'; };
   const gradeSelect = $('#mc-grade');
   const gradeCustom = $('#mc-grade-custom');
   const clsSelect = $('#mc-cls');
@@ -1368,7 +1392,9 @@ function paintBulletin() {
     <div id="bl-replies" aria-live="polite"></div>
   </section>`;
   const status = $('#bl-tip');
-  const tip = (msg, bad) => { status.textContent = msg; status.style.color = bad ? 'var(--red)' : 'var(--green)'; };
+  /* 同违纪：提交是异步的，回来时用户可能已经切页，status 指向的旧节点已脱离文档。
+     每次现取并判空，既修竞态也不影响正常提示。 */
+  const tip = (msg, bad) => { const el = $('#bl-tip') || status; if (!el || !el.isConnected) return; el.textContent = msg; el.style.color = bad ? 'var(--red)' : 'var(--green)'; };
   const repliesBox = $('#bl-replies');
   const paintReplies = (entries) => {
     const replies = (Array.isArray(entries) ? entries : []).filter((item) => item.reply)
