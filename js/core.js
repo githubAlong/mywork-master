@@ -87,7 +87,11 @@ export function classPicker(input, { courses, extra = [], ...options } = {}) {
    两个来源都取不到时下拉自动隐藏，输入框本身照旧能手动输入。 */
 export function classPickerAuto(input, { gradeInput } = {}) {
   if (!input) return;
-  classPicker(input, { courses: [], qualified: true, gradeInput });
+  /* 有独立年级字段时，班级只写班名（「5班」），年级单独存。
+     否则库里会同时有 grade=高二 和 class_name=高二5班，
+     列表里「高二」出现两遍，展示时还得再剥一次前缀。 */
+  const qualified = !gradeInput;
+  classPicker(input, { courses: [], qualified, gradeInput });
   Promise.all([
     api.get('/courses', null, { silent: true }).catch(() => []),
     api.get('/rosters', null, { silent: true }).catch(() => []),
@@ -106,7 +110,7 @@ export function classPickerAuto(input, { gradeInput } = {}) {
       input.removeAttribute('list');
       setTimeout(() => { if (input.isConnected) input.removeAttribute('list'); }, 500);
     }
-    classPicker(input, { courses: rows, qualified: true, gradeInput });
+    classPicker(input, { courses: rows, qualified, gradeInput });
   }).catch(() => {});
 }
 
