@@ -941,7 +941,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       return [...grid,footer];
     };
     if(format==='xlsx'){
-      saveBlob(makeXlsx({title:fileBase,grid:withFooter()}),fileBase+'.xlsx');
+      /* center:true —— 导出表格全部居中、抬头跨列合并（用户 11-24 需求）：
+         PNG/PDF 早就居中了，Excel 之前一直左对齐，三套导出观感不一致。 */
+      saveBlob(makeXlsx({title:fileBase,grid:withFooter(),center:true}),fileBase+'.xlsx');
       toast('已导出 '+fileBase+'.xlsx','ok');
     }else if(format==='csv'){
       const csv='\uFEFF'+withFooter().map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
