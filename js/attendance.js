@@ -1795,34 +1795,89 @@ async function exportXlsx(t, reload) {
 }
 
 /* 造一个最小的 xlsx：一个工作表、全是内联字符串，不需要 sharedStrings。
-   这样 30 行代码就能产出一个 Excel / WPS 都能打开的合法文件。 */
-export function makeXlsx({ title, grid }) {
+   这样 30 行代码就能产出一个 Excel / WPS 都能打开的合法文件。
+
+   center=true 时额外注入 xl/styles.xml（用户 11-24 需求：导出表格全部居中）：
+   - 数据格：水平+垂直居中、细边框
+   - 表头行（第一格是「序号」那行）：居中、加粗、浅灰底
+   - 抬头行（只有一格有内容的行，即表名/日期节次/人数统计）：居中、加粗加大，
+     并按表格总列数跨列合并，否则标题只居中在 A 列里、看上去仍然靠左。
+   不传 center 的导出（考勤明细、导入模板）不加任何样式，输出和以前逐字节一致。 */
+export function makeXlsx({ title, grid, center = false }) {
   const escXml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const colName = (i) => {
     let n = i + 1; let s = '';
     while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
     return s;
   };
+  const width = Math.max(...grid.map((l) => l.length));
+  const lastCol = colName(Math.max(1, width) - 1);
   /* 【数字还是文本】只有「序号」那一列（第 0 列、数据行）写成数字，
      其余一律写成文本。为什么不全写文本：序号写成文本，Excel 里那一列
      左上角会冒绿三角（"以文本形式存储的数字"），老师一看就以为导错了。
      反过来把姓名写成数字是不可能的，所以按列判断就够了。 */
-  const dataStart = grid.findIndex((line) => String(line[0] || '').trim() === '序号') + 1 || 3;
+  const headerRow = grid.findIndex((line) => String(line[0] || '').trim() === '序号');
+  const dataStart = headerRow + 1 || 3;
+  /* 抬头行判定：第一格有字、其余全空。导出抬头三级标题都是这种单格行；
+     末行「导出时间」写在最右列，第一格是空的，所以不会被误判成抬头。 */
+  const isHeadingRow = (r) => String(grid[r]?.[0] ?? '').trim() !== ''
+    && grid[r].slice(1).every((v) => v === '' || v == null);
+  /* 抬头层级跟 PNG 一致：一级表名最大加粗，二级日期节次加粗，三级统计常规字重。
+     按出现顺序分配，超过三行（理论上不会）统一按三级处理。 */
+  const headingStyles = {};
+  let headingSeq = 0;
+  if (center) {
+    grid.forEach((_, r) => {
+      if (r !== headerRow && isHeadingRow(r)) headingStyles[r] = ['3', '4', '5'][Math.min(headingSeq++, 2)];
+    });
+  }
+  const styleOf = (r) => {
+    if (!center) return '';
+    if (r === headerRow) return ' s="2"';
+    return isHeadingRow(r) ? ' s="' + headingStyles[r] + '"' : ' s="1"';
+  };
   const rowsXml = grid.map((line, r) => `<row r="${r + 1}">${line.map((v, c) => {
     if (v === '' || v == null) return '';
     const numeric = c === 0 && r >= dataStart && /^-?\d+(\.\d+)?$/.test(String(v));
     return numeric
-      ? `<c r="${colName(c)}${r + 1}"><v>${escXml(v)}</v></c>`
-      : `<c r="${colName(c)}${r + 1}" t="inlineStr"><is><t xml:space="preserve">${escXml(v)}</t></is></c>`;
+      ? `<c r="${colName(c)}${r + 1}"${styleOf(r)}><v>${escXml(v)}</v></c>`
+      : `<c r="${colName(c)}${r + 1}"${styleOf(r)} t="inlineStr"><is><t xml:space="preserve">${escXml(v)}</t></is></c>`;
   }).join('')}</row>`).join('');
-  const width = Math.max(...grid.map((l) => l.length));
   const colsXml = `<cols><col min="1" max="1" width="6"/><col min="2" max="2" width="12"/><col min="3" max="3" width="8"/>${width > 3 ? `<col min="4" max="${width}" width="10"/>` : ''}</cols>`;
+  /* 抬头跨列合并：只有真的多于 1 列才合并，单列表格不产生 mergeCells 节点 */
+  const merges = center && width > 1
+    ? grid.map((_, r) => (isHeadingRow(r) ? `<mergeCell ref="A${r + 1}:${lastCol}${r + 1}"/>` : '')).filter(Boolean)
+    : [];
+  const mergeXml = merges.length ? `<mergeCells count="${merges.length}">${merges.join('')}</mergeCells>` : '';
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+    + '<fonts count="3">'
+    + '<font><sz val="11"/><name val="宋体"/></font>'
+    + '<font><b/><sz val="11"/><name val="宋体"/></font>'
+    + '<font><b/><sz val="14"/><name val="宋体"/></font>'
+    + '</fonts>'
+    + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+    + '<fill><patternFill patternType="solid"><fgColor rgb="FFEEF3FA"/><bgColor indexed="64"/></patternFill></fill></fills>'
+    + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+    + '<border><left style="thin"><color rgb="FFB7C6DB"/></left><right style="thin"><color rgb="FFB7C6DB"/></right>'
+    + '<top style="thin"><color rgb="FFB7C6DB"/></top><bottom style="thin"><color rgb="FFB7C6DB"/></bottom><diagonal/></border></borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="6">'
+    + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+    + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    + '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    + '</cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="常规" xfId="0" builtinId="0"/></cellStyles>'
+    + '</styleSheet>';
   const files = {
-    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>${center ? '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' : ''}</Types>`,
     '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
     'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escXml(String(title).slice(0, 28) || 'Sheet1')}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
-    'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
-    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${colsXml}<sheetData>${rowsXml}</sheetData></worksheet>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>${center ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' : ''}</Relationships>`,
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${colsXml}<sheetData>${rowsXml}</sheetData>${mergeXml}</worksheet>`,
+    ...(center ? { 'xl/styles.xml': stylesXml } : {}),
   };
   return zipStore(files);
 }
