@@ -1808,6 +1808,23 @@ function ensureHubV3() {
     db.meta.attHubDeptSeeded = 1;
   }
 
+  /* 自愈：部门表被清空后补回默认部门。
+     线上真实问题（2026-11-26）：用户把唯一的「高中部」删掉（或整库同步时部门行被覆盖），
+     meta.attHubDeptSeeded 已经是 1，上面那段 seed 不会再跑，于是「部门管理」永远 0 个部门，
+     而年级、教师其实都还在（只在「年级管理」里变成「未分配」）。
+     只要年级名单里还有数据，就说明这不是一张空库，补回一个默认部门并把已有年级挂回去。
+     纯空库不动，避免把用户有意清空的状态又填满。 */
+  if (!deptRows().length) {
+    const known = gradeNameList();
+    if (known.length) {
+      const item = { id: deptNextId(), name: DEFAULT_DEPARTMENT, created_at: nowISO(), updated_at: nowISO(), deleted_at: null };
+      T(DEPT_TABLE).push(item);
+      const m = gradeDeptMap();
+      for (const g of known) if (!m[g]) m[g] = num(item.id);
+      dirty = true;
+    }
+  }
+
   /* 老花名册一次性清洗：教师序号纯数字、所属部门补高中部、备注清空、
      去掉已下线的「任教班级」残留值。只跑一次，不碰其它字段、不删记录。 */
   if (!db.meta.attHubV3Cleaned) {
@@ -1849,7 +1866,14 @@ function deptView() {
   };
 }
 
-on('GET', '/departments', () => deptView());
+/* 组织管理页三个接口是并发拉的，/departments 若先于 /org/teachers 返回，
+   部门行里的「教师数」会按还没回填的花名册算成 0，和下面「在编教师」对不上。
+   这里先回填一次，保证首屏数字自洽。 */
+on('GET', '/departments', () => {
+  ensureHubV3();
+  ensureRosterFromTeachers();
+  return deptView();
+});
 
 on('POST', '/departments', ({ body }) => {
   ensureHubV3();
@@ -1887,6 +1911,10 @@ on('DELETE', '/departments/:id', ({ params, query }) => {
   ensureHubV3();
   const row = byId(DEPT_TABLE, params.id);
   if (!row) fail(404, '没有这个部门');
+  /* 年级必须有归属，部门表不能空着：删到最后一个时直接拦住。
+     早先允许删空，而删空后 ensureHubV3 的 seed 又不会再跑，页面就永久显示
+     「0 个部门」——年级和教师明明都还在，用户只会以为数据丢了。 */
+  if (deptRows().length <= 1) fail(400, '至少要保留一个部门，可以先新建一个再删这个');
   const view = deptView();
   const me = view.list.find((d) => String(d.id) === String(row.id)) || { grades: [], teacherCount: 0 };
   if (String(query?.force || '') !== '1' && (me.gradeCount || me.teacherCount)) {
@@ -1962,8 +1990,11 @@ function ensureRosterFromTeachers() {
   const tableName = HUB_SHEETS.roster.table;
   const table = T(tableName);
   const rows = rowsOf(tableName).filter((r) => !r.deleted_at);
-  /* 花名册还是空的就不动：等用户自己导入或用旧工作台建名单 */
-  if (!rows.length) return 0;
+  /* 之前这里写着「花名册还是空的就不动」，结果和本函数的初衷正好相反：
+     只在旧工作台建过名单、没往新花名册导过的账号，组织管理里「在编教师」永远是 0，
+     而旧工作台明明有几十上百人。现在按姓名去重后照常补进来——
+     补进来的是同一批人，之后用户再导入花名册，同名记录也会被去重挡住，不会翻倍。 */
+  if (!rows.length && !rowsOf('teachers').length) return 0;
   const names = new Set(rows.map((r) => String(r.name || '').trim()).filter(Boolean));
   let seq = rows.reduce((mx, r) => Math.max(mx, num(String(r.teacher_id || '').match(/\d+/)?.[0]) || 0), 0);
   let added = 0;
