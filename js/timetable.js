@@ -871,17 +871,24 @@ export async function renderTimetable(box) {
     });
   }
 
+  /* 导出用的表格行：只导出当前显示的星期，和平台课表保持同一列，避免出现平台没显示的空列。 */
+  function exportDays() {
+    const list = (Array.isArray(shownDays) ? shownDays : []).map(Number).filter((day) => DAYS.includes(day));
+    return list.length ? DAYS.filter((day) => list.includes(day)) : [...DAYS];
+  }
+
   function exportRows(visible, periods) {
-    const rows = [['节次 / 时间', ...DAY_NAMES]];
+    const days = exportDays();
+    const rows = [['节次', '时间', ...days.map((day) => DAY_NAMES[DAYS.indexOf(day)])]];
     for (const period of periods) {
       const pNo = Number(period.period_no);
       const rowCourses = visible.filter((course) => getCanonicalPeriodNumber(course) === pNo);
       const first = rowCourses.find((course) => course.start_time || course.end_time) || {};
       const time = courseTime({ ...first, period_no: pNo }, period, periodTimes, appliedType);
-      const cells = DAYS.map((day) => rowCourses.filter((course) => Number(course.weekday) === day).map((course) =>
+      const cells = days.map((day) => rowCourses.filter((course) => Number(course.weekday) === day).map((course) =>
         [course.subject || '课程', gradeClass(course.grade, course.class_name), courseTime(course, period, periodTimes, appliedType)].filter(Boolean).join('\n')
       ).join('\n\n'));
-      rows.push([periodName(period) + (time ? '\n' + time : ''), ...cells]);
+      rows.push([periodName(period), time, ...cells]);
     }
     return rows;
   }
@@ -973,7 +980,7 @@ export async function renderTimetable(box) {
       { name: 'xl/_rels/workbook.xml.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
       { name: 'xl/worksheets/sheet1.xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + sheetRows + '</sheetData></worksheet>' },
     ];
-    downloadBlob(zipStore(files), '我的课表-' + appliedType + '-' + appliedGrade + '.xlsx');
+    downloadBlob(zipStore(files), '我的课表.xlsx');
     toast('Excel 课表已导出');
   }
 
@@ -982,73 +989,335 @@ export async function renderTimetable(box) {
     const htmlRows = rows.map((row, index) => '<tr>' + row.map((cell, cellIndex) =>
       '<' + (index === 0 ? 'th' : 'td') + '>' + esc(cell).replace(/\n/g, '<br>') + '</' + (index === 0 ? 'th' : 'td') + '>'
     ).join('') + '</tr>').join('');
-    const title = '我的课表 - ' + appliedType + ' - ' + appliedGrade;
+    const title = '我的课表';
     const win = window.open('', '_blank');
     if (!win) throw new Error('浏览器拦截了导出窗口，请允许弹出窗口后重试');
     win.document.write('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>' + esc(title) + '</title><style>' +
       'body{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#1B1F26;margin:20px}h2{margin:0 0 6px}.meta{color:#6B7280;margin-bottom:14px;font-size:12px}' +
       'table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}th,td{border:1px solid #D8DEE8;padding:7px 5px;vertical-align:middle;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#F2F5FA}' +
-      'th:first-child,td:first-child{width:115px;background:#F7F8FA;font-weight:700}@page{size:A4 landscape;margin:10mm}' +
-      '</style><h2>' + esc(title) + '</h2><div class="meta">导出时间：' + esc(new Date().toLocaleString('zh-CN')) + '</div><table>' + htmlRows + '</table>' +
+      'th:first-child,td:first-child{width:90px;background:#F7F8FA;font-weight:700}th:nth-child(2),td:nth-child(2){width:120px;background:#F7F8FA}' +
+      '@page{size:A4 landscape;margin:10mm}' +
+      '</style><h2>' + esc(title) + '</h2><div class="meta">' + esc(appliedType + ' · ' + (appliedGrade === '全部' ? '全部年级总课表' : appliedGrade) + ' · 导出时间：' + new Date().toLocaleString('zh-CN')) + '</div><table>' + htmlRows + '</table>' +
       '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},250)})<\/script></html>');
     win.document.close();
   }
 
+  /* 导出 PNG：按教师工作台课表的真实视觉重绘
+     —— 提醒卡（正在上课 / 下一节课 + 倒计时）、课表标题、节次 + 时间双列、课程块、午休条。 */
   async function exportPng(visible, periods) {
-    const width = 1680, left = 180, headerHeight = 120, rowHeight = 92;
-    const height = headerHeight + 48 + Math.max(1, periods.length) * rowHeight + 30;
-    const canvas = document.createElement('canvas');
-    canvas.width = width * 2; canvas.height = height * 2;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
-    ctx.fillStyle = '#F7F8FA'; ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = '#1B1F26'; ctx.font = '700 25px "Microsoft YaHei",sans-serif';
-    ctx.fillText('我的课表', 34, 42);
-    ctx.fillStyle = '#6B7280'; ctx.font = '14px "Microsoft YaHei",sans-serif';
-    ctx.fillText(appliedType + ' · ' + (appliedGrade === '全部' ? '全部年级总课表' : appliedGrade), 34, 72);
-    ctx.fillText('导出时间：' + new Date().toLocaleString('zh-CN'), 34, 98);
-    const dayWidth = (width - left) / 7;
-    const top = headerHeight;
-    ctx.fillStyle = '#EEF2F7'; ctx.fillRect(0, top, width, 48);
-    ctx.fillStyle = '#64748B'; ctx.font = '700 14px "Microsoft YaHei",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('节次 / 时间', left / 2, top + 29);
-    DAY_NAMES.forEach((day, index) => ctx.fillText(day, left + dayWidth * index + dayWidth / 2, top + 29));
-    periods.forEach((period, rowIndex) => {
-      const y = top + 48 + rowIndex * rowHeight;
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, y, width, rowHeight);
-      ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1; ctx.strokeRect(0, y, width, rowHeight);
-      ctx.fillStyle = '#F7F8FA'; ctx.fillRect(0, y, left, rowHeight);
-      ctx.fillStyle = '#344054'; ctx.font = '700 14px "Microsoft YaHei",sans-serif';
-      ctx.fillText(periodName(period), left / 2, y + 34);
-      ctx.fillStyle = '#6B7280'; ctx.font = '11px "Microsoft YaHei",sans-serif';
+    const C = {
+      page: '#F3F7FF', card: '#FFFFFF', text: '#172B4D', text2: '#637B9D', text3: '#8DA0BC',
+      line: '#E5EDF9', primary: '#2563EB', primaryDeep: '#0062CC', primaryWeak: '#EAF1FF',
+      sunken: '#F5F7FC', todayTint: '#F2F7FF', lunchBg: '#FFF5DF', lunchText: '#8C4B0C',
+    };
+    const FONT = '"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif';
+    const days = exportDays();
+    const rows = periods.map((period) => {
       const pNo = Number(period.period_no);
       const rowCourses = visible.filter((course) => getCanonicalPeriodNumber(course) === pNo);
       const first = rowCourses.find((course) => course.start_time || course.end_time) || {};
-      const range = courseTime({ ...first, period_no: pNo }, period, periodTimes, appliedType);
-      ctx.fillText(range, left / 2, y + 56);
-      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-        const x = left + dayWidth * dayIndex;
-        ctx.strokeStyle = '#E5E7EB'; ctx.strokeRect(x, y, dayWidth, rowHeight);
-        const day = DAYS[dayIndex];
-        const cellCourses = rowCourses.filter((course) => Number(course.weekday) === day);
-        cellCourses.forEach((course, courseIndex) => {
-          const grade = String(course.grade || '');
-          const fill = grade.includes('高二') ? '#F3EEFF' : grade.includes('高三') ? '#FEECEC' : grade.includes('高一') ? '#EEF4FF' : '#F2F3F5';
-          ctx.fillStyle = fill;
-          const bx = x + 6, by = y + 5 + courseIndex * 27, bw = dayWidth - 12, bh = Math.min(25, rowHeight - 10);
-          ctx.fillRect(bx, by, bw, bh);
-          ctx.fillStyle = '#1B1F26'; ctx.font = '700 12px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'left';
-          ctx.fillText(String(course.subject || '课程').slice(0, 16), bx + 6, by + 16);
-          ctx.fillStyle = '#667085'; ctx.font = '10px "Microsoft YaHei",sans-serif';
-          ctx.fillText((gradeClass(course.grade, course.class_name) || '').slice(0, 20), bx + 6, by + 24);
-        });
-      }
+      return {
+        period, pNo,
+        isLunch: pNo === 5.5 || String(period.name || '').includes('午休'),
+        time: courseTime({ ...first, period_no: pNo }, period, periodTimes, appliedType),
+        byDay: days.map((day) => rowCourses.filter((course) => Number(course.weekday) === day)),
+      };
     });
+
+    const W = 1680, PAD = 32, CONTENT = W - PAD * 2;
+    const PERIOD_W = 92, TIME_W = 138, HEAD_H = 46, ROW_H = 66, LUNCH_H = 50;
+    const DAY_W = (CONTENT - PERIOD_W - TIME_W) / Math.max(1, days.length);
+    const TOP = 26, TITLE_BLOCK = 82, REM_H = 150, GRID_TITLE_H = 56;
+    const remindTop = TOP + TITLE_BLOCK + 12;
+    const cardTop = remindTop + REM_H + 16;
+    const tableTop = cardTop + GRID_TITLE_H;
+    const tableH = HEAD_H + rows.reduce((sum, row) => sum + (row.isLunch ? LUNCH_H : ROW_H), 0);
+    const cardBottom = tableTop + tableH;
+    const H = cardBottom + 26;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * 2; canvas.height = H * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.textBaseline = 'alphabetic';
+
+    const setFont = (weight, size) => { ctx.font = weight + ' ' + size + 'px ' + FONT; };
+    const rr = (x, y, w, h, r) => {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    };
+    const fillRR = (x, y, w, h, r, fill) => { rr(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); };
+    const strokeRR = (x, y, w, h, r, stroke, weight) => { rr(x, y, w, h, r); ctx.strokeStyle = stroke; ctx.lineWidth = weight || 1; ctx.stroke(); };
+    const fit = (text, maxWidth, size, weight) => {
+      const value = String(text ?? '');
+      setFont(weight, size);
+      if (ctx.measureText(value).width <= maxWidth) return value;
+      let cut = value;
+      while (cut.length > 1 && ctx.measureText(cut + '…').width > maxWidth) cut = cut.slice(0, -1);
+      return cut + '…';
+    };
+
+    ctx.fillStyle = C.page;
+    ctx.fillRect(0, 0, W, H);
+
+    /* 顶部标题区（图片内部保留原有三行内容） */
     ctx.textAlign = 'left';
+    setFont('700', 26); ctx.fillStyle = C.text;
+    ctx.fillText('我的课表', PAD, TOP + 28);
+    setFont('400', 14); ctx.fillStyle = C.text2;
+    ctx.fillText(appliedType + ' · ' + (appliedGrade === '全部' ? '全部年级总课表' : appliedGrade), PAD, TOP + 54);
+    setFont('400', 12.5); ctx.fillStyle = C.text3;
+    ctx.fillText('导出时间：' + new Date().toLocaleString('zh-CN'), PAD, TOP + 76);
+
+    /* 提醒卡：与平台一致（正在上课 / 下一节课 + 班级 + 时间 + 倒计时） */
+    const now = new Date();
+    const info = currentLesson(visible);
+    const lesson = info.current || info.next;
+    let kicker = '今日无课';
+    let countLabel = '今日课程安排';
+    let target = null;
+    if (info.current) {
+      kicker = '正在上课';
+      countLabel = '距离下课';
+      target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(info.current.end / 60), info.current.end % 60);
+    } else if (info.next) {
+      kicker = '下一节课';
+      countLabel = '距离上课还有';
+      target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(info.next.start / 60), info.next.start % 60);
+    }
+    const remaining = info.todayCourses.filter((item) => item.end > info.now).length;
+    const lessonClass = lesson ? (gradeClass(lesson.course.grade, lesson.course.class_name) || '班级待填写') : '今天没有安排课程';
+    const lessonTime = lesson ? courseTime(lesson.course, lesson.period, periodTimes, appliedType) : '';
+    const lessonMeta = lesson
+      ? [lesson.course.subject || '课程', lesson.period ? periodName(lesson.period) : '节次待设置', '今日还剩 ' + remaining + ' 节'].join(' · ')
+      : '今天暂无课程安排，适合备课、整理资料或处理其他事务。';
+
+    fillRR(PAD, remindTop, CONTENT, REM_H, 14, C.card);
+    strokeRR(PAD, remindTop, CONTENT, REM_H, 14, C.line, 1);
+    const innerX = PAD + 26;
+    const rightX = PAD + CONTENT - 26;
+    const asideW = 232;
+    const pairMax = CONTENT - 26 * 2 - asideW - 30;
+    let bigSize = 42;
+    setFont('800', bigSize);
+    let classW = ctx.measureText(lessonClass).width;
+    let timeW = lessonTime ? ctx.measureText(lessonTime).width : 0;
+    while (bigSize > 22 && classW + timeW + 60 > pairMax) {
+      bigSize -= 2;
+      setFont('800', bigSize);
+      classW = ctx.measureText(lessonClass).width;
+      timeW = lessonTime ? ctx.measureText(lessonTime).width : 0;
+    }
+    setFont('700', 13); ctx.fillStyle = C.primary;
+    ctx.fillText(kicker, innerX, remindTop + 38);
+    setFont('800', bigSize); ctx.fillStyle = C.text;
+    ctx.fillText(fit(lessonClass, pairMax - timeW - 60, bigSize, '800'), innerX, remindTop + 92);
+    setFont('800', bigSize);
+    const drawnClassW = Math.min(classW, pairMax - timeW - 60);
+    const dividerX = innerX + drawnClassW + 22;
+    if (lessonTime) {
+      ctx.fillStyle = C.line;
+      ctx.fillRect(dividerX, remindTop + 62, 1, 52);
+      setFont('800', bigSize); ctx.fillStyle = C.primary;
+      ctx.fillText(lessonTime, dividerX + 22, remindTop + 92);
+    }
+    setFont('400', 13); ctx.fillStyle = C.text2;
+    ctx.fillText(fit(lessonMeta, pairMax + 10, 13, '400'), innerX, remindTop + 124);
+
+    ctx.fillStyle = C.line;
+    ctx.fillRect(rightX - asideW, remindTop + 26, 1, REM_H - 52);
+    ctx.textAlign = 'right';
+    setFont('400', 12); ctx.fillStyle = C.text3;
+    ctx.fillText(formatDate(now) + ' 周' + WD_SHORT[now.getDay()], rightX, remindTop + 48);
+    setFont('400', 12); ctx.fillStyle = C.text2;
+    ctx.fillText(countLabel, rightX, remindTop + 82);
+    setFont('700', 26); ctx.fillStyle = C.text;
+    ctx.fillText(target ? countdownText(target.getTime() - now.getTime()) : '—', rightX, remindTop + 116);
+    ctx.textAlign = 'left';
+
+    /* 卡片：课表标题 + 表格，整体圆角 */
+    ctx.save();
+    rr(PAD, cardTop, CONTENT, cardBottom - cardTop, 14);
+    ctx.clip();
+    ctx.fillStyle = C.card;
+    ctx.fillRect(PAD, cardTop, CONTENT, cardBottom - cardTop);
+
+    const titleValue = String(titleText || '我的课表');
+    const noteValue = '每周课程安排';
+    const iconW = 20;
+    setFont('800', 20);
+    const titleW = ctx.measureText(titleValue).width;
+    setFont('400', 11);
+    const noteW = ctx.measureText(noteValue).width;
+    const groupW = iconW + 10 + titleW + 10 + noteW;
+    const groupX = PAD + (CONTENT - groupW) / 2;
+    const iconY = cardTop + GRID_TITLE_H / 2 - iconW / 2;
+    ctx.strokeStyle = C.primary; ctx.lineWidth = 1.6;
+    ctx.strokeRect(groupX + 0.8, iconY + 2, iconW - 1.6, iconW - 5);
+    ctx.beginPath();
+    ctx.moveTo(groupX, iconY + 7.5); ctx.lineTo(groupX + iconW, iconY + 7.5);
+    ctx.moveTo(groupX + 5, iconY + 2); ctx.lineTo(groupX + 5, iconY - 0.5);
+    ctx.moveTo(groupX + iconW - 5, iconY + 2); ctx.lineTo(groupX + iconW - 5, iconY - 0.5);
+    ctx.stroke();
+    const titleBaseline = cardTop + GRID_TITLE_H / 2 + 7;
+    setFont('800', 20); ctx.fillStyle = C.primaryDeep;
+    ctx.fillText(titleValue, groupX + iconW + 10, titleBaseline);
+    setFont('400', 11); ctx.fillStyle = C.text3;
+    ctx.fillText(noteValue, groupX + iconW + 10 + titleW + 10, titleBaseline);
+
+    /* 表头 */
+    const colX = [];
+    let cx = PAD;
+    colX.push(cx); cx += PERIOD_W;
+    colX.push(cx); cx += TIME_W;
+    days.forEach(() => { colX.push(cx); cx += DAY_W; });
+    const todayIdx = days.findIndex((day) => Number(day) === new Date().getDay());
+
+    ctx.fillStyle = C.primaryWeak;
+    ctx.fillRect(PAD, tableTop, CONTENT, HEAD_H);
+    if (todayIdx >= 0) {
+      ctx.fillStyle = C.primary;
+      ctx.fillRect(colX[todayIdx + 2], tableTop, DAY_W, 3);
+    }
+    ctx.textAlign = 'center';
+    const headLabels = ['节次', '时间', ...days.map((day) => DAY_NAMES[DAYS.indexOf(Number(day))])];
+    const headWidths = [PERIOD_W, TIME_W, ...days.map(() => DAY_W)];
+    let hx = PAD;
+    headLabels.forEach((label, index) => {
+      const isToday = index >= 2 && index - 2 === todayIdx;
+      setFont(isToday ? '800' : '700', 13);
+      ctx.fillStyle = isToday ? C.primary : C.text2;
+      ctx.fillText(label, hx + headWidths[index] / 2, tableTop + 29);
+      hx += headWidths[index];
+    });
+    ctx.fillStyle = C.primary;
+    ctx.fillRect(PAD, tableTop + HEAD_H - 2, CONTENT, 2);
+
+    /* 课程块配色：沿用平台按年级区分的四套色 */
+    const gradeStyle = (course) => {
+      const grade = String(course.grade || '');
+      if (grade.includes('高二')) return { bg1: '#ECE0FF', bg2: '#DDCCFF', border: '#D9C9F8', left: '#6D28D9', text: '#4C1D95' };
+      if (grade.includes('高三')) return { bg1: '#FFE1E4', bg2: '#F9CDD2', border: '#F5C6CB', left: '#B91C1C', text: '#8A1C2C' };
+      if (grade.includes('高一')) return { bg1: '#DCE8FF', bg2: '#C8DCFF', border: '#B7CDF8', left: '#1D4ED8', text: '#153E8F' };
+      return { bg1: '#D8F3E6', bg2: '#C4EBD8', border: '#B6E3CE', left: '#047857', text: '#065A42' };
+    };
+    const nowCourseId = info.current ? String(info.current.course.id) : '';
+    const nextCourseId = info.next ? String(info.next.course.id) : '';
+
+    const drawCourse = (x, y, w, h, course, period) => {
+      const style = gradeStyle(course);
+      const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+      grad.addColorStop(0, style.bg1);
+      grad.addColorStop(1, style.bg2);
+      fillRR(x, y, w, h, 8, grad);
+      strokeRR(x, y, w, h, 8, style.border, 1);
+      ctx.save();
+      rr(x, y, w, h, 8); ctx.clip();
+      ctx.fillStyle = style.left;
+      ctx.fillRect(x, y, 3, h);
+      if (String(course.id) === nowCourseId) {
+        ctx.strokeStyle = '#E69A36'; ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      } else if (String(course.id) === nextCourseId) {
+        ctx.strokeStyle = C.primary; ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      }
+      const padX = 10;
+      const innerW = w - padX * 2 - 2;
+      const className = gradeClass(course.grade, course.class_name) || '班级待填写';
+      const subject = course.subject || '未命名课程';
+      const time = courseTime(course, period, periodTimes, appliedType);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = style.text;
+      if (h >= 48) {
+        setFont('800', 13);
+        ctx.fillText(fit(className, innerW, 13, '800'), x + padX, y + 19);
+        setFont('400', 11); ctx.globalAlpha = 0.86;
+        ctx.fillText(fit(subject, innerW, 11, '400'), x + padX, y + 34);
+        setFont('400', 10);
+        ctx.fillText(fit(time, innerW, 10, '400'), x + padX, y + 47);
+        ctx.globalAlpha = 1;
+      } else {
+        setFont('800', 12);
+        ctx.fillText(fit(className + ' · ' + subject, innerW, 12, '800'), x + padX, y + h / 2 + 4);
+      }
+      ctx.restore();
+    };
+
+    /* 表格主体 */
+    let ry = tableTop + HEAD_H;
+    rows.forEach((row) => {
+      const rowH = row.isLunch ? LUNCH_H : ROW_H;
+      ctx.fillStyle = row.isLunch ? C.lunchBg : C.card;
+      ctx.fillRect(PAD, ry, CONTENT, rowH);
+      if (row.isLunch) {
+        ctx.textAlign = 'center';
+        setFont('800', 12); ctx.fillStyle = C.lunchText;
+        ctx.fillText('午休', PAD + PERIOD_W / 2, ry + rowH / 2 + 4);
+        const lunchRange = row.time === '时间待设置' ? '12:20–14:10' : row.time;
+        setFont('800', 22);
+        const lw = ctx.measureText('午休  ' + lunchRange).width;
+        const lx = PAD + PERIOD_W + (CONTENT - PERIOD_W) / 2 - (lw + 26) / 2;
+        const iconCx = lx + 9, iconCy = ry + rowH / 2;
+        ctx.beginPath(); ctx.arc(iconCx, iconCy, 8, 0, Math.PI * 2);
+        ctx.strokeStyle = C.lunchText; ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(iconCx, iconCy - 4); ctx.lineTo(iconCx, iconCy); ctx.lineTo(iconCx + 3.2, iconCy + 1.8);
+        ctx.stroke();
+        ctx.textAlign = 'left'; ctx.fillStyle = C.lunchText;
+        setFont('800', 22);
+        ctx.fillText('午休  ' + lunchRange, lx + 24, ry + rowH / 2 + 8);
+        ctx.textAlign = 'left';
+      } else {
+        ctx.textAlign = 'center';
+        setFont('800', 12); ctx.fillStyle = C.text2;
+        ctx.fillText(fit(periodName(row.period), PERIOD_W - 12, 12, '800'), PAD + PERIOD_W / 2, ry + rowH / 2 + 4);
+        setFont('400', 12); ctx.fillStyle = C.text2;
+        ctx.fillText(fit(row.time || '时间待设置', TIME_W - 16, 12, '400'), PAD + PERIOD_W + TIME_W / 2, ry + rowH / 2 + 4);
+        if (todayIdx >= 0) {
+          ctx.fillStyle = C.todayTint;
+          ctx.fillRect(colX[todayIdx + 2] + 1, ry, DAY_W - 1, rowH - 1);
+        }
+        row.byDay.forEach((list, dayIndex) => {
+          if (!list.length) return;
+          const cellX = colX[dayIndex + 2];
+          const gap = 4;
+          const blockH = Math.max(30, (rowH - 10 - gap * (list.length - 1)) / list.length);
+          list.forEach((course, courseIndex) => {
+            drawCourse(cellX + 5, ry + 5 + courseIndex * (blockH + gap), DAY_W - 10, blockH, course, row.period);
+          });
+        });
+        ctx.textAlign = 'left';
+      }
+      /* 行内分隔线：午休整行贯通，只在节次列后断开 */
+      ctx.fillStyle = C.line;
+      ctx.fillRect(PAD + PERIOD_W, ry, 1, rowH);
+      if (!row.isLunch) {
+        let vx = PAD + PERIOD_W + TIME_W;
+        ctx.fillRect(vx, ry, 1, rowH);
+        for (let i = 1; i < days.length; i++) { vx += DAY_W; ctx.fillRect(vx, ry, 1, rowH); }
+      }
+      const lineBottom = Math.min(ry + rowH, cardBottom) - 1;
+      ctx.fillRect(PAD, lineBottom, CONTENT, 1);
+      ry += rowH;
+    });
+    ctx.restore();
+
+    strokeRR(PAD, cardTop, CONTENT, cardBottom - cardTop, 14, C.line, 1);
+
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('图片生成失败，请重试');
-    downloadBlob(blob, '我的课表-' + appliedType + '-' + appliedGrade + '.png');
+    downloadBlob(blob, '我的课表.png');
     toast('PNG 课表已导出');
   }
 
