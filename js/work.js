@@ -2,7 +2,10 @@ import { api, el, esc, clsName, clsShort, clsPair, clsStore, makeClsLabeler, nor
 import { printStatement } from './pdfprint.js';
 import { registerView, state, icon, go, pageHead, onViewLeave } from './ui.js';
 import { renderAttendance } from './attendance.js';
-import { renderAttendancePRD } from './attendance-prd.js';
+/* attendance-prd.js（2000+ 行，还带着名单导入/OCR 链）改成按需加载：
+   静态引入会让「工作」页的启动依赖整条考勤链，链上任何一个文件在客户端
+   缓存里缺失或 404，整个页面就打不开。现在只有真的进高一/高二考勤工作台才拉它。 */
+
 import { renderTimetable as renderMyTimetable } from './timetable.js';
 import { detectTimetable } from './ttimage.js';
 import { loginBanner, hookBanner } from './auth.js';
@@ -151,6 +154,7 @@ registerView(async function work(main, { tab, third }) {
     }
     /* 工作台自己渲染标题、说明与实时状态，外层页头必须移除，否则同一标题会出现两次 */
     headEl.remove();
+    const { renderAttendancePRD } = await import('./attendance-prd.js');
     return renderAttendancePRD(body, { grade });
   }
   if (t === 'invigilation') return renderInvigilation(body);

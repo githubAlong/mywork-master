@@ -1,4 +1,4 @@
-import { state, loadMe, render, parseHash, loadAuthConfig, WORK_TABS } from './ui.js';
+import { state, loadMe, render, parseHash, loadAuthConfig, WORK_TABS, hardReset } from './ui.js';
 import { ls, toast, STATIC, api } from './core.js';
 import { setActiveAccount, activeAccountId } from './localdb.js';
 import { load as loadTaskData, save as saveTaskData } from './localdb.js';
@@ -165,7 +165,42 @@ window.addEventListener('wb:signout', async () => {
   await renderCurrentRoute();
 });
 
-await renderCurrentRoute();
+/* 【首屏兜底：模块加载失败也必须给出能点的界面】
+   静态站点没有打包器，页面就是一个模块图。任何一次 import 失败
+   （文件名对不上、部署中途、客户端缓存里存着坏文件）都会让下面那个
+   top-level await 抛错，main.js 直接终止 —— 表现就是 app.html 那个
+   「仍在加载，当前网络比较慢」，而且刷新多少次都一样，页面等于打不开。
+   这里把错误接住，画一张卡片：普通重载 + 强制更新（清缓存、注销 SW、带新参数重进）。 */
+function showBootFailure(error) {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const detail = String((error && (error.message || error)) || '未知错误').slice(0, 200)
+    .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const btn = 'width:100%;height:44px;border:0;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer';
+  app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
+    + 'font-family:-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;box-sizing:border-box">'
+    + '<div style="max-width:360px;text-align:center">'
+    + '<div style="width:52px;height:52px;border-radius:15px;margin:0 auto 16px;display:grid;place-items:center;'
+    + 'background:linear-gradient(135deg,#4f6ef7,#7b5cf0);color:#fff;font-size:22px;font-weight:700">台</div>'
+    + '<div style="font-size:15px;color:#2a2f3a;line-height:1.7;margin-bottom:6px">页面有一个模块没能加载出来</div>'
+    + '<div style="font-size:12px;color:#8b93a3;line-height:1.6;word-break:break-all;margin-bottom:18px">' + detail + '</div>'
+    + '<button id="bo-hard" style="' + btn + ';background:#4f6ef7;color:#fff">强制更新并重新进入</button>'
+    + '<button id="bo-reload" style="' + btn + ';background:#eef1f7;color:#2a2f3a;margin-top:10px">仅重新加载</button>'
+    + '<div style="margin-top:14px;font-size:11.5px;color:#9aa1ad;line-height:1.6">'
+    + '强制更新会清掉浏览器里这站点的旧缓存，不会删除本机资料或登录状态。</div>'
+    + '</div></div>';
+  const hard = document.getElementById('bo-hard');
+  if (hard) hard.onclick = () => { hardReset(); };
+  const reload = document.getElementById('bo-reload');
+  if (reload) reload.onclick = () => location.reload();
+  console.error('[boot] 首屏渲染失败：', error);
+}
+
+try {
+  await renderCurrentRoute();
+} catch (error) {
+  showBootFailure(error);
+}
 window.__wbBooted = true;
 window.dispatchEvent(new Event('wb:booted'));
 

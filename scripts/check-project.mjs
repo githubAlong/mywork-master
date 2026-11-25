@@ -55,6 +55,38 @@ for (const file of jsFiles) {
   }
 }
 
+/* 【模块引用必须指向真实存在的文件】
+   静态站点没有打包器，浏览器按模块图逐个下载。只要有一个 import 指向
+   不存在的文件名（改名后漏改、文件漏提交），这条链上的页面就会整页打不开，
+   而且用户刷新也没用 —— 只能清缓存。2026-11 就出现过这种故障：
+   报错的是一个从来没存在过的 roster-photo-parsers.mjs，页面停在「仍在加载」。
+   把这类错误挡在提交/发布之前，比上线后再救便宜得多。 */
+const SPECIFIER = /(?:\bfrom\s*|(?:^|[^\w$.])(?:import|require)\s*(?:\(\s*)?)['"]([^'"]+)['"]/g;
+for (const file of jsFiles) {
+  const relativeToRoot = path.relative(root, file);
+  /* 只看我们自己写的 js/ 模块；assets/ 下是第三方打包文件（mammoth、pdf.js 等），
+     里面的 require 走的是它们自己的打包器约定，不该由这份检查判定。 */
+  if (!relativeToRoot.startsWith(`js${path.sep}`)) continue;
+  const dir = path.dirname(file);
+  const source = await readFile(file, 'utf8');
+  const seen = new Set();
+  for (const match of source.matchAll(SPECIFIER)) {
+    const specifier = match[1];
+    if (!specifier.startsWith('.')) continue;
+    if (seen.has(specifier)) continue;
+    seen.add(specifier);
+    const resolved = path.resolve(dir, specifier.split('?')[0]);
+    const candidates = [resolved, `${resolved}.mjs`, `${resolved}.js`, path.join(resolved, 'index.js')];
+    let exists = false;
+    for (const candidate of candidates) {
+      try {
+        if ((await stat(candidate)).isFile()) { exists = true; break; }
+      } catch { /* 继续试下一个候选 */ }
+    }
+    if (!exists) failures.push(`引用了不存在的模块：${relativeToRoot} → ${specifier}`);
+  }
+}
+
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);

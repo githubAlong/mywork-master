@@ -584,8 +584,53 @@ export async function render() {
   } catch (e) {
     if (mySeq !== renderSeq) return;
     console.error(e);
-    main.innerHTML = `<div class="empty"><div class="em">${icon('alert', 34)}</div>${esc(e.message || '页面加载失败')}</div>`;
+    paintViewError(main, e);
   }
+}
+
+/* 【页面内模块加载失败：说人话 + 给能点的出口】
+   以前这里直接把 e.message 原样铺出来，用户看到的是
+   「Failed to fetch dynamically imported module: …/js/xxx.js」这种技术报错，
+   不知道该怎么办。静态站点上这类失败几乎都是「本机存着旧版本文件」
+   或「文件改名／漏部署」，而页面自己也修不了 —— 必须让用户能一键强制更新。
+   注意：缓存里存的是带版本号的整包，清掉不会影响登录状态和本机资料。 */
+export async function hardReset() {
+  try {
+    if (self.caches?.keys) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch (e) { console.warn('[reset] 清理缓存失败', e); }
+  try {
+    if (navigator.serviceWorker?.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((reg) => reg.unregister()));
+    }
+  } catch (e) { console.warn('[reset] 注销 Service Worker 失败', e); }
+  location.replace(location.pathname + '?v=' + Date.now() + (location.hash || ''));
+}
+
+function paintViewError(main, error) {
+  const raw = String((error && (error.message || error)) || '页面加载失败');
+  const moduleIssue = /module|import|fetch|404|Failed|script/i.test(raw);
+  const title = moduleIssue ? '这个页面有文件没能加载出来' : '页面加载失败';
+  const tip = moduleIssue
+    ? '多半是浏览器里存着旧版本文件（或刚更新完还没刷干净）。点「强制更新」会清掉本站旧缓存再重新进入。'
+    : '可以重试一次；如果一直这样，点「强制更新」清掉旧缓存再进。';
+  main.innerHTML = ' <div style="max-width:420px;margin:48px auto;text-align:center;font-family:inherit">'
+    + '<div style="width:48px;height:48px;border-radius:14px;margin:0 auto 14px;display:grid;place-items:center;'
+    + 'background:#eef1f7;color:#4f6ef7">' + icon('alert', 24) + '</div>'
+    + '<div style="font-size:16px;font-weight:700;color:#2a2f3a;margin-bottom:8px">' + esc(title) + '</div>'
+    + '<div style="font-size:13px;line-height:1.7;color:#6b7280;margin-bottom:6px">' + esc(tip) + '</div>'
+    + '<div style="font-size:11.5px;line-height:1.6;color:#9aa1ad;word-break:break-all;margin-bottom:18px">'
+    + esc(raw.slice(0, 180)) + '</div>'
+    + '<button class="btn primary" id="view-hard" style="width:100%;height:42px">强制更新并重新进入</button>'
+    + '<button class="btn ghost" id="view-retry" style="width:100%;height:42px;margin-top:10px">仅重新加载</button>'
+    + '</div>';
+  const hard = main.querySelector('#view-hard');
+  if (hard) hard.onclick = () => hardReset();
+  const retry = main.querySelector('#view-retry');
+  if (retry) retry.onclick = () => location.reload();
 }
 const defaultTab = (seg) => (seg === 'work' ? 'lessons' : seg === 'daily' ? 'notes' : '');
 

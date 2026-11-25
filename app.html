@@ -106,17 +106,55 @@
   (function () {
     var app = document.getElementById('app');
     var t1, t2, tried = 0;
-    function box(text, showBtn) {
+
+    /* 【自救出口：清缓存 + 注销 SW + 带新参数重进】
+       这段必须写在这个内联脚本里，不能放进 js/main.js ——
+       因为出问题的场景恰恰是 js 模块加载失败，那时 main.js 根本不会执行。
+       不会删除本机数据（localStorage/IndexedDB 保持），只清本站的静态资源缓存。 */
+    window.__wbHardReset = function () {
+      var go = function () {
+        var url = location.pathname + '?v=' + Date.now() + (location.hash || '');
+        location.replace(url);
+      };
+      var jobs = [];
+      try {
+        if (window.caches && caches.keys) {
+          jobs.push(caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }).catch(function () {}));
+        }
+      } catch (e) {}
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }).catch(function () {}));
+        }
+      } catch (e) {}
+      if (!jobs.length) { go(); return; }
+      var done = false;
+      var finish = function () { if (done) return; done = true; go(); };
+      Promise.all(jobs).then(finish, finish);
+      setTimeout(finish, 2500);
+    };
+
+    function box(text, showBtn, showHard) {
       if (!app) return;
+      var btn = 'margin-top:18px;width:100%;height:44px;border:0;'
+        + 'border-radius:12px;font-size:15px;font-weight:600;'
+        + 'font-family:inherit;cursor:pointer';
       app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
         + 'font-family:-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;box-sizing:border-box">'
-        + '<div style="max-width:340px;text-align:center">'
+        + '<div style="max-width:350px;text-align:center">'
         + '<div style="width:52px;height:52px;border-radius:15px;margin:0 auto 16px;display:grid;place-items:center;'
         + 'background:linear-gradient(135deg,#4f6ef7,#7b5cf0);color:#fff;font-size:22px;font-weight:700">台</div>'
         + '<div style="font-size:15px;color:#2a2f3a;line-height:1.7">' + text + '</div>'
-        + (showBtn ? '<button onclick="location.reload()" style="margin-top:18px;width:100%;height:44px;border:0;'
-            + 'border-radius:12px;background:#4f6ef7;color:#fff;font-size:15px;font-weight:600;'
-            + 'font-family:inherit;cursor:pointer">重新加载</button>' : '')
+        + (showBtn ? '<button onclick="location.reload()" style="' + btn
+            + ';background:#4f6ef7;color:#fff">重新加载</button>' : '')
+        + (showHard ? '<button onclick="window.__wbHardReset()" style="' + btn
+            + ';background:#eef1f7;color:#2a2f3a">强制更新（清掉旧缓存）</button>'
+            + '<div style="margin-top:12px;font-size:11.5px;color:#9aa1ad;line-height:1.6">'
+            + '网络恢复后还是进不去就点这个：只清本站在浏览器里的旧文件，不动你的资料和登录。</div>' : '')
         + '</div></div>';
     }
     function rendered() {
@@ -125,9 +163,15 @@
     function showStartupError(message) {
       if (rendered()) return;
       var detail = String(message || '未知启动错误').slice(0, 220);
-      box('工作台启动遇到问题<br><span style="font-size:12px;color:#8b93a3">'
+      var text = '工作台启动遇到问题';
+      /* 模块加载失败的报错长得像技术文档，说人话：多半是本机存着旧版本文件 */
+      if (/module|import|fetch|script|404|Failed/i.test(detail)) {
+        text = '页面文件没能加载完整';
+        console.warn('[startup] 模块加载失败，可能是旧缓存：', detail);
+      }
+      box(text + '<br><span style="font-size:12px;color:#8b93a3">'
         + detail.replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; })
-        + '</span>', true);
+        + '</span>', true, true);
       console.error('[startup] 页面启动失败：', message);
     }
     window.addEventListener('error', function (event) {
@@ -148,7 +192,7 @@
     }, 5000);
     t2 = setTimeout(function () {
       if (rendered()) return;
-      box('仍在加载，当前网络比较慢<br>可以继续等待，或点下面重新加载。', true);
+      box('仍在加载，当前网络比较慢<br>可以继续等待，或点下面重新加载。', true, true);
       /* 不要自动刷新：云端超时期间刷新会重复触发账户初始化请求，
          造成请求风暴。让用户手动点击重试，避免放大 Supabase 压力。 */
     }, 30000);

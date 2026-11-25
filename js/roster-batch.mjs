@@ -1,6 +1,13 @@
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { chooseBestRosterSheet, parseTeacherRosterGrid } from './roster-import.mjs';
-import { recognizeRosterPhoto } from './ocr.js';
+
+/* 【ocr.js 改成按需加载，别再静态 import】
+   静态 import 会把 ocr.js（33KB）连同它的依赖拉进「考勤 → 名单」的启动链：
+   roster-batch → ocr → roster-photo-parser（还有 Tesseract 相关代码）。
+   这条链上任何一个文件在客户端缓存里缺失/404，整个 attendance-prd.js 就加载失败，
+   再往上 work.js 失败，最终整页停在「仍在加载」——一次改名就能让工作台打不开。
+   识别本来只在用户真的选了图片/PDF 时才需要，改成用到才 import，
+   失败也只影响「拍照建册」这一步，页面其他功能照常。 */
 
 const NAME_HEADERS = new Set(['姓名','名字','教师','教师姓名','老师','name','teacher']);
 const SUBJECT_HEADERS = new Set(['学科','科目','教研组','subject']);
@@ -187,11 +194,42 @@ async function loadPdfJs() {
   throw new Error('PDF 解析组件加载失败，请检查网络后重试。' + (lastError?.message || ''));
 }
 
+/* 识别模块按需加载，失败重试一次（网络抖动/首次部署缓存未就绪很常见）。
+   仍然失败就抛一条人话错误，让调用方在弹窗里提示，不影响页面其它功能。 */
+let ocrLoading = null;
+async function loadRecognizeRosterPhoto() {
+  if (!ocrLoading) {
+    ocrLoading = (async () => {
+      const attempt = () => import('./ocr.js');
+      let mod;
+      try {
+        mod = await attempt();
+      } catch (first) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        try {
+          mod = await attempt();
+        } catch (second) {
+          ocrLoading = null;
+          console.warn('[roster] 识别模块加载失败', first && first.message, second && second.message);
+          throw new Error('图片识别模块没能加载出来，请刷新页面后重试（其余功能可正常使用）。');
+        }
+      }
+      if (typeof mod.recognizeRosterPhoto !== 'function') {
+        ocrLoading = null;
+        throw new Error('图片识别模块版本不匹配，请刷新页面后重试。');
+      }
+      return mod.recognizeRosterPhoto;
+    })();
+  }
+  return ocrLoading;
+}
+
 async function recognizePdf(file, gradeHint, onProgress) {
   if (file.size > 50 * 1024 * 1024) throw new Error('PDF 超过 50MB，请先压缩后再上传');
   const pdfjs = await loadPdfJs();
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   if (pdf.numPages > 20) throw new Error('PDF 超过 20 页，请拆分后分批导入，避免浏览器处理过慢。');
+  const recognizeRosterPhoto = await loadRecognizeRosterPhoto();
   const allRows = [];
   const warnings = [];
   for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
@@ -247,7 +285,7 @@ export async function parseRosterFile(file, gradeHint = '', onProgress = () => {
   } else if (ext === 'pdf' || file.type === 'application/pdf') {
     result = await recognizePdf(file, gradeHint, onProgress);
   } else if (/^image\/(png|jpe?g|webp)$/i.test(file.type) || /\.(png|jpe?g|webp)$/i.test(name)) {
-    const { recognizeRosterPhoto } = await import('./ocr.js');
+    const recognizeRosterPhoto = await loadRecognizeRosterPhoto();
     onProgress('正在启动中文图片识别…');
     const recognized = await recognizeRosterPhoto(file, onProgress, null, gradeHint);
     // Keep the complete review grid; do not silently discard rows the OCR missed.
