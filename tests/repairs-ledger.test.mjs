@@ -70,10 +70,30 @@ test('维修状态支持自由输入并兼容旧状态',()=>{
  assert.equal(isRepairFixed({status:'已修好'}),true);
  assert.equal(isRepairFixed({status:'等待配件'}),false);
 });
-test('维修登记状态为自由文本输入框',()=>{
- assert.match(repairSource,/<input class="input" id="s"/);
- assert.doesNotMatch(repairSource,/<select class="input" id="s"/);
- assert.ok(repairSource.includes('placeholder="手动输入状态'));
+test('是否修好为可手动输入 + 三项下拉的组合框，状态说明与费用栏已移除',()=>{
+ assert.match(repairSource,/<input class="input" id="fx"/);
+ assert.doesNotMatch(repairSource,/<select class="input" id="fx"/);
+ assert.match(repairSource,/id="fx-menu" hidden/);
+ assert.match(repairSource,/id="fx-toggle"/);
+ for (const label of ['待修复','修复中','已修复']) {
+  assert.ok(repairSource.includes(`data-rp-status="${label}"`),`缺少下拉选项 ${label}`);
+ }
+ assert.doesNotMatch(repairSource,/id="s"/);
+ assert.doesNotMatch(repairSource,/id="co"/);
+ assert.doesNotMatch(repairSource,/状态说明/);
+ assert.doesNotMatch(repairSource,/费用（元）/);
+});
+test('下拉三项保存后列表与统计判定正确',()=>{
+ for (const [text,fixed] of [['待修复',false],['修复中',false],['已修复',true]]) {
+  assert.equal(isRepairFixed({status:text}),fixed,`${text} 的修好判定`);
+ }
+});
+test('取消 / 删除 / 保存 三个按钮集中在同一排',()=>{
+ assert.match(repairSource,/class="confirm-actions rp-form-actions"/);
+ assert.doesNotMatch(repairSource,/margin-right:auto/);
+ for (const id of ['del','cancel','ok']) {
+  assert.ok(repairSource.includes(`id="${id}"`),`缺少按钮 ${id}`);
+ }
 });
 
 test('截图中的已修复记录在编辑、列表和月份统计中均为已修好', () => {

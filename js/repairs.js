@@ -7,7 +7,7 @@ import {
   api, esc, toast, sheet, confirmDialog, ymd,
 } from './core.js';
 import { registerView, icon, pageHead } from './ui.js';
-import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusForSave, repairStatusInputValue } from './repairs-domain.mjs';
+import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusInputValue } from './repairs-domain.mjs';
 
 /* 维修状态使用自由文本输入，保留旧状态兼容。 */
 const URG = {
@@ -15,6 +15,15 @@ const URG = {
   normal: { label: '一般', chip: 'blue' },
   high: { label: '急', chip: 'red' },
 };
+
+/* 存量记录的状态文案统一显示成下拉三项；用户自己填过的自由文本原样保留。 */
+function repairStatusDisplay(row) {
+  if (isRepairFixed(row)) return '已修复';
+  const raw = repairStatusInputValue(row?.status);
+  if (['处理中', '维修中', '正在维修', '修复中', 'doing'].includes(raw)) return '修复中';
+  if (['待处理', '待维修', '待修复', 'pending', ''].includes(raw)) return '待修复';
+  return raw;
+}
 
 
 /* 老链接 #/repairs 兜底（render() 里会先 translate 成 work/repairs） */
@@ -149,57 +158,95 @@ export async function renderRepairsBody(box) {
     const body = document.createElement('div');
     body.className = 'sheet-body';
     body.innerHTML = `
-      <div class="form-grid">
-        <div class="field"><label class="field-label">报修日期</label>
-          <input class="input" id="d" type="date" value="${esc(row?.date || today)}"></div>
-        <div class="field"><label class="field-label">紧急程度</label>
-          <select class="input" id="u">
-            ${Object.entries(URG).map(([k, v]) => `<option value="${k}" ${(row?.urgency || 'normal') === k ? 'selected' : ''}>${v.label}</option>`).join('')}
-          </select></div>
+      <div class="rp-form-section">
+        <div class="rp-form-section-title">报修信息</div>
+        <div class="form-grid">
+          <div class="field"><label class="field-label">报修日期</label>
+            <input class="input" id="d" type="date" value="${esc(row?.date || today)}"></div>
+          <div class="field"><label class="field-label">紧急程度</label>
+            <select class="input" id="u">
+              ${Object.entries(URG).map(([k, v]) => `<option value="${k}" ${(row?.urgency || 'normal') === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+            </select></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label class="field-label">位置</label>
+            <input class="input" id="pl" value="${esc(row?.place || '')}" placeholder="如 高二(3)班教室"></div>
+          <div class="field"><label class="field-label">设备名称</label>
+            <input class="input" id="it" value="${esc(row?.item || '')}" placeholder="如 投影仪 / 门锁 / 灯管 / 网线"></div>
+        </div>
       </div>
-      <div class="form-grid">
-        <div class="field"><label class="field-label">位置</label>
-          <input class="input" id="pl" value="${esc(row?.place || '')}" placeholder="如 高二(3)班教室"></div>
-        <div class="field"><label class="field-label">设备名称</label>
-          <input class="input" id="it" value="${esc(row?.item || '')}" placeholder="如 投影仪 / 门锁 / 灯管 / 网线"></div>
+      <div class="rp-form-section">
+        <div class="rp-form-section-title">故障与处理</div>
+        <div class="field"><label class="field-label">故障描述</label>
+          <textarea class="input" id="fl" rows="2" placeholder="如：开机后一直闪红灯，投不出画面">${esc(row?.fault || '')}</textarea></div>
+        <div class="form-grid">
+          <div class="field"><label class="field-label">报修人 <span class="tiny muted">（选填）</span></label>
+            <input class="input" id="rp" value="${esc(row?.reporter || '')}" placeholder="谁发现的"></div>
+          <div class="field"><label class="field-label">维修人 <span class="tiny muted">（选填）</span></label>
+            <input class="input" id="hd" value="${esc(row?.handler || '')}" placeholder="如 后勤王师傅"></div>
+        </div>
       </div>
-      <div class="field"><label class="field-label">故障描述</label>
-        <textarea class="input" id="fl" rows="2" placeholder="如：开机后一直闪红灯，投不出画面">${esc(row?.fault || '')}</textarea></div>
-      <div class="form-grid">
-        <div class="field"><label class="field-label">报修人 <span class="tiny muted">（选填）</span></label>
-          <input class="input" id="rp" value="${esc(row?.reporter || '')}" placeholder="谁发现的"></div>
-        <div class="field"><label class="field-label">维修人 <span class="tiny muted">（选填）</span></label>
-          <input class="input" id="hd" value="${esc(row?.handler || '')}" placeholder="如 后勤王师傅"></div>
+      <div class="rp-form-section">
+        <div class="rp-form-section-title">处理结果</div>
+        <div class="form-grid">
+          <div class="field"><label class="field-label" for="fx">是否修好</label>
+            <div class="rp-combo" id="fx-combo">
+              <input class="input" id="fx" value="${esc(repairStatusDisplay(row))}" placeholder="可手动输入，或点右侧选择" autocomplete="off">
+              <button type="button" class="rp-combo-toggle" id="fx-toggle" aria-label="展开状态选项" aria-expanded="false">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 5.5L7 9.5L11 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="rp-combo-menu" id="fx-menu" hidden>
+                <button type="button" class="rp-combo-option" data-rp-status="待修复"><span class="rp-combo-dot is-pending"></span>待修复</button>
+                <button type="button" class="rp-combo-option" data-rp-status="修复中"><span class="rp-combo-dot is-doing"></span>修复中</button>
+                <button type="button" class="rp-combo-option" data-rp-status="已修复"><span class="rp-combo-dot is-done"></span>已修复</button>
+              </div>
+            </div>
+            <div class="rp-combo-hint">可直接输入，或点右侧箭头选择</div>
+          </div>
+          <div class="field"><label class="field-label">是否跟踪</label>
+            <label class="rp-follow-control"><input type="checkbox" id="fu" ${row?.follow_up === true || row?.follow_up === 1 || row?.follow_up === '1' ? 'checked' : ''}><span>需要持续跟踪处理</span></label></div>
+        </div>
+        <div class="field"><label class="field-label">备注</label>
+          <input class="input" id="rm" value="${esc(row?.remark || '')}" placeholder="有什么要补充的？直接在这里写"></div>
       </div>
-      <div class="form-grid">
-        <div class="field"><label class="field-label" for="fx">是否修好</label>
-          <select class="input" id="fx">
-            <option value="open" ${!isRepairFixed(row) ? 'selected' : ''}>未修好</option>
-            <option value="done" ${isRepairFixed(row) ? 'selected' : ''}>已修好</option>
-          </select></div>
-        <div class="field"><label class="field-label">费用（元）</label>
-          <input class="input" id="co" type="number" min="0" step="0.01" value="${esc(row?.cost || '')}" placeholder="0"></div>
-      </div>
-      <div class="field"><label class="field-label">状态说明</label>
-          <input class="input" id="s" value="${esc(repairStatusInputValue(row?.status))}" placeholder="手动输入状态，如：待处理、等待配件、已修好" autocomplete="off"></div>
-      <div class="field"><label class="field-label">是否跟踪</label>
-        <label class="rp-follow-control"><input type="checkbox" id="fu" ${row?.follow_up === true || row?.follow_up === 1 || row?.follow_up === '1' ? 'checked' : ''}><span>需要持续跟踪处理</span></label></div>
-      <div class="field"><label class="field-label">备注</label>
-        <input class="input" id="rm" value="${esc(row?.remark || '')}" placeholder="有什么要补充的？直接在这里写"></div>
-      <div class="confirm-actions">
-        ${row ? '<button class="btn ghost" id="del" style="color:var(--red);margin-right:auto">删除</button>' : ''}
+      <div class="confirm-actions rp-form-actions">
+        ${row ? '<button class="btn ghost rp-btn-delete" id="del">删除</button>' : ''}
         <button class="btn ghost" id="cancel">取消</button>
         <button class="btn primary" id="ok">保存</button>
       </div>`;
     const s = sheet({ title: isNew ? '新增维修记录' : '维修记录修改', body, wide: true });
     const $ = (id) => body.querySelector('#' + id);
 
-    $('fx').onchange = () => {
-      $('s').value = repairStatusInputValue(repairStatusForSave($('s').value, $('fx').value === 'done'));
+    /* 状态组合框：输入框可直接键入；点右侧箭头展开固定三项，选中后回填。 */
+    const combo = $('fx-combo');
+    const menu = $('fx-menu');
+    const toggle = $('fx-toggle');
+    const closeCombo = () => {
+      menu.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      combo.classList.remove('is-open');
     };
-    $('s').oninput = () => {
-      $('fx').value = isRepairFixed({ status: $('s').value }) ? 'done' : 'open';
+    toggle.onclick = (event) => {
+      event.stopPropagation();
+      const willOpen = menu.hidden;
+      menu.hidden = !willOpen;
+      toggle.setAttribute('aria-expanded', String(willOpen));
+      combo.classList.toggle('is-open', willOpen);
     };
+    menu.querySelectorAll('[data-rp-status]').forEach((option) => {
+      option.onclick = (event) => {
+        event.stopPropagation();
+        $('fx').value = option.dataset.rpStatus;
+        closeCombo();
+        $('fx').focus();
+      };
+    });
+    body.addEventListener('click', (event) => {
+      if (!combo.contains(event.target)) closeCombo();
+    });
+    $('fx').addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeCombo();
+    });
     $('cancel').onclick = s.close;
     $('del')?.addEventListener('click', async () => {
       if (await confirmDialog('删除这条报修记录？')) {
@@ -214,10 +261,11 @@ export async function renderRepairsBody(box) {
         item: $('it').value.trim(),
         fault: $('fl').value.trim(),
         urgency: $('u').value,
-        status: repairStatusForSave($('s').value, $('fx').value === 'done'),
+        status: $('fx').value.trim() || '待修复',
         reporter: $('rp').value.trim(),
         handler: $('hd').value.trim(),
-        cost: Number($('co').value) || 0,
+        /* 维修不产生费用：界面已去掉费用栏，这里只沿用存量值，不改历史记录。 */
+        cost: Number(row?.cost) || 0,
         follow_up: $('fu').checked,
         remark: $('rm').value.trim(),
       };
