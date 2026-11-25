@@ -43,6 +43,9 @@ import {
   normalizeRow, validateRow, filterRows, calcStats, migrationKey,
   DEFAULT_DEPARTMENT, gradesOfDepartment, deptName, gradeKey,
 } from './attendance-hub-domain.mjs';
+import {
+  LEGACY_RESTORE_VERSION, HUB_RESTORE_KEYS, freshHubRows, planHubBackfill,
+} from './attendance-legacy-restore.mjs';
 
 /* ============================ 基础工具 ============================ */
 
@@ -2891,6 +2894,139 @@ on('GET', '/attendance/stats', ({ query }) => {
   if (!grade) fail(400, '要指定年级');
   return attMonthlyStats(grade, year);
 });
+/* ==========================================================================
+ * 恢复旧版考勤工作台后的「历史数据自动补齐」
+ * --------------------------------------------------------------------------
+ * 2026-11-26 设计确认：考勤回到旧版 PRD 单页工作台（六页签）。
+ * v417~v423 期间用户可能在新架构的 5 张独立表里录过数据，这些数据必须
+ * 回填到旧版数据源（teachers / attendance_tables / attendance_rows / leaves），
+ * 否则恢复界面后那几天的记录会凭空消失。
+ *
+ * 触发：work.js 进入考勤路由时 POST 一次，页面上看不到按钮（用户上一轮要求
+ * 「同步旧数据按钮去掉」）。幂等靠 db.meta.legacyRestoreVersion + 每行
+ * `_restored` 标记 + 内容去重三重保证；重复调用不会插重复行。
+ * ========================================================================== */
+function ensureLegacyRestore({ force = false } = {}) {
+  const db = load();
+  const hub = {};
+  for (const key of HUB_RESTORE_KEYS) hub[key] = rowsOf(HUB_SHEETS[key].table);
+  const fresh = {};
+  let pending = 0;
+  for (const key of HUB_RESTORE_KEYS) {
+    fresh[key] = freshHubRows(hub[key]);
+    pending += fresh[key].length;
+  }
+  const empty = { teachers: 0, sheets: 0, leaves: 0, stats: 0 };
+  if (!force && db.meta.legacyRestoreVersion === LEGACY_RESTORE_VERSION && !pending) {
+    return { ok: true, already: true, version: LEGACY_RESTORE_VERSION, restored: empty };
+  }
+
+  const u = currentUser();
+  u.settings = u.settings || {};
+  const workspace = safeJSON(u.settings.attendanceWorkspace, {}) || {};
+  const leaves = Array.isArray(workspace.leaves) ? workspace.leaves.slice() : [];
+  const teachers = rowsOf('teachers');
+  const subjectOf = (name) => String(
+    teachers.find((t) => String(t.name || '').trim() === String(name || '').trim())?.subject || '',
+  ).trim();
+  const plan = planHubBackfill({ hub, teachers, leaves, subjectOf });
+
+  /* ① 教师：年级 + 姓名 + 学科 判重；年级名单缺了就补，否则工作台下拉里看不到 */
+  let teacherId = T('teachers').reduce((mx, t) => Math.max(mx, num(t.id)), 0);
+  let teacherSort = T('teachers').reduce((mx, t) => Math.max(mx, num(t.sort)), 0);
+  const gradeList = Array.isArray(u.settings.grades) ? u.settings.grades.slice() : [];
+  for (const it of plan.teacherAdds) {
+    teacherId += 1; teacherSort += 1;
+    T('teachers').push({
+      id: teacherId, grade: it.grade, name: it.name, subject: it.subject,
+      phone: it.phone || '', active: it.active, sort: teacherSort,
+      created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
+    });
+    if (!gradeList.some((g) => String(g).trim() === it.grade)) gradeList.push(it.grade);
+  }
+  u.settings.grades = gradeList;
+
+  /* ② 状态行：按 日期 | 年级 | 表类型 找（找不到就惰性建）工作表，
+        同时写 __teacherGrid 与勾选列，全天 / 分节查看都能显示。 */
+  const tables = T('attendance_tables');
+  const arows = T('attendance_rows');
+  let tableId = tables.reduce((mx, t) => Math.max(mx, num(t.id)), 0);
+  let rowId = arows.reduce((mx, r) => Math.max(mx, num(r.id)), 0);
+  const tableCache = new Map();
+  const tableFor = (type, date, grade) => {
+    const cacheKey = [type, date, grade].join('|');
+    if (tableCache.has(cacheKey)) return tableCache.get(cacheKey);
+    let t = tables.find((x) => !x.deleted_at && String(x.grade || '') === grade
+      && String(x.sheet_date || '') === date && tableTypeOf(x) === type);
+    if (!t) {
+      tableId += 1;
+      t = {
+        id: tableId, kind: type, name: `${date} ${grade} ${type === 'seat' ? '坐班表' : '上课表'}`,
+        month: date.slice(0, 7), columns: JSON.stringify(defaultCols(type)),
+        meta: JSON.stringify({ day_key: attendanceDayKey(date, grade, type), restored_from_hub: LEGACY_RESTORE_VERSION }),
+        grade, sheet_type: type, sheet_date: date, weekday: '', periods: '', subject: '',
+        created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
+      };
+      tables.push(t);
+    }
+    tableCache.set(cacheKey, t);
+    return t;
+  };
+  let writtenSheets = 0;
+  for (const p of plan.sheetAdds) {
+    const t = tableFor(p.type, p.date, p.grade);
+    const src = p.data.__hub;
+    const dup = arows.some((r) => !r.deleted_at && String(r.table_id) === String(t.id)
+      && String(safeJSON(r.data, {}).__hub?.id ?? '') === String(src?.id ?? '')
+      && safeJSON(r.data, {}).__hub?.sheet === src?.sheet);
+    if (dup) continue;
+    rowId += 1;
+    const sort = arows.filter((r) => String(r.table_id) === String(t.id))
+      .reduce((mx, r) => Math.max(mx, num(r.sort)), 0) + 1;
+    arows.push({
+      id: rowId, table_id: t.id, teacher: p.name, subject: p.subject,
+      data: JSON.stringify(p.data), sort,
+      created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
+    });
+    writtenSheets += 1;
+  }
+
+  /* ③ 请假：按 id 去重写回 settings.attendanceWorkspace.leaves */
+  const seenLeave = new Set(leaves.map((l) => String(l?.id ?? '')));
+  let writtenLeaves = 0;
+  for (const l of plan.leaveAdds) {
+    if (seenLeave.has(String(l.id))) continue;
+    leaves.push(l); seenLeave.add(String(l.id)); writtenLeaves += 1;
+  }
+
+  /* ④ 统计表在旧版没有一一对应的格子，原样归档，保证一条不丢 */
+  const archive = Array.isArray(workspace.hubArchive) ? workspace.hubArchive.slice() : [];
+  const seenStat = new Set(archive.map((x) => `${x?._hubSheet}:${x?.id}`));
+  let writtenStats = 0;
+  for (const s of plan.statsArchive) {
+    const k = `${s._hubSheet}:${s.id}`;
+    if (seenStat.has(k)) continue;
+    archive.push(s); seenStat.add(k); writtenStats += 1;
+  }
+  u.settings.attendanceWorkspace = { ...workspace, leaves, hubArchive: archive };
+  db.meta.user = u;
+
+  /* ⑤ 行级幂等标记：只标记本次扫描到的新录入行，旧的 _src 副本不动 */
+  for (const key of HUB_RESTORE_KEYS) {
+    for (const r of fresh[key]) r._restored = LEGACY_RESTORE_VERSION;
+  }
+  db.meta.legacyRestoreVersion = LEGACY_RESTORE_VERSION;
+  save();
+  return {
+    ok: true, already: false, version: LEGACY_RESTORE_VERSION,
+    restored: {
+      teachers: plan.teacherAdds.length, sheets: writtenSheets,
+      leaves: writtenLeaves, stats: writtenStats,
+    },
+  };
+}
+on('POST', '/attendance/restore-hub', ({ body }) => ensureLegacyRestore({ force: String(body?.force || '') === '1' }));
+
 on('GET', '/attendance', ({ query }) => attTablesList(query));
 on('GET', '/attendance/:id', ({ params }) => attTableDetail(params.id));
 on('POST', '/attendance', ({ body }) => {

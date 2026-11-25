@@ -185,25 +185,24 @@ test('年级管理动态化：新建年级能落库，改名同步 5 张考勤�
   assert.equal(D.calcStats({ roster: [{ name: '甲', grade: '高一' }] }, '', '高一年级').length, 1);
 });
 
-test('接线：侧栏 6 个二级导航 / 路由分派 / CSS / SW 资源清单', async () => {
+test('接线：考勤单入口恢复旧工作台 / 独立表源码保留 / CSS / SW 资源清单', async () => {
   const [ui, work, sw, appHtml, localdb, hub, attgrade, dept, domain, css] = await Promise.all([
     read('js/ui.js'), read('js/work.js'), read('sw.js'), read('app.html'), read('js/localdb.js'),
     read('js/attendance-hub.js'), read('js/attgrade.js'), read('js/attendance-departments.js'),
     read('js/attendance-hub-domain.mjs'), read('css/attendance-hub.css'),
   ]);
-  const navBlock = /\{ id: 'attendance'[\s\S]*?\]\s*\}\s*,/.exec(ui)?.[0] || '';
-  for (const key of ['departments', 'roster', 'duty', 'class', 'leave', 'stats']) {
-    assert.match(navBlock, new RegExp(`id: '${key}'`), `侧栏缺二级导航 ${key}`);
-  }
-  /* 部门管理必须排在花名册上面（二级列表第 1 项） */
-  assert.ok(navBlock.indexOf("id: 'departments'") < navBlock.indexOf("id: 'roster'"),
-    '部门管理应放在花名册上面');
-  assert.match(work, /renderAttendanceHub/);
-  assert.match(work, /attendance-hub\.js/);
-  assert.match(work, /renderAttendanceDepartments/);
-  assert.match(work, /attendance-departments\.js/);
-  assert.doesNotMatch(work, /renderAttendance\(body\)/, '旧考勤首页入口应已下线');
-  assert.match(ui, /attendance: 'attendance\/roster'/, '点「考勤」应直达花名册');
+  /* 2026-11-26 设计确认：考勤恢复旧版单页工作台，6 个独立表页与部门管理下线。
+     独立表源码全部保留（下面的文件级断言仍要过），只是不再挂到路由上。 */
+  const navLine = /\{ id: 'attendance'[^}]*\}/.exec(ui)?.[0] || '';
+  assert.match(navLine, /label: '考勤'/);
+  assert.doesNotMatch(navLine, /sub:/, '考勤不应再有三级导航');
+  assert.match(ui, /attendance: 'work\/attendance'/, '点「考勤」应直达单页工作台');
+  assert.match(work, /renderAttendancePRD/, '考勤路由应渲染旧版 PRD 工作台');
+  assert.match(work, /attendance-prd\.js/);
+  assert.doesNotMatch(work, /renderAttendanceHub/, '独立表路由已下线');
+  assert.doesNotMatch(work, /renderAttendanceDepartments/, '部门管理路由已下线');
+  assert.doesNotMatch(work, /renderAttendance\(body\)/, '旧考勤首页（年级卡片）不恢复');
+  assert.match(work, /\/attendance\/restore-hub/, '进页面要自动触发历史数据补齐');
 
   /* v3：年级管理 / 新建年级两个入口全部搬进部门管理页 */
   assert.match(dept, /id="ad-dept-add"/, '部门管理缺「新建部门」');
@@ -254,7 +253,7 @@ test('接线：侧栏 6 个二级导航 / 路由分派 / CSS / SW 资源清单',
      这里只校验「存在且符合 wb-v<数字>-<名字> 的换缓存命名规范」。 */
   assert.match(sw, /const CACHE = 'wb-v\d+-[a-z0-9-]+'/);
   for (const f of ['./js/attendance-hub.js', './js/attendance-hub-domain.mjs',
-    './js/attendance-departments.js', './css/attendance-hub.css']) {
+    './js/attendance-departments.js', './js/attendance-legacy-restore.mjs', './css/attendance-hub.css']) {
     assert.ok(sw.includes(`'${f}'`), `SW 缺资源 ${f}`);
   }
   for (const t of [...D.HUB_TABLES, 'att_hub_departments']) {

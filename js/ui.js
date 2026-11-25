@@ -108,17 +108,10 @@ export const NAV = [
       /* 备课紧接课表：课前看图、课后备课，动线是连着的。 */
       { id: 'prep', label: '备课', icon: 'book' },
       { id: 'repairs', label: '维修', icon: 'wrench' },
-      /* 考勤一级导航下面 6 个二级导航各自是独立页面。
-         v3 新增「部门管理」：放在花名册上面、考勤下面，统一管新建部门 / 新建年级。
-         部门是年级的上级，花名册分表页签由这里的配置自动生成。 */
-      { id: 'attendance', label: '考勤', icon: 'users', sub: [
-        { id: 'departments', label: '部门管理', icon: 'users' },
-        { id: 'roster', label: '花名册', icon: 'users' },
-        { id: 'duty', label: '坐班表', icon: 'clock' },
-        { id: 'class', label: '上课表', icon: 'book' },
-        { id: 'leave', label: '请假表', icon: 'cal' },
-        { id: 'stats', label: '统计表', icon: 'zap' },
-      ] },
+      /* 2026-11-26 设计确认：考勤恢复旧版单页工作台（花名册/坐班/上课/教研/请假/汇总六页签）。
+         撤掉 v417 的 6 个三级导航与部门管理入口；年级 / 日期 / 节次都在工作台内切换。
+         v412 已下线的年级卡片首页不恢复。独立表源码保留，随时可切回。 */
+      { id: 'attendance', label: '考勤', icon: 'users' },
       { id: 'invigilation', label: '监考', icon: 'shield' },
       { id: 'trips', label: '出差', icon: 'car' },
       { id: 'notes', label: '笔记', icon: 'edit' },
@@ -394,9 +387,9 @@ function bindShell() {
          容易误以为一级导航失效。 */
       if (!e.target.closest('.nav-caret')) {
         setNavGroupOpen(key, true);
-        /* 分组标题的默认页：工作 → 上课；考勤 → 花名册（旧考勤首页已下线）；
-           小助手 → 任务。不写这条的话点一级标题会落到老课件总览，二级项也不高亮。 */
-        const groupDefault = { work: 'work/lessons', attendance: 'attendance/roster', materials: 'materials/selfstudy' };
+        /* 分组标题的默认页：工作 → 上课；考勤 → 单页工作台；小助手 → 任务。
+           不写这条的话点一级标题会落到老课件总览，二级项也不高亮。 */
+        const groupDefault = { work: 'work/lessons', attendance: 'work/attendance', materials: 'materials/selfstudy' };
         go(groupDefault[key] || key);
         return;
       }

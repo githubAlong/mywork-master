@@ -111,7 +111,7 @@ registerView(async function work(main, { tab, third }) {
     timetable: ['周课表', '一周课程安排、上课时间与班级一目了然'],
     prep: ['备课', '管理备课时间、授课内容与备注，支持按筛选条件批量导入导出'],
     repairs: ['维修记录表', '按月份查看维修记录、处理状态与待跟踪事项'],
-    attendance: ['考勤', '按年级分开管：花名册、每日三张表、统计'],
+    attendance: ['考勤', '花名册 / 坐班 / 上课 / 教研 / 请假 / 汇总统计，六张表同一工作台'],
     invigilation: ['监考', '监考场次、时间、补贴，一场不漏'],
     trips: ['出差', '行程、报销记录'],
     notes: ['笔记', '随手记的教学笔记，可搜索、可归档'],
@@ -144,28 +144,20 @@ registerView(async function work(main, { tab, third }) {
   }
   if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
-    /* 考勤只保留 6 个二级页面：部门管理 / 花名册 / 坐班表 / 上课表 / 请假表 / 统计表。
-       旧「考勤管理首页（年级总览 + 年级考勤工作区）」已下线：侧栏点「考勤」、
-       底部导航、旧收藏链接 #/attendance 都直接落到花名册。
-       中文年级名仍按旧工作台渲染，让已有的年级工作台链接不白屏。 */
-    const grade = third ? decodeURIComponent(third) : '';
-    /* v3：部门管理是独立页面，先建部门再在部门里建年级。 */
-    if (grade === 'departments') {
-      headEl.remove();
-      const { renderAttendanceDepartments } = await import('./attendance-departments.js');
-      return renderAttendanceDepartments(body);
-    }
-    /* 二级 key 用英文，中文年级名（高一/高二/高三）不会撞上。
-       年级 / 日期在二级页里只是筛选条件，不再是数据隔离边界。 */
-    if (!grade || ['roster', 'duty', 'class', 'leave', 'stats'].includes(grade)) {
-      headEl.remove();
-      const { renderAttendanceHub } = await import('./attendance-hub.js');
-      return renderAttendanceHub(body, { sheet: grade || 'roster' });
-    }
+    /* 2026-11-26 设计确认：恢复旧版 PRD 考勤工作台（单页六页签）。
+       v417~v423 的 6 个独立表页面与部门管理已下线；源码全部保留，随时可切回。
+       旧收藏链接 work/attendance/<英文 key> 一律落到工作台，不白屏；
+       中文年级名仍作为初始年级传入，已有的年级工作台链接继续可用。 */
+    const raw = third ? decodeURIComponent(third) : '';
+    const HUB_KEYS = new Set(['departments', 'roster', 'duty', 'class', 'leave', 'stats']);
+    const initialGrade = HUB_KEYS.has(raw) ? '' : raw;
+    /* 历史数据自动补齐：v417~v423 期间录进 5 张独立表的数据回填到旧版数据源。
+       带版本标记 + 行级幂等，进页面时后台跑一次，不新增可见按钮。 */
+    await api.post('/attendance/restore-hub', {}).catch(() => null);
     /* 工作台自己渲染标题、说明与实时状态，外层页头必须移除，否则同一标题会出现两次 */
     headEl.remove();
     const { renderAttendancePRD } = await import('./attendance-prd.js');
-    return renderAttendancePRD(body, { grade });
+    return renderAttendancePRD(body, { grade: initialGrade });
   }
   if (t === 'invigilation') return renderInvigilation(body);
   if (t === 'trips') { headEl.remove(); return renderTripManagement(body); }
