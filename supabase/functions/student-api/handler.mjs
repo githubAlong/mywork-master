@@ -186,8 +186,16 @@ export function createStudentApiHandler({ backendUrl, serviceKey, fetchImpl = fe
     const classes = [...classPairs.values()]
       .sort((a, b) => a.grade.localeCompare(b.grade, 'zh-Hans-CN') || a.class_name.localeCompare(b.class_name, 'zh-Hans-CN'));
 
+    /* 学生端任务展示字号：教师在「自习管理」设置，存 payload.meta 随快照同步。
+       白名单 + 边界收敛，非法值一律回落到默认 28px。 */
+    const savedTaskFont = Number(payload.meta?.studentTaskDisplay?.fontSize);
+    const taskDisplay = {
+      fontSize: Number.isFinite(savedTaskFont) && savedTaskFont >= 18 && savedTaskFont <= 48
+        ? Math.round(savedTaskFont) : 28,
+      align: 'center',
+    };
     return json({
-      link: { code: link.code, title: link.title, grades, modules },
+      link: { code: link.code, title: link.title, grades, modules, display: taskDisplay },
       teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
       materials: mats, categories: cats, rosters, classes, punishments: punish, roll, date,
       selfstudyTasks, misconduct, bulletin,

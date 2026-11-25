@@ -240,7 +240,6 @@ import { handle as localHandle } from './js/localapi.js';
 import { getStudentMaterials, materialEndpoint, passcodeHeaders } from './js/material-sharing.mjs';
 import { resolveEnvironmentProfile } from './js/environment-config.mjs';
 import { replaceMemFromDisk, setActiveAccount } from './js/localdb.js';
-import { taskImagePages, downloadCanvas } from './js/selfstudy-task-image.mjs';
 /* 同一个浏览器里演示时，学生端要读老师那份账号库。
    localdb 会记住最后登录的账号，这里先恢复，否则读到默认空库，
    表现就是「链接不存在或已关闭」。 */
@@ -442,6 +441,13 @@ function taskLines(t) {
   return String(t.content || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
     .map((line) => line.replace(/^\s*(?:\d+[.、)]|[-•])\s*/, '')).filter(Boolean);
 }
+/* 教师后台「自习管理 → 学生端任务展示」下发的字号，学生端只读。
+   老师改完保存后，学生端轮询会自动感知 display 变化并重绘。 */
+function taskFontSize() {
+  const d = data?.link?.display || {};
+  const n = Number(d.fontSize);
+  return Number.isFinite(n) && n >= 18 && n <= 48 ? Math.round(n) : 28;
+}
 function studentCardHtml(t) {
   const items = taskLines(t);
   const body = items.length > 1
@@ -450,19 +456,16 @@ function studentCardHtml(t) {
   const img = t.task_image || t.generated_image;
   const day = t.date === todayStr() ? '今日' : (t.date || '');
   const deadline = [day, t.deadline_time || t.end_time || t.period].filter(Boolean).join(' ');
-  return `<div class="card card-pad stu-task-card">
+  /* 固定展示框 + 教师指定字号（水平居中由 CSS 负责），底部两个按钮已按要求移除 */
+  return `<div class="card card-pad stu-task-card stu-task-display" style="--task-font-size:${taskFontSize()}px">
     <div class="stu-section-head">
       <div class="card-title">${esc(t.title || '今日任务')}</div>
     </div>
     <div class="st-card-body">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
-    <div class="row wrap tiny muted" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
+    <div class="row wrap tiny muted stu-task-meta" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
       <span>教师：${esc(t.creator || '老师')}</span>
       <span>任务类型：课堂自习</span>
       <span>截止时间：${esc(deadline)}</span>
-    </div>
-    <div class="row wrap" style="gap:10px;margin-top:4px">
-      <button class="btn ghost" id="st-view">查看任务</button>
-      <button class="btn primary" id="st-save">保存任务图</button>
     </div>
   </div>`;
 }
@@ -472,7 +475,7 @@ function paintSelfstudy() {
   const t = mine[0];
   if (!t) {
     /* 和教材 / 点名 / 盲盒保持一致：都放在一张普通卡片里，不再用整页居中的空白块 */
-    $('#s-body').innerHTML = `<div class="card card-pad stu-task-card">
+    $('#s-body').innerHTML = `<div class="card card-pad stu-task-card stu-task-display" style="--task-font-size:${taskFontSize()}px">
       <div class="stu-section-head">
         <div class="card-title">${ICON.clock} 今日任务</div>
         <div class="tiny muted" style="margin-top:4px">${myClass() ? `当前设备班级：${esc(myClass())} · ` : ''}老师发布后会自动出现在这里</div>
@@ -485,41 +488,23 @@ function paintSelfstudy() {
     return;
   }
   $('#s-body').innerHTML = studentCardHtml(t);
-  $('#st-view').onclick = () => openTaskModal(t);
-  $('#st-save').onclick = () => {
-    const pages = taskImagePages({
-      title: t.title, class_label: t.class_label, date: t.date, period: t.period,
-      content: t.content, school: data.teacher?.school || '',
-    }, 'save');
-    pages.forEach((c, i) => downloadCanvas(c, `${t.title || '自习任务'}-${t.date || ''}-${i + 1}.png`));
-  };
 }
-function openTaskModal(t) {
-  const wrap = document.createElement('div');
-  wrap.className = 'stu-modal';
-  wrap.innerHTML = `<div class="stu-modal-card">
-    <div class="stu-modal-head"><b>${esc(t.title || '今日任务')}</b><button aria-label="关闭">×</button></div>
-    <div class="stu-modal-body">${esc(t.content || '')}${(t.task_image || t.generated_image) ? `<img src="${esc(t.task_image || t.generated_image)}" alt="任务图">` : ''}</div>
-  </div>`;
-  const close = () => wrap.remove();
-  wrap.querySelector('button').onclick = close;
-  document.body.appendChild(wrap);
-}
-
-/* 学生端 60 秒轮询一次：任务或模块开关有变化才重绘，避免大屏上闪白 */
+/* 学生端 60 秒轮询一次：任务、模块开关或展示配置有变化才重绘，避免大屏上闪白 */
 setInterval(async () => {
   try {
     replaceMemFromDisk();
     const d = await api(`/public/link/${code}`);
     const before = JSON.stringify(data?.selfstudyTasks || []);
     const after = JSON.stringify(d.selfstudyTasks || []);
+    const beforeDisplay = JSON.stringify(data?.link?.display || {});
+    const afterDisplay = JSON.stringify(d.link?.display || {});
     if (data) { data.selfstudyTasks = d.selfstudyTasks || []; if (d.link) data.link = d.link; }
     const next = visibleTabs();
     if (!next.includes('selfstudy')) $('.stu-modal')?.remove();
     const tabsChanged = next.join(',') !== availTabs.join(',');
     availTabs = next;
     if (tabsChanged) paint();
-    else if (before !== after && tab === 'selfstudy') paint();
+    else if ((before !== after || beforeDisplay !== afterDisplay) && tab === 'selfstudy') paint();
   } catch {}
 }, 60000);
 /* ---------- 签到：学生点一下，老师端实时看到 ---------- */

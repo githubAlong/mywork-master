@@ -14,6 +14,7 @@ import { cleanPeriodTime, normalizeTimetablePeriods, completeTimetablePeriods } 
 import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.mjs';
 import { makeClsLabeler, clsShort } from './grade-class.mjs';
 import { syncMaterialSharing } from './material-sharing.mjs';
+import { load as loadLocalDB, save as saveLocalDB } from './localdb.js';
 
 /* 单独占一个视图名还保留着，是为了 #/selfstudy 这种老链接能落到正确的地方；
    实际渲染走 render() 里的 translate，这里只做兜底。 */
@@ -541,6 +542,8 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
   ]);
   const link = links[0];
   let visible = link?.modules?.selfstudy !== 0;
+  const savedFont = Number(loadLocalDB().meta?.studentTaskDisplay?.fontSize);
+  const displayFont = Number.isFinite(savedFont) && savedFont >= 18 && savedFont <= 48 ? Math.round(savedFont) : 28;
   const open = sessions.filter((s) => s.status === 'open');
   const today = sessions.filter((s) => String(s.date || '') === ymd(new Date()));
   box.innerHTML = `
@@ -563,6 +566,18 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
         <span class="ssm-pc-text ${visible ? 'on' : ''}" id="ss-visible-text">${visible ? '开启' : '关闭'}</span>
       </div>
       <div class="ssm-pc-note">关闭后隐藏学生端的「自习」页签。重新开启会恢复已发布的任务。</div>
+    </div>` : ''}
+    ${entryOnly ? `<div class="card card-pad" style="margin-bottom:14px">
+      <div class="ssm-card-title">学生端任务展示</div>
+      <div class="ssm-pc-note" style="margin-bottom:10px">设置学生端「任务」页的字体大小，文字水平居中显示在固定展示框中。保存后学生端自动更新。</div>
+      <div class="row wrap" style="gap:12px;align-items:center">
+        <span class="tiny muted" style="min-width:52px">字号</span>
+        <input type="range" id="ss-task-font" min="18" max="48" step="1" value="${displayFont}"
+               style="flex:1;min-width:160px;accent-color:var(--primary)" aria-label="学生端任务字号">
+        <b class="mono" id="ss-task-font-val" style="min-width:48px;text-align:right">${displayFont}px</b>
+        <button class="btn primary sm" id="ss-task-font-save">保存</button>
+      </div>
+      <div class="ssm-pc-note" style="margin-top:8px">范围 18–48px，默认 28px。这是展示字号，不影响任务内容本身。</div>
     </div>` : ''}
     ${entryOnly ? '' : `
     <div class="ss-stats mod-stats">
@@ -617,6 +632,24 @@ async function renderStudentSelfstudy(box, entryOnly = false) {
         toast(error.message || '保存失败，请重试', 'err');
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    /* 学生端任务展示字号：存账号快照 meta，随现有同步链路上云，不改表结构 */
+    const fontRange = box.querySelector('#ss-task-font');
+    const fontVal = box.querySelector('#ss-task-font-val');
+    fontRange?.addEventListener('input', () => { if (fontVal) fontVal.textContent = fontRange.value + 'px'; });
+    box.querySelector('#ss-task-font-save')?.addEventListener('click', async () => {
+      const n = Math.min(48, Math.max(18, Number(fontRange?.value) || 28));
+      const db = loadLocalDB();
+      if (!db.meta || typeof db.meta !== 'object') db.meta = {};
+      db.meta.studentTaskDisplay = { fontSize: Math.round(n), updatedAt: new Date().toISOString() };
+      if (!saveLocalDB()) { toast('保存失败，请检查本机存储空间', 'err'); return; }
+      try {
+        await syncMaterialSharing();
+        toast('已保存，学生端会自动更新', 'ok');
+      } catch (error) {
+        toast('已保存到本机，学生端同步失败。' + (error.message || '请稍后重试'), 'err');
       }
     });
     return;

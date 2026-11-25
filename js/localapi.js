@@ -4062,8 +4062,16 @@ on('GET', '/public/link/:code', ({ params, query }) => {
     .filter((b) => !grades.length || !b.grade || grades.includes(b.grade))
     .filter((b) => String(b.reply || '').trim())
     .map((b) => ({ id: b.id, grade: b.grade, class_name: b.class_name, reply: b.reply, replied_at: b.replied_at }));
+  /* 学生端任务展示字号：教师在「自习管理」设置，存 meta 随快照同步。
+     白名单 + 边界收敛，非法值一律回落到默认 28px。 */
+  const savedTaskFont = Number(db.meta?.studentTaskDisplay?.fontSize);
+  const taskDisplay = {
+    fontSize: Number.isFinite(savedTaskFont) && savedTaskFont >= 18 && savedTaskFont <= 48
+      ? Math.round(savedTaskFont) : 28,
+    align: 'center',
+  };
   return {
-    link: { code: l.code, title: l.title, grades, modules: linkModules(l) },
+    link: { code: l.code, title: l.title, grades, modules: linkModules(l), display: taskDisplay },
     teacher: { nickname: u.nickname, subject: u.subject, school: u.school },
     materials: mats, categories: cats, rosters, classes: publicClassOptions(grades), punishments: punish, roll, date,
     selfstudyTasks: publicSelfstudyTasks(l),
