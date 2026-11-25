@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v407-module-resilience';
+const CACHE = 'wb-v408-nav-resilience';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -182,10 +182,18 @@ self.addEventListener('message', (e) => {
   e.source?.postMessage({ type: 'WB_VERSION', cache: CACHE });
 });
 
-/* 【兜底页】
-   网络挂了、缓存里也没有首页时，返回这个。
-   以前这里直接 throw err，浏览器就是一片灰白，用户只会觉得「这网站坏了」。
-   页面上给一个「重试」按钮，点一下重新走一遍导航。 */
+/* 【兜底页：能自己重试的页面】
+   网络挂了、缓存里也没有这个页面时返回它。
+   历史教训（两个版本都踩过）：
+     v1 直接 throw → 浏览器一片灰白，用户以为网站坏了；
+     v2 换成静态提示页 + 「重新加载」按钮 → 按钮就是 location.reload()，
+        网络还失败就又回到这张一模一样的页。页面没有任何变化，
+        用户只会说「点了没反应」。
+   v3（本版）：
+     1) 点重试先显示「正在重试…」和尝试次数 —— 每次点击都有可见反馈；
+     2) 真拿到 HTML 就 document.write 原地渲染，不用再赌一次整页导航；
+     3) 还是失败就写明原因（含代理/VPN 提示），给「强制更新」「打开首页」出口；
+     4) 重试带 12 秒超时，避免一直转圈什么都不说。 */
 const OFFLINE_HTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>教师个人工作台</title>
@@ -194,28 +202,122 @@ const OFFLINE_HTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf
   body{display:flex;align-items:center;justify-content:center;min-height:100vh;
        font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
        background:#f5f6f8;color:#2a2f3a;padding:24px;box-sizing:border-box}
-  .box{max-width:340px;text-align:center}
+  .box{max-width:350px;text-align:center}
   .logo{width:52px;height:52px;border-radius:15px;margin:0 auto 16px;display:grid;place-items:center;
         background:linear-gradient(135deg,#4f6ef7,#7b5cf0);color:#fff;font-size:22px;font-weight:700}
   h1{font-size:17px;margin:0 0 8px;font-weight:700}
   p{font-size:13.5px;line-height:1.65;color:#6b7280;margin:0 0 18px}
   button{width:100%;height:44px;border:0;border-radius:12px;background:#4f6ef7;color:#fff;
          font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
-  .sub{margin-top:12px;font-size:12px;color:#9aa1ad}
+  button[disabled]{opacity:.7;cursor:default}
+  .ghost{background:#eef1f7;color:#2a2f3a;margin-top:10px}
+  .sub{margin-top:12px;font-size:12px;color:#9aa1ad;line-height:1.6}
+  .status{margin:0 0 14px;font-size:12.5px;line-height:1.6;color:#4b5563;min-height:18px}
 </style></head><body>
 <div class="box">
   <div class="logo">台</div>
   <h1>页面没能加载出来</h1>
-  <p>多半是网络卡了一下，或者浏览器里存着旧的版本。<br>点下面按钮再试一次。</p>
-  <button onclick="location.reload()">重新加载</button>
-  <div class="sub">请检查网络后重试。本提示不会清除本机资料或登录信息。</div>
-</div></body></html>`;
+  <p>这一次请求在网络上失败了（常见原因：网速抖动、代理/VPN 拦截）。<br>点下面按钮重新下载，不用关页面。</p>
+  <div class="status" id="msg"></div>
+  <button id="retry">重新加载</button>
+  <div id="extra"></div>
+  <div class="sub">重试不会清除本机资料或登录信息。</div>
+</div>
+<script>
+(function () {
+  var msg = document.getElementById('msg');
+  var btn = document.getElementById('retry');
+  var extra = document.getElementById('extra');
+  var tried = 0;
+  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  /* 强制更新：清掉本站旧缓存并注销 Service Worker，再带新参数重进。
+     只动静态资源缓存，不碰 localStorage / IndexedDB。 */
+  function hardReset() {
+    msg.textContent = '正在清理旧缓存…';
+    btn.disabled = true;
+    var go = function () { location.replace(location.pathname + '?v=' + Date.now() + (location.hash || '')); };
+    var jobs = [];
+    try { if (window.caches && caches.keys) jobs.push(caches.keys().then(function (ks) {
+      return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).catch(function () {})); } catch (e) {}
+    try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.map(function (r) { return r.unregister(); })); }).catch(function () {})); } catch (e) {}
+    var done = false;
+    var finish = function () { if (done) return; done = true; go(); };
+    if (!jobs.length) { finish(); return; }
+    Promise.all(jobs).then(finish, finish);
+    setTimeout(finish, 2500);
+  }
+  function paintExit() {
+    extra.innerHTML = '<button class="ghost" id="hard">强制更新（清掉旧缓存）</button>'
+      + '<div class="sub">还进不去就点「强制更新」：它只清本站在浏览器里的旧文件，不动你的资料和登录。</div>';
+    var hard = document.getElementById('hard');
+    if (hard) hard.onclick = hardReset;
+  }
+  function retry() {
+    tried += 1;
+    btn.disabled = true;
+    btn.textContent = '正在重新加载…';
+    msg.textContent = '第 ' + tried + ' 次重试，正在重新下载页面…';
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 12000);
+    fetch(location.href, { cache: 'reload', signal: ctrl ? ctrl.signal : undefined })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (html) {
+        clearTimeout(timer);
+        msg.textContent = '已经连上，正在打开页面…';
+        try {
+          document.open(); document.write(html); document.close();
+        } catch (e) {
+          location.reload();
+        }
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        btn.disabled = false;
+        btn.textContent = '再试一次';
+        var reason = (err && (err.name === 'AbortError' ? '等太久没有响应' : (err.message || err.name))) || '网络错误';
+        msg.innerHTML = '第 ' + tried + ' 次重试还是失败：<br><span style="color:#b45309">' + esc(reason) + '</span><br>'
+          + '如果你开着代理 / VPN / 加速器，先关掉它或换个网络再试。';
+        paintExit();
+      });
+  }
+  btn.onclick = retry;
+  paintExit();
+})();
+</script>
+</body></html>`;
 
 function offlineResponse() {
   return new Response(OFFLINE_HTML, {
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   });
+}
+
+/* 【导航请求失败自动重试一次】
+   DNS 慢半拍、代理握手失败、连接被重置，大多是一瞬间的事。
+   以前一次失败就直接甩兜底页，用户看到「页面没能加载出来」；
+   隔 1.2 秒再试一次，绝大多数抖动当场就过去了。
+   5xx 也当失败处理：GitHub Pages 部署窗口会短暂返回 500/503，
+   那种错误页给用户看没有意义，回退到缓存比它有用。 */
+async function navFetch(request, tries = 2) {
+  let lastError = null;
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      const response = await fetch(request, { cache: 'no-store' });
+      if (response && response.status < 500) return response;
+      lastError = new Error('HTTP ' + (response && response.status));
+    } catch (error) {
+      lastError = error;
+    }
+    if (i < tries - 1) await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  throw lastError || new Error('导航请求失败');
 }
 
 self.addEventListener('fetch', (e) => {
@@ -228,7 +330,7 @@ self.addEventListener('fetch', (e) => {
 
   /* 【打开页面本身：网络优先 + 离线缓存兜底】
      首页不直接沿用缓存，避免新 HTML 与当前 CACHE 的静态资源错配。
-     网络失败时才读首页缓存；网络也拿不到且没有缓存就返回兜底页。
+     网络失败时才读缓存；网络也拿不到且没有缓存就返回兜底页。
      注意不能把「网络返回的错误页」当成功 —— 502/503 也要走兜底。 */
   if (e.request.mode === 'navigate') {
     const base = self.registration.scope;
@@ -237,14 +339,24 @@ self.addEventListener('fetch', (e) => {
     /* 只有工作台首页（scope 根 / index.html）才按「首页壳」处理。
        以前所有导航都当成 index.html：打开 student.html 时断网会拿缓存的教师首页
        顶替（学生端就显示「页面没能加载出来」），联网时还会把学生端 HTML 写进
-       首页缓存，反过来污染工作台。子页面改成网络优先、离线回退自己的缓存。 */
+       首页缓存，反过来污染工作台。子页面改成网络优先、离线回退自己的缓存。
+       从 v408 起：子页面成功打开后也写一份缓存（去掉查询串做 key），
+       这样下一次网络抖动能直接显示上次的页面，而不是掉进兜底页。 */
     if (url.pathname !== scopePath && url.pathname !== scopePath + 'index.html') {
       e.respondWith((async () => {
         try {
-          return await fetch(e.request);
+          const response = await navFetch(e.request);
+          if (response && response.ok) {
+            const canonical = new Request(url.origin + url.pathname);
+            caches.open(CACHE)
+              .then((cache) => cache.put(canonical, response.clone()))
+              .catch((cacheError) => console.warn('[sw] 子页面缓存写入失败：', cacheError && cacheError.message));
+          }
+          return response;
         } catch (error) {
           console.warn('[sw] 子页面网络失败，尝试使用缓存：', url.pathname, error && error.message);
-          const cached = (await caches.match(e.request))
+          const cached = (await caches.match(new Request(url.origin + url.pathname)))
+            || (await caches.match(e.request))
             || (url.pathname.includes('student') ? await caches.match(base + 'student.html') : null);
           return cached || offlineResponse();
         }
@@ -255,7 +367,7 @@ self.addEventListener('fetch', (e) => {
       /* 网络优先，但不人为缩短浏览器自身的网络超时。
          缓存只用于离线兜底：写入慢或失败都不能丢弃已经成功的网络响应。 */
       try {
-        const response = await fetch(e.request, { cache: 'no-store' });
+        const response = await navFetch(e.request);
         if (!response || !response.ok) throw new Error('HTTP ' + (response && response.status));
         caches.open(CACHE).then((cache) => Promise.all([
           cache.put(base + 'index.html', response.clone()),
@@ -296,4 +408,3 @@ self.addEventListener('fetch', (e) => {
     }
   })());
 });
-
