@@ -18,8 +18,11 @@ for (const width of [1600, 900, 390]) {
     const base = process.env.BASE_URL || 'http://127.0.0.1:4189';
     await page.goto(base + '/?e2e=1#/daily/notes');
     await expect(page.locator('.sticky-card')).toHaveCount(5);
-    await expect(page.locator('.sidebar [data-nav-toggle="materials"]')).toHaveCount(0);
-    for (const id of ['selfstudy', 'textbook', 'pick', 'mystery']) await expect(page.locator(`.sidebar [data-nav="${id}"]`)).toHaveCount(1);
+    await expect(page.locator('.sidebar [data-nav-toggle="materials"]')).toHaveCount(1);
+    for (const id of ['selfstudy', 'textbook', 'pick', 'mystery', 'misconduct', 'bulletin']) {
+      await expect(page.locator(`.sidebar [data-nav="materials/${id}"]`)).toHaveCount(1);
+    }
+    await expect(page.locator('.sidebar [data-nav="recycle"]')).toHaveCount(1);
     await expect(page.locator('.sidebar [data-nav="daily"]')).toContainText('便签');
     await page.locator('#sticky-query').fill('周末');
     await expect(page.locator('.sticky-card')).toHaveCount(5);
@@ -52,9 +55,9 @@ for (const width of [1600, 900, 390]) {
     await expect(edited).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.goto(base + '/?e2e=1#/materials/pick');
-    await page.waitForURL('**#/pick');
+    await expect(page).toHaveURL(/#\/materials\/pick$/);
     await expect(page.locator('#materials-body')).toBeVisible();
-    await expect(page.locator('.sidebar [data-nav="pick"]')).toHaveClass(/active/);
+    await expect(page.locator('.sidebar [data-nav="materials/pick"]')).toHaveClass(/on/);
     await context.close();
   });
 }

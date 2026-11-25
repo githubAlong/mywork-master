@@ -5,6 +5,7 @@ import { load as loadTaskData, save as saveTaskData } from './localdb.js';
 import { reconcileTaskLinks } from './todo-item-sync.mjs';
 import './editable-choices.js';
 import { takeRetiredResetParam } from './startup-safety.mjs';
+import { ASSISTANT_ROOT, ASSISTANT_TABS } from './assistant-route.mjs';
 
 /* 静态托管没有打包器，首屏静态导入所有页面会迫使浏览器先下载完整模块图。
    只让当前路由阻塞首屏，其余页面启动后再预加载；路由切换也必须先等视图注册。 */
@@ -34,7 +35,9 @@ function loadPageModule(file) {
 function currentPageModule() {
   const seg = parseHash().path.split('/')[0];
   if (WORK_TABS.some((item) => item.id === seg)) return PAGE_MODULES.work;
-  if (['materials', 'textbook', 'pick', 'mystery', 'misconduct', 'bulletin'].includes(seg)) return PAGE_MODULES.work;
+  /* 小助手：新地址 #/materials/<tab> 和 6 个旧平级地址都先加载 work.js
+     （materials 视图注册在 work.js 里），否则旧地址重定向后视图还没注册。 */
+  if (seg === ASSISTANT_ROOT || ASSISTANT_TABS.includes(seg)) return PAGE_MODULES.work;
   if (seg === 'messages' || seg === 'profile') return PAGE_MODULES.me;
   if (seg === 'qr') return null;
   return PAGE_MODULES[seg] || PAGE_MODULES.home;

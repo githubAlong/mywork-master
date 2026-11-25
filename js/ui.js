@@ -1,6 +1,7 @@
 import { api, el, esc, toast, ls, sheet } from './core.js';
 import { setActiveAccount, load as loadLocalDB } from './localdb.js';
 import { DEFAULT_PLACE } from './weather-view.mjs';
+import { normalizeAssistantRoute } from './assistant-route.mjs';
 
 /* ---------------- 图标 ---------------- */
 const I = {
@@ -121,12 +122,18 @@ export const NAV = [
       { id: 'notes', label: '笔记', icon: 'edit' },
   { id: 'daily', label: '便签', icon: 'daily' },
   { id: 'study', label: '学习', icon: 'study' },
-  { id: 'selfstudy', label: '任务', icon: 'clock' },
-  { id: 'textbook', label: '教材', icon: 'book' },
-  { id: 'pick', label: '点名', icon: 'dice' },
-  { id: 'mystery', label: '盲盒', icon: 'gift' },
-  { id: 'misconduct', label: '违纪', icon: 'alert' },
-  { id: 'bulletin', label: '留言', icon: 'chat' },
+  /* 小助手：6 个学生端互动工具收进一个一级分组（2026-11-25）。
+     一级 id 沿用 materials —— work.js 里已有同名视图，6 个页面的分发现成，
+     所以这里只改导航与路由，不新建页面、不动任何业务代码。
+     default 是点一级标题 / 手机底部导航时进入的二级页；回收站保持一级导航。 */
+  { id: 'materials', label: '小助手', icon: 'star', default: 'selfstudy', sub: [
+    { id: 'selfstudy', label: '任务', icon: 'clock' },
+    { id: 'textbook', label: '教材', icon: 'book' },
+    { id: 'pick', label: '点名', icon: 'dice' },
+    { id: 'mystery', label: '盲盒', icon: 'gift' },
+    { id: 'misconduct', label: '违纪', icon: 'alert' },
+    { id: 'bulletin', label: '留言板', icon: 'chat' },
+  ] },
   { id: 'recycle', label: '回收站', icon: 'trash' },
   { id: 'me', label: '我的', icon: 'me' },
 ];
@@ -172,6 +179,9 @@ export function subCurrentOf(rootId, route) {
     return 'lessons';
   }
   if (rootId === 'daily') return tab || 'notes';
+  /* 小助手：#/materials 这种老课件页链接没有第二段，二级项仍默认落在「任务」，
+     保证一级高亮和展开状态不会因为收藏夹老链接而丢掉。 */
+  if (rootId === 'materials') return tab || 'selfstudy';
   return tab || null;
 }
 
@@ -295,7 +305,7 @@ function navHTML(n, cls) {
   const caret = isGroup ? `<span class="nav-caret">${icon(isOpen(n.id) ? 'down' : 'right', 13)}</span>` : '';
   const action = isGroup
     ? `data-nav-toggle="${n.id}" aria-expanded="${isOpen(n.id)}"`
-    : `data-nav="${n.id}"`;
+    : `data-nav="${cls === 'bn-item' && n.sub && n.default ? `${n.id}/${n.default}` : n.id}"`;
   return `<button class="${cls} ${active}" ${action}>
     ${cls === 'bn-item' ? icon(n.icon, 22) : `<span class="ni">${icon(n.icon, 20)}</span>`}
     <span class="nav-label">${n.label}</span>${caret}${badge}</button>`;
@@ -359,7 +369,6 @@ function isActive(id) {
   const r = state.route;
   if (id === 'home') return r === 'home' || r === '';
   if (WORK_TABS.some(item => item.id === id)) return r === id || r.startsWith(id + '/');
-  if (['selfstudy', 'textbook', 'pick', 'mystery'].includes(id)) return r === id || r.startsWith(id + '/');
   if (id === 'materials') return r === 'materials' || r.startsWith('materials/');
   if (id === 'daily') return r.startsWith('daily');
   if (id === 'study') return r.startsWith('study');
@@ -383,9 +392,9 @@ function bindShell() {
          容易误以为一级导航失效。 */
       if (!e.target.closest('.nav-caret')) {
         setNavGroupOpen(key, true);
-        /* 分组标题的默认页：工作 → 上课；考勤 → 花名册（旧考勤首页已下线）。
-           不写这条的话，点「考勤」会落到已不存在的年级总览，二级项也不会高亮。 */
-        const groupDefault = { work: 'work/lessons', attendance: 'attendance/roster' };
+        /* 分组标题的默认页：工作 → 上课；考勤 → 花名册（旧考勤首页已下线）；
+           小助手 → 任务。不写这条的话点一级标题会落到老课件总览，二级项也不高亮。 */
+        const groupDefault = { work: 'work/lessons', attendance: 'attendance/roster', materials: 'materials/selfstudy' };
         go(groupDefault[key] || key);
         return;
       }
@@ -453,16 +462,12 @@ export async function render() {
   if (previousRoute !== path) navGroupOverrides.clear();
   let [seg, tab, third] = path.split('/');
 
-  if (seg === 'materials' && ['selfstudy', 'textbook', 'pick', 'mystery', 'misconduct', 'bulletin'].includes(tab)) {
-    path = path.split('/').slice(1).join('/'); location.replace('#/' + path); return render();
-  }
-  if (seg === 'work' && tab === 'materials') {
-    path = third ? path.split('/').slice(2).join('/') : 'materials';
-    location.replace('#/' + path); return render();
-  }
-  if (seg === 'work' && ['selfstudy', 'textbook', 'pick', 'mystery', 'misconduct', 'bulletin'].includes(tab)) {
-    path = path.split('/').slice(1).join('/'); location.replace('#/' + path); return render();
-  }
+  /* 小助手统一路由：#/materials/<tab>。
+     旧的平级地址（#/textbook、#/selfstudy 等）和 work/materials/... 老链接
+     全部收敛过来，否则地址栏、侧栏高亮、手机端二级横条会各说各话。
+     #/materials 本身仍指向老课件总览页，收藏夹里的旧链接不失效。 */
+  const normalized = normalizeAssistantRoute(path);
+  if (normalized !== path) { location.replace('#/' + normalized); return render(); }
   // Keep bookmarks and in-app links working after promoting work modules.
   if (seg === 'work') {
     path = (tab || 'lessons') + (third ? '/' + third : '');
@@ -491,8 +496,11 @@ export async function render() {
     const hit = navNode(seg);
     if (hit) {
       const root = SUB_OF[seg];
-      path = root ? `${root}/${seg}` : seg;
-      location.replace('#/' + path); return render();
+      const next = root ? `${root}/${seg}` : seg;
+      /* next 与当前地址相同时不能原地 replace 再 render —— 视图没注册时
+         会变成自己调自己的无限递归。交给 hashchange / 首屏模块加载接手。 */
+      if (next === path) return;
+      location.replace('#/' + next); return render();
     }
     viewName = 'home';
     if (!render.__fallbackHinted) {

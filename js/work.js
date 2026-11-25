@@ -179,7 +179,7 @@ registerView(async function work(main, { tab, third }) {
 registerView(async function materials(main, { tab }) {
   const t = tab || '';
   const meta = {
-    selfstudy: ['自习', '学生端「自习」：开一场签到，学生点「我到了」，这里实时看人数'],
+    selfstudy: ['自习管理', '发布当节自习课的学习安排，学生端同步可见'],
     textbook: ['教材', '学生端「教材」：你勾了「学生可见」的资料，就是学生看到的全部'],
     pick: ['点名', '学生端「点名」：按号码或按名单，点过的不重复'],
     mystery: ['盲盒', '学生端「盲盒」：点一下随机弹一个任务，这一轮不重复'],
@@ -195,7 +195,10 @@ registerView(async function materials(main, { tab }) {
   if (!t) return renderMaterials(body);
   if (t === 'selfstudy') {
     const m = await import('./selfstudy.js');
-    return m.renderSelfstudyBody(body, { studentTab: 'checkin' });
+    /* 「任务」二级页必须和原来的 #/selfstudy 独立页完全一样：
+       学生入口 + 教师自习任务管理（manage）。这里不能传 studentTab，
+       否则会切成学生签到面板，等于把原页面换掉了。 */
+    return m.renderSelfstudyBody(body);
   }
   if (t === 'textbook') return renderStudentModule(body, 'textbook');
   if (t === 'pick') return renderStudentModule(body, 'pick');

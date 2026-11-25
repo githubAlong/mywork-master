@@ -144,7 +144,7 @@ test('个人中心采用六张设置卡片并保留独立资料编辑与布局�
   assert.match(me, /id="me-wide-toggle"/);
   assert.match(me, /id="me-reset-layout"/);
   assert.match(me, /id="me-logout"/);
-  assert.match(ui, /id: 'bulletin', label: '留言'/);
+  assert.match(ui, /id: 'bulletin', label: '留言板'/);
   assert.match(me, /function renderProfile\(main, \{ inline = false \} = \{\}\)/);
   assert.match(me, /id="p-avatar-upload"/);
   assert.match(me, /id="p-avatar-remove"/);
