@@ -160,9 +160,35 @@ test('批量导入 + 刷新汇总 + 迁移幂等', async () => {
   assert.equal(second.migrated.roster, 0, '同一条旧记录不能重复迁入');
 });
 
+test('年级管理动态化：新建年级能落库，改名同步 5 张考勤表', async () => {
+  const g = '测试年级A';
+  const g2 = '测试年级B';
+  await call('POST', '/grades', {}, { name: g });
+  const created = await call('POST', '/att-hub/roster', {}, {
+    name: '年级联动测试', grade: g, status: '在职',
+  });
+  assert.equal(created.item.grade, g, '动态年级不能被回落成「高一」');
+
+  const renamed = await call('PATCH', `/grades/${encodeURIComponent(g)}`, {}, { name: g2 });
+  assert.ok(renamed.migrated.hub >= 1, '改名要同步新考勤表');
+  const list = await call('GET', '/att-hub/roster', { q: '年级联动测试' });
+  assert.equal(list.list[0].grade, g2);
+
+  assert.deepEqual(D.gradeOptions({ grades: [g2, '  ', g2] }), [g2]);
+  assert.deepEqual(D.gradeOptions({ grades: [] }), ['高一', '高二', '高三']);
+  assert.deepEqual(D.gradeOptions(null), ['高一', '高二', '高三']);
+  assert.equal(D.normalizeRow('roster', { grade: g2 }).grade, g2);
+  assert.equal(D.normalizeRow('roster', { status: '乱填的' }).status, '在职', '其它下拉仍收敛');
+  assert.equal(D.gradeKey('高一年级'), '高一');
+  assert.equal(D.filterRows('roster', [{ id: 1, grade: '高一' }], { grade: '高一年级' }).length, 1,
+    '动态年级名要能筛到 v411 迁移时的简写');
+  assert.equal(D.calcStats({ roster: [{ name: '甲', grade: '高一' }] }, '', '高一年级').length, 1);
+});
+
 test('接线：侧栏 5 个二级导航 / 路由分派 / CSS / SW 资源清单', async () => {
-  const [ui, work, sw, appHtml, localdb] = await Promise.all([
+  const [ui, work, sw, appHtml, localdb, hub, attgrade] = await Promise.all([
     read('js/ui.js'), read('js/work.js'), read('sw.js'), read('app.html'), read('js/localdb.js'),
+    read('js/attendance-hub.js'), read('js/attgrade.js'),
   ]);
   const navBlock = /\{ id: 'attendance'[\s\S]*?\]\s*\}\s*,/.exec(ui)?.[0] || '';
   for (const key of ['roster', 'duty', 'class', 'leave', 'stats']) {
@@ -170,8 +196,14 @@ test('接线：侧栏 5 个二级导航 / 路由分派 / CSS / SW 资源清单',
   }
   assert.match(work, /renderAttendanceHub/);
   assert.match(work, /attendance-hub\.js/);
+  assert.doesNotMatch(work, /renderAttendance\(body\)/, '旧考勤首页入口应已下线');
+  assert.match(ui, /attendance: 'attendance\/roster'/, '点「考勤」应直达花名册');
+  assert.match(hub, /id="ahub-grade-manage"/);
+  assert.match(hub, /id="ahub-grade-add"/);
+  assert.match(hub, /gradeOptions/);
+  assert.match(attgrade, /花名册的年级筛选/);
   assert.match(appHtml, /attendance-hub\.css/);
-  assert.match(sw, /const CACHE = 'wb-v411-attendance-hub'/);
+  assert.match(sw, /const CACHE = 'wb-v412-attendance-grade'/);
   for (const f of ['./js/attendance-hub.js', './js/attendance-hub-domain.mjs', './css/attendance-hub.css']) {
     assert.ok(sw.includes(`'${f}'`), `SW 缺资源 ${f}`);
   }

@@ -9,6 +9,16 @@
 
 const SELECT = (list) => ({ type: 'select', options: list });
 
+/* 年级不再写死在前端：花名册顶部接入「年级管理 / 新建年级」后，
+   年级下拉和新增表单都要读 /grades 的真实年级列表。
+   老库或一个年级都没建过的时候给三项兜底，别把筛选能力弄丢。 */
+export const FALLBACK_GRADES = ['高一', '高二', '高三'];
+export function gradeOptions(data) {
+  const raw = Array.isArray(data?.grades) ? data.grades : [];
+  const list = [...new Set(raw.map((g) => String(g ?? '').trim()).filter(Boolean))];
+  return list.length ? list : FALLBACK_GRADES.slice();
+}
+
 export const HUB_SHEETS = {
   roster: {
     key: 'roster', label: '花名册', table: 'att_hub_roster',
@@ -137,7 +147,11 @@ export function normalizeRow(key, input = {}) {
     if (v === undefined || v === null) v = '';
     if (typeof v === 'string') v = v.trim();
     if (c.type === 'number') v = Number(v) || 0;
-    if (c.type === 'select' && c.options && v && !c.options.includes(v)) v = c.options[0];
+    /* 年级由「年级管理」动态维护，不能按写死的三个选项回落：
+       否则新建一个年级后，存进去的记录会被悄悄改回「高一」。
+       其余下拉仍按固定选项收敛，脏值不落库。 */
+    if (c.key === 'grade' && typeof v === 'string') v = v.slice(0, 12);
+    if (c.type === 'select' && c.options && v && c.key !== 'grade' && !c.options.includes(v)) v = c.options[0];
     out[c.key] = v;
   }
   return out;
@@ -153,11 +167,18 @@ export function validateRow(key, row) {
   return '';
 }
 
+/* 年级名历史上两种写法并存：/grades 里常写「高一年级」，v411 迁移过的行
+   被写死的下拉选项回落成了「高一」。筛选按去掉「年级」后缀后的名字比，
+   动态年级列表和已迁移的数据才对得上。 */
+export function gradeKey(v) {
+  return String(v ?? '').trim().replace(/年级$/, '');
+}
+
 /* 统一筛选：年级 / 日期区间 / 关键词；年级和日期都只是筛选，不是存储边界 */
 export function filterRows(key, rows, f = {}) {
   const def = sheetDef(key);
   if (!def) return [];
-  const grade = String(f.grade || '').trim();
+  const grade = gradeKey(f.grade);
   const from = String(f.from || '').trim();
   const to = String(f.to || '').trim();
   const q = String(f.q || '').trim().toLowerCase();
@@ -165,7 +186,7 @@ export function filterRows(key, rows, f = {}) {
   const dateKeyOf = (r) => String(r.date || r.start_at || r.period || '').slice(0, 10);
   return (Array.isArray(rows) ? rows : []).filter((r) => {
     if (r.deleted_at) return false;
-    if (grade && String(r.grade || '') !== grade) return false;
+    if (grade && gradeKey(r.grade) !== grade) return false;
     if (subject && String(r.subject || '') !== subject) return false;
     const d = dateKeyOf(r);
     if (from && d && d < from) return false;
@@ -250,7 +271,7 @@ export function fromCsv(key, text) {
    从 4 张业务表按 (周期, 年级) 聚合；手工修正过的行由调用方保留，不覆盖。 */
 export function calcStats({ roster = [], duty = [], klass = [], leave = [] }, period = '', grade = '全部') {
   const inPeriod = (r) => !period || String(r.date || r.start_at || '').slice(0, 7) === String(period).slice(0, 7);
-  const inGrade = (r) => grade === '全部' || !grade || String(r.grade || '') === grade;
+  const inGrade = (r) => grade === '全部' || !grade || gradeKey(r.grade) === gradeKey(grade);
   const pick = (list) => list.filter((r) => !r.deleted_at && inPeriod(r) && inGrade(r));
   const teachers = pick(roster);
   const duties = pick(duty);

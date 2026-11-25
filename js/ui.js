@@ -383,7 +383,10 @@ function bindShell() {
          容易误以为一级导航失效。 */
       if (!e.target.closest('.nav-caret')) {
         setNavGroupOpen(key, true);
-        go(key === 'work' ? 'work/lessons' : key);
+        /* 分组标题的默认页：工作 → 上课；考勤 → 花名册（旧考勤首页已下线）。
+           不写这条的话，点「考勤」会落到已不存在的年级总览，二级项也不会高亮。 */
+        const groupDefault = { work: 'work/lessons', attendance: 'attendance/roster' };
+        go(groupDefault[key] || key);
         return;
       }
 

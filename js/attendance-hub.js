@@ -7,11 +7,11 @@
    ========================================================================== */
 import { api, esc, toast, confirmDialog, saveBlob } from './core.js';
 import {
-  HUB_SHEETS, sheetDef, blankRow, toCsv, fromCsv, validateRow,
+  HUB_SHEETS, sheetDef, blankRow, toCsv, fromCsv, validateRow, gradeOptions,
 } from './attendance-hub-domain.mjs';
 
 const PAGE_SIZE = 20;
-const GRADES = ['高一', '高二', '高三'];
+/* 年级列表从 /grades 动态读取（见 loadGrades），这里不再写死。 */
 
 const optionHTML = (list, cur) => list.map((v) =>
   `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(v)}</option>`).join('');
@@ -28,8 +28,12 @@ function fieldHTML(col, value) {
   const v = value == null ? '' : String(value);
   const id = `ahub-f-${col.key}`;
   if (col.type === 'select') {
+    /* 编辑历史记录时，旧年级可能已经从年级列表里删掉了；
+       把当前值补进选项，避免打开编辑框就静默丢掉一个字段。 */
+    const opts = col.options || [];
+    const merged = v && !opts.includes(v) ? [v, ...opts] : opts;
     return `<label class="ahub-field"><span>${esc(col.label)}${col.required ? ' <i>*</i>' : ''}</span>
-      <select name="${esc(col.key)}" id="${esc(id)}"><option value="">全部 / 未填</option>${optionHTML(col.options || [], v)}</select></label>`;
+      <select name="${esc(col.key)}" id="${esc(id)}"><option value="">全部 / 未填</option>${optionHTML(merged, v)}</select></label>`;
   }
   const type = col.type === 'date' ? 'date' : col.type === 'time' ? 'time' : col.type === 'number' ? 'number' : 'text';
   return `<label class="ahub-field"><span>${esc(col.label)}${col.required ? ' <i>*</i>' : ''}</span>
@@ -60,17 +64,22 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     key, def,
     filters: { grade: '', subject: '', from: '', to: '', q: '' },
     page: 1, list: [], total: 0, busy: false,
+    grades: gradeOptions(null),
   };
 
   root.innerHTML = `
     <div class="ahub">
-      <header class="ahub-head">
+      <header class="ahub-head${key === 'roster' ? ' ahub-head-roster' : ''}">
         <div>
           <div class="ahub-crumb">考勤 <span>/</span> ${esc(def.label)}</div>
           <h1>${esc(def.title)}</h1>
           <p>${esc(def.desc)}</p>
         </div>
         <div class="ahub-head-right">
+          ${key === 'roster' ? `<div class="ahub-grade-actions">
+            <button type="button" class="ahub-btn" id="ahub-grade-manage">年级管理</button>
+            <button type="button" class="ahub-btn primary" id="ahub-grade-add">＋ 新建年级</button>
+          </div>` : ''}
           <span class="ahub-tag">独立表 · ${esc(HUB_SHEETS[key].table)}</span>
           <span class="ahub-count" id="ahub-count">—</span>
         </div>
@@ -78,7 +87,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
 
       <section class="ahub-card ahub-filters">
         <label class="ahub-field"><span>年级</span>
-          <select id="ahub-grade"><option value="">全部年级</option>${optionHTML(GRADES, '')}</select></label>
+          <select id="ahub-grade"><option value="">全部年级</option>${optionHTML(S.grades, '')}</select></label>
         ${def.filters.includes('subject') ? `<label class="ahub-field"><span>学科</span>
           <input id="ahub-subject" placeholder="如 语文" autocomplete="off"></label>` : ''}
         ${def.filters.includes('from') ? `<label class="ahub-field"><span>起始日期</span><input type="date" id="ahub-from"></label>
@@ -114,6 +123,25 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     </div>`;
 
   const $ = (sel) => root.querySelector(sel);
+
+  /* ---------------- 年级管理 ----------------
+     旧「考勤管理首页」下线后，「年级管理 / 新建年级」搬到花名册标题行。
+     年级列表来自 /grades，一个年级都没建过时给三项兜底。 */
+  async function loadGrades() {
+    const data = await api.get('/grades').catch(() => null);
+    S.grades = gradeOptions(data);
+    const sel = $('#ahub-grade');
+    if (!sel) return;
+    const cur = sel.value || '';
+    /* 正在筛的年级如果被删掉了，暂时保留这一项，不让筛选条件突然跳回「全部」 */
+    const list = cur && !S.grades.includes(cur) ? [cur, ...S.grades] : S.grades;
+    sel.innerHTML = `<option value="">全部年级</option>${optionHTML(list, cur)}`;
+  }
+
+  async function refreshAfterGradeChange() {
+    await loadGrades();
+    await load({ silent: true });
+  }
 
   /* ---------------- 数据加载 ---------------- */
   async function load({ silent = false } = {}) {
@@ -173,8 +201,11 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   function openForm(row = null) {
     const editing = !!row;
     const values = { ...blankRow(key), ...(row || {}) };
+    if (!row && values.grade && !S.grades.includes(values.grade)) values.grade = S.grades[0] || '';
+    /* 年级下拉用动态列表，其余列保持字段契约里的固定选项 */
+    const cols = S.def.columns.map((c) => (c.key === 'grade' ? { ...c, options: S.grades } : c));
     const body = `<form id="ahub-form" class="ahub-form">
-      ${S.def.columns.map((c) => fieldHTML(c, values[c.key])).join('')}
+      ${cols.map((c) => fieldHTML(c, values[c.key])).join('')}
       <div class="ahub-form-err" id="ahub-form-err"></div>
       <div class="ahub-form-actions">
         <button type="button" class="ahub-btn ghost" data-close>取消</button>
@@ -278,6 +309,16 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     ['#ahub-grade', '#ahub-subject', '#ahub-from', '#ahub-to', '#ahub-q'].forEach((s) => { const e = $(s); if (e) e.value = ''; });
     S.page = 1; load({ silent: true });
   };
+  if ($('#ahub-grade-add')) {
+    $('#ahub-grade-add').onclick = async () => {
+      const m = await import('./attgrade.js');
+      m.addGradeDialog(() => refreshAfterGradeChange());
+    };
+    $('#ahub-grade-manage').onclick = async () => {
+      const m = await import('./attgrade.js');
+      await m.gradeManageDialog(() => refreshAfterGradeChange(), () => refreshAfterGradeChange());
+    };
+  }
   $('#ahub-add').onclick = () => openForm();
   $('#ahub-import').onclick = openImport;
   $('#ahub-export').onclick = exportCsv;
@@ -299,5 +340,6 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     } catch (e) { toast('汇总失败：' + (e.message || e), 'warn'); }
   };
 
+  await loadGrades();
   await load();
 }

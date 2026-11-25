@@ -35,6 +35,10 @@
   border-radius: 6px; padding: 6px 10px; white-space: nowrap;
 }
 .ahub-count { font-size: 12px; color: var(--ahub-sub); white-space: nowrap; }
+/* 花名册标题行右侧：原「考勤管理首页」的年级管理 / 新建年级 */
+.ahub-head-roster .ahub-head-right { flex: 1 1 auto; justify-content: flex-end; }
+.ahub-grade-actions { display: flex; align-items: center; gap: 8px; order: -1; flex-wrap: wrap; }
+.ahub-grade-actions .ahub-btn { display: inline-flex; align-items: center; }
 
 .ahub-card {
   background: var(--ahub-card); border: 1px solid var(--ahub-line);

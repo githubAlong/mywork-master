@@ -39,7 +39,7 @@ import {
 import { cleanPeriodTime, normalizeTimetablePeriods, completeTimetablePeriods } from './timetable-periods.mjs';
 import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.mjs';
 import {
-  HUB_SHEETS, HUB_SHEET_KEYS, sheetDef, isHubSheet,
+  HUB_SHEETS, HUB_SHEET_KEYS, HUB_TABLES, sheetDef, isHubSheet,
   normalizeRow, validateRow, filterRows, calcStats, migrationKey,
 } from './attendance-hub-domain.mjs';
 
@@ -3340,13 +3340,23 @@ on('PATCH', '/grades/:name', async ({ params, body }) => {
       tables++;
     }
   }
+  /* 新考勤 5 张独立表里年级只是普通字段：改名要一起同步，
+     否则「年级管理」改完名字，花名册的筛选下拉和已存记录就对不上了。 */
+  let hubRows = 0;
+  if (name !== old) {
+    for (const t of HUB_TABLES) {
+      for (const r of rowsOf(t)) {
+        if (r.grade === old) { r.grade = name; r.updated_at = nowISO(); hubRows++; }
+      }
+    }
+  }
   if (name !== old) {
     u.settings.grades = [...new Set(extra.map((g) => (g === old ? name : g)).concat(extra.includes(old) ? [] : [name]))];
     if (DEFAULT_GRADES.includes(old) && !off.includes(old)) off.push(old);
   }
   saveUser(u);
   save();
-  return { ok: true, migrated: { teachers, tables: tables + cloudTables } };
+  return { ok: true, migrated: { teachers, tables: tables + cloudTables, hub: hubRows } };
 });
 /* 年级删除（PRD FR-GRADE-3）：花名册软删；考勤表软删（回收站可找回）；
    行跟着表一起软删。删除后在年级列表里消失。 */

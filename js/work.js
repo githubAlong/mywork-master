@@ -1,8 +1,8 @@
 import { api, el, esc, clsName, clsShort, clsPair, clsStore, makeClsLabeler, normClass, normGrade, inferGrade, startPoll, toast, sheet, saving, confirmDialog, promptDialog, ymd, pad2, WD_SHORT, fmtDateTime, fmtTime, parseDT, exportUrl, download, doExport, STATIC, studentUrl, shortPath, classPickerAuto } from './core.js';
 import { printStatement } from './pdfprint.js';
 import { registerView, state, icon, go, pageHead, onViewLeave } from './ui.js';
-import { renderAttendance } from './attendance.js';
-/* attendance-prd.js（2000+ 行，还带着名单导入/OCR 链）改成按需加载：
+/* 旧「考勤管理首页 / 年级总览」已下线，attendance.js 不再静态引入。
+   attendance-prd.js（2000+ 行，还带着名单导入/OCR 链）仍然是按需加载：
    静态引入会让「工作」页的启动依赖整条考勤链，链上任何一个文件在客户端
    缓存里缺失或 404，整个页面就打不开。现在只有真的进高一/高二考勤工作台才拉它。 */
 
@@ -144,21 +144,17 @@ registerView(async function work(main, { tab, third }) {
   }
   if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
-    /* 考勤管理两级入口：
-       没有年级参数时恢复原有年级总览；选择年级后进入当前考勤工作台。
-       中文年级名需要解码，URL 形如 #/work/attendance/高一。 */
+    /* 考勤只保留 5 个二级页面：花名册 / 坐班表 / 上课表 / 请假表 / 统计表。
+       旧「考勤管理首页（年级总览 + 年级考勤工作区）」已下线：侧栏点「考勤」、
+       底部导航、旧收藏链接 #/attendance 都直接落到花名册。
+       中文年级名仍按旧工作台渲染，让已有的年级工作台链接不白屏。 */
     const grade = third ? decodeURIComponent(third) : '';
-    /* 【考勤二级导航】#/attendance/roster|duty|class|leave|stats
-       5 个独立页面 + 5 张独立数据表；年级 / 日期在这里只是筛选条件。
-       二级 key 用英文，中文年级名（高一/高二/高三）不会撞上，旧收藏链接继续可用。 */
-    if (['roster', 'duty', 'class', 'leave', 'stats'].includes(grade)) {
+    /* 二级 key 用英文，中文年级名（高一/高二/高三）不会撞上。
+       年级 / 日期在二级页里只是筛选条件，不再是数据隔离边界。 */
+    if (!grade || ['roster', 'duty', 'class', 'leave', 'stats'].includes(grade)) {
       headEl.remove();
       const { renderAttendanceHub } = await import('./attendance-hub.js');
-      return renderAttendanceHub(body, { sheet: grade });
-    }
-    if (!grade) {
-      headEl.remove();
-      return renderAttendance(body);
+      return renderAttendanceHub(body, { sheet: grade || 'roster' });
     }
     /* 工作台自己渲染标题、说明与实时状态，外层页头必须移除，否则同一标题会出现两次 */
     headEl.remove();

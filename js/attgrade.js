@@ -20,7 +20,7 @@ export function addGradeDialog(reload) {
   const body = el(`<div class="sheet-body">
     <div class="field"><label class="field-label">年级名称</label>
       <input class="input" id="gname" placeholder="如：高三">
-      <div class="field-hint">创建后会在考勤管理首页显示；新年级的花名册和考勤表均为空，需要单独录入。</div></div>
+      <div class="field-hint">创建后会出现在花名册的年级筛选和新增教师表单里；新年级下还没有教师，可直接新增或批量导入。</div></div>
     <div class="confirm-actions"><button class="btn ghost" id="c">取消</button><button class="btn primary" id="k">添加</button></div>
   </div>`);
   const s = sheet({ title: '新建年级', body });
@@ -51,7 +51,7 @@ export async function gradeManageDialog(reload, onChanged) {
       </div>`).join('')}
     </div>
     <div class="att-tip-note" style="margin-top:12px">
-      每个年级的花名册、三张考勤表、统计表都是独立的。改名会把该年级的名册和考勤表一起改过去；删除会连带删掉这些数据（进回收站，可从回收站找回）。
+      年级用于给花名册和考勤记录归类。改名会同步更新 5 张考勤表里已有的记录；删除只把年级从列表移除，已录入的记录会保留，仍可在「全部年级」下查看。
     </div>
     <div class="confirm-actions">
       <button class="btn ghost" id="gm-add">＋ 新建年级</button>
