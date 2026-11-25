@@ -4,16 +4,21 @@ import { readFile } from 'node:fs/promises';
 
 const src = (await readFile(new URL('../student.html', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
-test('学生端页签与文案改成「任务」，不再出现自习字样', () => {
+test('学生端 6 个页签与课堂大屏首页（wb-v415 设计稿）', () => {
   /* v2 设计稿占位稿不含旧页签实现，正式实现后恢复 */
   if (src.includes('学生端 · 今日任务')) return;
-  assert.match(src, /selfstudy: \{ icon: ICON\.clock, label: '任务' \}/);
+  assert.match(src, /selfstudy: \{ icon: SD_ICON\.task, label: '任务' \}/);
+  for (const label of ['教材', '点名', '盲盒', '违纪', '留言板']) {
+    assert.match(src, new RegExp(`label: '${label}'`), `侧栏要有「${label}」`);
+  }
   assert.doesNotMatch(src, /label: '自习'/);
-  assert.equal(src.match(/今日自习任务/g)?.length || 0, 0, '卡片标题和两处兜底都要换成今日任务');
-  /* 弹层（openTaskModal）已按要求移除，原「任务卡 + 空态 + 弹层」3 处变 2 处 */
-  assert.equal(src.match(/今日任务/g)?.length || 0, 2, '空态标题 + 任务卡（弹层已移除）');
-  assert.doesNotMatch(src, /本时段暂无自习任务/);
-  assert.match(src, /<b>暂无任务<\/b>/);
+  assert.equal(src.match(/今日自习任务/g)?.length || 0, 0, '不再出现「今日自习任务」字样');
+  assert.match(src, /欢迎来到本班课堂/, '每页顶部欢迎头');
+  assert.match(src, /class="sd-stats"/, '任务页 4 张统计卡');
+  assert.match(src, /class="sd-shortcuts"/, '任务页快捷入口');
+  assert.match(src, /class="sd-recent"/, '任务页最近任务');
+  assert.match(src, /sdPaintWelcome\(\)/, '欢迎头由 paintShell 渲染');
+  assert.match(src, /showTaskDetail/, '点「查看任务」展开完整任务卡');
 });
 
 test('任务页是固定展示框：字号由教师后台下发，查看/保存按钮已移除', () => {

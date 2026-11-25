@@ -165,6 +165,8 @@
 <link rel="stylesheet" href="css/student-workbench.css">
 <!-- 紫色外观覆盖层：必须排在 student-workbench.css 之后（同优先级后加载者胜） -->
 <link rel="stylesheet" href="css/student-purple.css">
+<!-- 课堂大屏设计稿（6 页）：必须排在 student-purple.css 之后 -->
+<link rel="stylesheet" href="css/student-dashboard.css">
 <style>
   /* 【新版本提示条】只有真的换了版本才出现，点一下就地刷新到新版。
      发布靠递增 sw.js 里的 CACHE 版本号触发：SW 装好后广播 WB_SW_UPDATED，
@@ -194,7 +196,7 @@
      桌面 ≥1024px 它就是左侧栏顶部的品牌头。 -->
 <header class="stu-headwrap">
   <div class="stu-top">
-    <div class="stu-logo" aria-hidden="true">学</div>
+    <div class="stu-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.4C9.8 4.9 7 4.4 4 4.9v13.2c3-.5 5.8 0 8 1.5 2.2-1.5 5-2 8-1.5V4.9c-3-.5-5.8 0-8 1.5z"/><path d="M12 6.4v13.2"/></svg></div>
     <h1 class="stu-title">课堂小助手</h1>
   </div>
 </header>
@@ -360,54 +362,159 @@ async function init() {
   tab = availTabs.includes(wanted) ? wanted : (landing || availTabs[0] || null);
   paint();
 }
-const TAB_DEF = {
-  selfstudy: { icon: ICON.clock, label: '任务' },
-  checkin: { icon: ICON.check, label: '签到', dot: true },
-  material: { icon: ICON.mat, label: '教材' },
-  roll: { icon: ICON.dice, label: '点名' },
-  punish: { icon: ICON.target, label: '盲盒' },
-  misconduct: { icon: ICON.alert, label: '违纪' },
-  bulletin: { icon: ICON.chat, label: '留言板' },
+/* 课堂大屏设计稿：侧栏 6 项线性图标（与教师端小助手图标语言一致） */
+const SD_ICON = {
+  task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4V2.8h6V4M9 10h6M9 14h6"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.4C9.8 4.9 7 4.4 4 4.9v13.2c3-.5 5.8 0 8 1.5 2.2-1.5 5-2 8-1.5V4.9c-3-.5-5.8 0-8 1.5z"/><path d="M12 6.4v13.2"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M9 15l2 2 4-4"/></svg>',
+  gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="12" rx="2"/><path d="M3 13h18M12 9v12M12 9S9 3.5 6.8 5.4C5 6.9 7.3 9 12 9zm0 0s3-5.5 5.2-3.6C19 6.9 16.7 9 12 9z"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17h.01"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8 8 0 0 1-8 8 8.6 8.6 0 0 1-3.1-.6L4 21l1.4-4.4A8 8 0 1 1 20.5 12z"/><circle cx="9" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="12.5" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r=".9" fill="currentColor" stroke="none"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15m-6-6 6 6-6 6"/></svg>',
+  people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19M16 5.5a3 3 0 0 1 0 5.8M17.5 13.4A4.4 4.4 0 0 1 20.5 17.5V19"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.8h7l5 5v13.4H6z"/><path d="M13 2.8v5h5M9 12h6M9 16h4"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.5 4.5"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 0 0-12 0c0 6.5-2.5 7.5-2.5 9h17c0-1.5-2.5-2.5-2.5-9z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>',
+  monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 20.5h6M12 17v3.5"/></svg>',
+  board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13.5" rx="2"/><path d="M8 21h8M12 17.5V21M7.5 11l3-3 3 3 3.5-4"/></svg>',
+  done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="m8 12 3 3 5-6"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.4 6.2M20 5.5V11h-5.5"/></svg>',
 };
-/* 页头「头像 + 问候」：姓名只有学生自己签到过才在本地存着（recall），
-   没签到过就退成「同学」，不编造名字。班级同理，优先取本机偏好 / 当前任务。 */
+const TAB_DEF = {
+  selfstudy: { icon: SD_ICON.task, label: '任务' },
+  checkin: { icon: SD_ICON.check, label: '签到', dot: true },
+  material: { icon: SD_ICON.book, label: '教材' },
+  roll: { icon: SD_ICON.check, label: '点名' },
+  punish: { icon: SD_ICON.gift, label: '盲盒' },
+  misconduct: { icon: SD_ICON.alert, label: '违纪' },
+  bulletin: { icon: SD_ICON.chat, label: '留言板' },
+};
+let showTaskDetail = false;
+/* 欢迎头：每页一个紫色方块图标，日期按本机当天生成，不写死设计稿里的示例日期。 */
+const SD_WELCOME_ICON = {
+  selfstudy: SD_ICON.monitor,
+  material: SD_ICON.board,
+  roll: SD_ICON.check,
+  punish: SD_ICON.board,
+  misconduct: SD_ICON.board,
+  bulletin: SD_ICON.board,
+  checkin: SD_ICON.check,
+};
+function sdDateText() {
+  const d = new Date();
+  const week = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][d.getDay()];
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${week}`;
+}
+function sdToast(msg) {
+  let el = document.getElementById('sd-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sd-toast';
+    el.style.cssText = 'position:fixed;z-index:99;left:50%;top:18px;transform:translateX(-50%);padding:10px 18px;border-radius:12px;background:#2f2a45;color:#fff;font:600 13px/1.4 inherit;box-shadow:0 10px 30px rgba(40,26,90,.3)';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.remove(), 2200);
+}
+function goTab(id) {
+  if (!availTabs.includes(id)) return sdToast('老师还没开放这个功能');
+  tab = id; cur = null; showTaskDetail = false; paint();
+}
+/* 搜索：跨任务 / 教材 / 留言做一次本地匹配，点结果直接跳到对应模块。 */
+function sdSearchItems(q) {
+  const kw = q.toLowerCase();
+  if (!kw) return [];
+  const out = [];
+  (data?.selfstudyTasks || []).forEach((t) => {
+    if (String(t.title || '').toLowerCase().includes(kw) || String(t.content || '').toLowerCase().includes(kw))
+      out.push({ kind: '任务', label: t.title || '今日任务', tab: 'selfstudy' });
+  });
+  (data?.materials || []).forEach((m) => {
+    if (String(m.title || '').toLowerCase().includes(kw))
+      out.push({ kind: '教材', label: m.title, tab: 'material', mat: m.id });
+  });
+  (data?.bulletin || []).forEach((b) => {
+    if (String(b.reply || '').toLowerCase().includes(kw))
+      out.push({ kind: '留言', label: String(b.reply).slice(0, 24), tab: 'bulletin' });
+  });
+  return out.slice(0, 8);
+}
+function sdPaintWelcome() {
+  const topbar = document.querySelector('.stu-topbar');
+  if (!topbar) return;
+  const withTools = tab === 'selfstudy';
+  topbar.innerHTML = `<div class="sd-welcome">
+    <div class="sd-wico">${SD_WELCOME_ICON[tab] || SD_ICON.monitor}</div>
+    <div class="sd-wtxt"><h1>欢迎来到本班课堂</h1><p>${sdDateText()} · 班级课堂大屏</p></div>
+    ${withTools ? `<div class="sd-wtools">
+      <div class="sd-search">${SD_ICON.search}<input id="sd-search-input" type="text" autocomplete="off" placeholder="搜索任务、教材或留言..." aria-label="搜索任务、教材或留言"><div id="sd-search-pop"></div></div>
+      <div class="sd-bell-wrap"><button type="button" class="sd-bell" id="sd-bell" aria-label="通知">${SD_ICON.bell}</button><div id="sd-bell-pop"></div></div>
+    </div>` : ''}
+  </div>`;
+  if (!withTools) return;
+  const input = document.getElementById('sd-search-input');
+  const pop = document.getElementById('sd-search-pop');
+  const closePop = () => { pop.innerHTML = ''; };
+  input.oninput = () => {
+    const text = input.value.trim();
+    const items = sdSearchItems(text);
+    if (!text) return closePop();
+    pop.className = 'sd-pop search-pop';
+    pop.innerHTML = items.length
+      ? items.map((x, i) => `<button type="button" data-i="${i}">${esc(x.label)}<span class="sd-pop-kind">${x.kind}</span></button>`).join('')
+      : '<div class="sd-pop-empty">没有找到相关内容</div>';
+    pop.querySelectorAll('[data-i]').forEach((b) => {
+      b.onclick = () => {
+        const it = items[Number(b.dataset.i)];
+        closePop(); input.value = '';
+        if (it.tab === 'material' && it.mat !== undefined) { cur = it.mat; goTab('material'); return; }
+        if (it.tab === 'selfstudy') { goTab('selfstudy'); showTaskDetail = true; paint(); return; }
+        goTab(it.tab);
+      };
+    });
+  };
+  input.onblur = () => setTimeout(closePop, 180);
+  const bell = document.getElementById('sd-bell');
+  const bpop = document.getElementById('sd-bell-pop');
+  bell.onclick = () => {
+    if (bpop.innerHTML) { bpop.innerHTML = ''; return; }
+    const notes = [];
+    if (data?.roll?.length) notes.push('老师发起了课堂签到，到「点名」即可签到');
+    (data?.selfstudyTasks || []).slice(0, 2).forEach((t) => notes.push(`任务：${t.title || '今日任务'}`));
+    (data?.bulletin || []).slice(0, 2).forEach((b) => notes.push(`教师回复：${String(b.reply || '').slice(0, 22)}`));
+    bpop.className = 'sd-pop';
+    bpop.innerHTML = notes.length
+      ? notes.map((n) => `<button type="button" data-note="1">${esc(n)}</button>`).join('')
+      : '<div class="sd-pop-empty">暂时没有新消息</div>';
+    bpop.querySelectorAll('[data-note]').forEach((b) => { b.onclick = () => { bpop.innerHTML = ''; goTab(data?.roll?.length ? 'checkin' : 'selfstudy'); }; });
+  };
+}
+/* 页头换成设计稿的「欢迎来到本班课堂」；学生姓名/班级仍由 recall() / myClass()
+   在签到、盲盒留痕等业务逻辑里使用，只是不再占着页头位置。 */
 function paintShell() {
-  const me = recall();
-  const raw = String(me?.name || '').trim();
-  const hour = new Date().getHours();
-  const hi = hour < 5 ? '凌晨好' : hour < 11 ? '早上好' : hour < 13 ? '中午好'
-    : hour < 18 ? '下午好' : '晚上好';
-  const who = raw ? `${hi}，${raw}` : hi;
-  const avatar = raw ? raw[0] : '学';
-  /* 副标题只留班级，不再报「今天有 N 项任务」——
-     那条数的是老师发过的任务，不代表今天真要上的课，学生看着莫名其妙。 */
-  const sub = String(myClass() || '').trim();
-  const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-  setText('stu-avatar', avatar);
-  setText('stu-hi', who);
-  setText('stu-sub', sub);
-  const subEl = document.getElementById('stu-sub');
-  if (subEl) subEl.style.display = sub ? '' : 'none';
-  /* 桌面左栏的品牌头也用同一个首字，省得两块头像不一致 */
-  const logo = document.querySelector('.stu-logo');
-  if (logo) logo.textContent = '学';
+  sdPaintWelcome();
 }
 
 function paintNav() {
   const nav = document.getElementById('s-nav');
   if (!nav) return;
-  if (!availTabs.length) {
+  /* 签到是随场次出现的临时入口，不占设计稿的 6 项侧栏；
+     有进行中签到时由任务页 / 点名页的提示卡进入，功能不丢。 */
+  const shown = availTabs.filter((t) => t !== 'checkin');
+  if (!shown.length) {
     nav.hidden = true;
     nav.innerHTML = '';
     return;
   }
-  nav.innerHTML = availTabs.map((t) => {
+  nav.innerHTML = shown.map((t) => {
     const d = TAB_DEF[t];
-    return `<button type="button" data-t="${t}" class="${tab === t ? 'on' : ''}" aria-pressed="${tab === t}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
+    const on = tab === t || (tab === 'checkin' && t === 'roll');
+    return `<button type="button" data-t="${t}" class="${on ? 'on' : ''}" aria-pressed="${on}">${d.icon} ${d.label}${d.dot ? ' <span class="s-dot"></span>' : ''}</button>`;
   }).join('');
   nav.hidden = false;
   nav.querySelectorAll('[data-t]').forEach((b) => {
-    b.onclick = () => { tab = b.dataset.t; cur = null; paint(); };
+    b.onclick = () => goTab(b.dataset.t);
   });
 }
 
@@ -427,6 +534,7 @@ function paint() {
   paintNav();
   /* #s-body 每次重画，各 paint* 里都用 $('#s-body') 取，所以这里保留这层壳 */
   $('#s-app').innerHTML = '<div id="s-body"></div>';
+  $('#s-app').classList.toggle('sd-deco-page', ['punish', 'misconduct', 'bulletin'].includes(tab));
   if (tab === 'selfstudy') paintSelfstudy();
   if (tab === 'checkin') paintCheckin();
   if (tab === 'material') paintMaterials();
@@ -469,25 +577,87 @@ function studentCardHtml(t) {
     </div>
   </div>`;
 }
+function sdTaskDeadline(t) {
+  return [t.date, t.deadline_time || t.end_time || t.period].filter(Boolean).join(' ');
+}
+/* 任务页 = 设计稿的课堂大屏首页：4 张统计卡 + 当前任务 + 快捷入口 / 最近任务。
+   所有数字都取自 /public/link 下发的真实数据，不写死设计稿里的示意值。
+   点「查看任务」才展开旧版完整任务卡（正文、图片、教师指定字号都保留）。 */
 function paintSelfstudy() {
   const all = data.selfstudyTasks || [];
   const mine = all.filter((t) => t.class_scope === 'all' || t.class_label === myClass());
   const t = mine[0];
-  if (!t) {
-    /* 和教材 / 点名 / 盲盒保持一致：都放在一张普通卡片里，不再用整页居中的空白块 */
-    $('#s-body').innerHTML = `<div class="card card-pad stu-task-card stu-task-display" style="--task-font-size:${taskFontSize()}px">
-      <div class="stu-section-head">
-        <div class="card-title">${ICON.clock} 今日任务</div>
-        <div class="tiny muted" style="margin-top:4px">${myClass() ? `当前设备班级：${esc(myClass())} · ` : ''}老师发布后会自动出现在这里</div>
-      </div>
-      <div class="stu-empty stu-task-empty">
-        <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5M8 16h3"/></svg>
-        <b>暂无任务</b>
-      </div>
-    </div>`;
+  if (showTaskDetail) {
+    $('#s-body').innerHTML = `<button type="button" class="sd-detail-back" id="sd-back">‹ 返回概览</button>`
+      + (t ? studentCardHtml(t) : `<div class="card card-pad"><div class="sd-empty-line">老师还没有发布任务</div></div>`);
+    const back = $('#sd-back');
+    if (back) back.onclick = () => { showTaskDetail = false; paint(); };
     return;
   }
-  $('#s-body').innerHTML = studentCardHtml(t);
+  const stats = [
+    { label: '待完成任务', num: mine.length, ico: SD_ICON.task },
+    { label: '已完成', num: 0, ico: SD_ICON.done },
+    { label: '违纪记录', num: (data.misconduct || []).length, ico: SD_ICON.alert, warn: true },
+    { label: '新留言', num: (data.bulletin || []).length, ico: SD_ICON.chat },
+  ];
+  const deadline = t ? sdTaskDeadline(t) : '';
+  const desc = t ? String(t.content || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] || '' : '';
+  const shortcuts = [
+    { id: 'material', label: '教材', sub: '查看课程教材', ico: SD_ICON.book, cls: 'sd-sc-purple' },
+    { id: 'roll', label: '点名', sub: '课堂签到考勤', ico: SD_ICON.check, cls: 'sd-sc-green' },
+    { id: 'punish', label: '盲盒', sub: '抽取课堂惊喜', ico: SD_ICON.gift, cls: 'sd-sc-pink' },
+    { id: 'bulletin', label: '留言板', sub: '查看同学留言', ico: SD_ICON.chat, cls: 'sd-sc-violet' },
+  ];
+  const recent = mine.slice(0, 3);
+  const checkin = (data.roll || []).length
+    ? `<div class="sd-panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px"><b style="font-size:14px;color:var(--sd-ink)">老师正在点名签到</b>
+        <div class="tiny muted" style="margin-top:4px">现在可以提交你的到课情况</div></div>
+        <button type="button" class="sd-main-btn" id="sd-checkin">去签到 ${SD_ICON.arrow}</button></div>`
+    : '';
+  $('#s-body').innerHTML = `<div class="sd-dash">
+    <div class="sd-stats">${stats.map((s) => `<div class="sd-stat${s.warn ? ' warn' : ''}">
+      <div class="sd-stat-label">${s.label}</div><div class="sd-stat-num">${s.num}</div>
+      <div class="sd-stat-ico">${s.ico}</div></div>`).join('')}</div>
+    ${checkin}
+    <div class="sd-main-task">
+      <div class="sd-main-left">
+        <div class="sd-main-top"><span class="sd-tag">课堂自习</span>
+          ${deadline ? `<span class="sd-deadline">截止 ${esc(deadline)}</span>` : ''}</div>
+        <h2 class="sd-main-title">${t ? esc(t.title || '今日任务') : '暂无任务'}</h2>
+        <p class="sd-main-desc">${t ? esc(desc) : '老师发布任务后会自动出现在这里'}</p>
+        <div class="sd-main-meta">
+          <span>${SD_ICON.people} 教师：${t ? esc(t.creator || '老师') : '—'}</span>
+          <span>${SD_ICON.task} 类型：课堂自习</span>
+          <span>${SD_ICON.done} 状态：<b class="sd-state">${t ? '进行中' : '待发布'}</b></span>
+        </div>
+      </div>
+      <button type="button" class="sd-main-btn" id="sd-view-task" ${t ? '' : 'disabled style="opacity:.55"'}>查看任务 ${SD_ICON.arrow}</button>
+    </div>
+    <div class="sd-cols">
+      <section class="sd-panel">
+        <div class="sd-panel-head"><h2>快捷入口</h2></div>
+        <div class="sd-shortcuts">${shortcuts.map((s) => `<button type="button" class="sd-shortcut" data-go="${s.id}">
+          <span class="sd-shortcut-ico ${s.cls}">${s.ico}</span><b>${s.label}</b><small>${s.sub}</small></button>`).join('')}</div>
+      </section>
+      <section class="sd-panel">
+        <div class="sd-panel-head"><h2>最近任务</h2><button type="button" class="sd-link" id="sd-all-tasks">查看全部 ›</button></div>
+        <div class="sd-recent">${recent.length ? recent.map((x) => `<div class="sd-recent-item">
+          <span class="sd-recent-ico">${SD_ICON.doc}</span>
+          <div class="sd-recent-txt"><b>${esc(x.title || '今日任务')}</b>
+            <small>教师：${esc(x.creator || '老师')}　截止：${esc(sdTaskDeadline(x))}</small></div>
+          <span class="sd-recent-state"><i></i> 进行中</span></div>`).join('')
+          : '<div class="sd-empty-line">更多任务发布后会出现在这里</div>'}</div>
+      </section>
+    </div>
+  </div>`;
+  const view = $('#sd-view-task');
+  if (view && t) view.onclick = () => { showTaskDetail = true; paint(); };
+  const allBtn = $('#sd-all-tasks');
+  if (allBtn && t) allBtn.onclick = () => { showTaskDetail = true; paint(); };
+  const ck = $('#sd-checkin');
+  if (ck) ck.onclick = () => goTab('checkin');
+  document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => goTab(b.dataset.go); });
 }
 /* 学生端 60 秒轮询一次：任务、模块开关或展示配置有变化才重绘，避免大屏上闪白 */
 setInterval(async () => {
@@ -594,8 +764,8 @@ function paintMaterials() {
   if (cur) return openMaterial();
   const mats = data.materials;
   $('#s-body').innerHTML = `<div class="card stu-materials">
-    <div class="stu-section-head"><div class="card-title">全部资料 <span class="chip blue">${mats.length}</span></div>
-      <div class="tiny muted" style="margin-top:4px">点开即可查看和下载；标了「需要口令」的，要输入老师给的班级口令</div></div>
+    <div class="stu-section-head"><div class="sd-section-title">${SD_ICON.book} 全部资料 <span class="chip blue">${mats.length}</span></div>
+      <p class="sd-section-sub">点开即可查看和下载；标了「需要口令」的，要输入老师给的班级口令</p></div>
     ${mats.length ? mats.map((m) => {
     const locked = m.locked && !passcodeFor(m.id);
     return `<button type="button" class="mat-card" data-m="${esc(m.id)}">
@@ -923,7 +1093,7 @@ function paintRoll() {
       <div class="field"><label class="field-label" for="pk-num">抽取人数</label>
         <input class="input" id="pk-num" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
     </div>
-    <label class="pk-nr"><input type="checkbox" id="pk-norepeat"><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
+    <label class="pk-nr"><input type="checkbox" id="pk-norepeat" checked><span>不重复点同一人 <span class="tiny muted">（点完一轮前不会再出现）</span></span></label>
     <button class="btn primary block" id="go" style="height:56px;font-size:17px;margin-top:14px">${ICON.dice} 开始点名</button>
     <div class="pick-stage"><div class="pick-roll" id="stage"><span class="tiny muted" style="font-size:14px;font-weight:500;letter-spacing:0;text-align:center;display:block;padding:0 18px">点「开始点名」，名字会在这里滚出来</span></div></div>
     <div id="history" class="tiny muted" style="text-align:center;min-height:18px"></div>
@@ -1082,7 +1252,7 @@ const LV_NAME = { light: '轻松', average: '有点挑战', heavy: '大冒险' }
 const LV_CLASS = { light: 'l1', average: 'l2', heavy: 'l3' };
 /* 用 SVG 而不是 emoji：部分安卓机/电脑缺 emoji 字体，会渲染成方框 */
 const BOX_ICO = {
-  closed: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v3.5h-19zM12 9v11.5"/><path d="M12 9S10.6 4 8.2 4a2.4 2.4 0 0 0 0 5M12 9s1.4-5 3.8-5a2.4 2.4 0 0 1 0 5"/></svg>',
+  closed: '<span style="font-size:78px;line-height:1;display:block;filter:drop-shadow(0 10px 12px rgba(120,80,60,.22))">🎁</span>',
   light: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.2 5.6L20 10l-4.4 3.6L16.6 20 12 16.8 7.4 20l1-6.4L4 10l5.8-1.4z"/></svg>',
   average: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>',
   heavy: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 6 6.6 6 10a6 6 0 0 1-12 0c0-3.4 3-6 6-10z"/><path d="M12 17a2.6 2.6 0 0 1-2.6-2.6c0-1.5 1.3-2.6 2.6-4.4 1.3 1.8 2.6 2.9 2.6 4.4A2.6 2.6 0 0 1 12 17z"/></svg>',
@@ -1098,10 +1268,11 @@ function leftCount(list) {
 function paintPunish() {
   const list = data.punishments || [];
   const me = recall();
-  $('#s-body').innerHTML = `<div class="card card-pad" style="text-align:center">
+  $('#s-body').innerHTML = `<div class="card card-pad sd-box-card">
+    <span class="sd-handwrite">让课堂更有趣</span>
     <div class="stu-section-head">
-      <div class="card-title" style="justify-content:center">${ICON.target} 惊喜盲盒</div>
-      <div class="tiny muted">点一下开箱，点到什么就做什么</div>
+      <div class="sd-section-title" style="justify-content:center">${SD_ICON.gift} 惊喜盲盒</div>
+      <p class="sd-section-sub">点一下开箱，点到什么就做什么</p>
     </div>
     <div class="box-stage" id="box">
       <div>
@@ -1115,6 +1286,7 @@ function paintPunish() {
       ${ICON.target} <span id="spintxt">${list.length ? '开箱' : '老师还没设置任务'}</span>
     </button>
     <div class="tiny muted" id="pcnt" style="margin-top:12px">${list.length ? `盲盒里共 ${list.length} 个任务 · 这一轮还剩 ${leftCount(list)} 个没点过` : '请老师到「工作 - 课件」里添加'}</div>
+    <div class="sd-box-deco"></div>
   </div>`;
   if (!list.length) return;
 
@@ -1226,15 +1398,17 @@ function paintMisconduct() {
     ? { grade: String(saved.misconduct_grade || '').trim(), class_name: String(saved.misconduct_cls || '').trim() }
     : splitCls(saved.misconduct_cls);
   const auto = splitCls(myClass());
-  const curGrade = pref.grade || auto.grade;
-  const curClass = pref.class_name || auto.class_name;
+  /* 没存过偏好时默认带出课表里的第一个年级/班级：
+     设计稿里两个下拉一进来就是「高二 / 5班」，不让学生先做两次无谓选择。 */
+  const curGrade = pref.grade || auto.grade || gradeList[0] || '';
+  const curClass = pref.class_name || auto.class_name || (curGrade ? classesOf(curGrade)[0] : '') || '';
   const otherGrade = !!curGrade && !gradeList.includes(curGrade);
   const initialClasses = curGrade ? classesOf(curGrade) : [];
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="stu-section-head">
-      <div class="card-title">${ICON.alert} 违纪登记</div>
-      <div class="tiny muted">选择你所在的年级班级，填写违纪情况后提交，老师会在教师端看到。</div>
+      <div class="sd-section-title warn">${SD_ICON.alert} 违纪登记</div>
+      <p class="sd-section-sub">选择所在年级班级，填写违纪情况后提交，老师会在教师端看到。</p>
     </div>
     <div class="stu-form-grid">
       <div class="field">
@@ -1256,11 +1430,12 @@ function paintMisconduct() {
         <input class="input" id="mc-cls-custom" placeholder="例如：1 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
       </div>
     </div>
-    <div class="field">
+    <div class="field sd-count">
       <label class="field-label" for="mc-text">违纪情况</label>
-      <textarea class="input" id="mc-text" rows="4" placeholder="写清楚时间、地点和具体情节"></textarea>
+      <textarea class="input" id="mc-text" rows="4" maxlength="200" placeholder="写清楚时间、地点和具体情节"></textarea>
+      <span class="sd-counter" id="mc-count">0/200</span>
     </div>
-    <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
+    <div class="sd-submit-row">
       <span class="tiny" id="mc-tip" style="color:var(--green)"></span>
       <button class="btn primary" id="mc-send">提交</button>
     </div>
@@ -1299,6 +1474,9 @@ function paintMisconduct() {
     if (clsSelect.value !== '__other__') savePref('misconduct_cls', clsSelect.value.trim());
   });
   syncCustom();
+  const mcText = $('#mc-text');
+  const mcCount = $('#mc-count');
+  if (mcText && mcCount) mcText.addEventListener('input', () => { mcCount.textContent = `${mcText.value.length}/200`; });
   $('#mc-send')?.addEventListener('click', async () => {
     const customGrade = gradeSelect.value === '__other__';
     const grade = (customGrade ? gradeCustom.value : gradeSelect.value).trim();
@@ -1331,15 +1509,17 @@ function paintBulletin() {
     ? { grade: String(saved.bulletin_grade || '').trim(), class_name: String(saved.bulletin_cls || '').trim() }
     : splitCls(saved.bulletin_cls);
   const auto = splitCls(myClass());
-  const curGrade = pref.grade || auto.grade;
-  const curClass = pref.class_name || auto.class_name;
+  /* 没存过偏好时默认带出课表里的第一个年级/班级：
+     设计稿里两个下拉一进来就是「高二 / 5班」，不让学生先做两次无谓选择。 */
+  const curGrade = pref.grade || auto.grade || gradeList[0] || '';
+  const curClass = pref.class_name || auto.class_name || (curGrade ? classesOf(curGrade)[0] : '') || '';
   const otherGrade = !!curGrade && !gradeList.includes(curGrade);
   const initialClasses = curGrade ? classesOf(curGrade) : [];
   const otherClass = !!curClass && !initialClasses.includes(curClass);
   $('#s-body').innerHTML = `<div class="card card-pad">
     <div class="stu-section-head">
-      <div class="card-title">${ICON.chat} 留言板</div>
-      <div class="tiny muted">留言提交后，可在下方查看教师回复。</div>
+      <div class="sd-section-title">${SD_ICON.chat} 留言板</div>
+      <p class="sd-section-sub">留言提交后，可在下方查看教师回复。</p>
     </div>
     <div class="stu-form-grid">
       <div class="field" style="flex:1;min-width:140px">
@@ -1361,18 +1541,19 @@ function paintBulletin() {
         <input class="input" id="bl-class-custom" placeholder="例如：3 班" value="${otherClass ? esc(curClass) : ''}" style="display:none;margin-top:8px">
       </div>
     </div>
-    <div class="field">
+    <div class="field sd-count">
       <label class="field-label" for="bl-text">留言内容</label>
-      <textarea class="input" id="bl-text" rows="4" placeholder="想对老师说的话"></textarea>
+      <textarea class="input" id="bl-text" rows="4" maxlength="500" placeholder="想对老师说的话"></textarea>
+      <span class="sd-counter" id="bl-count">0/500</span>
     </div>
-    <div class="row" style="justify-content:flex-end;align-items:center;gap:10px">
+    <div class="sd-submit-row">
       <span class="tiny" id="bl-tip" style="color:var(--green)"></span>
       <button class="btn primary" id="bl-send">提交</button>
     </div>
   </div><section class="card card-pad stu-replies">
     <div class="row stu-section-head" style="justify-content:space-between;align-items:center;gap:8px">
-      <div class="card-title">教师回复</div>
-      <button type="button" class="btn" id="bl-refresh-replies">刷新回复</button>
+      <div class="sd-section-title" style="font-size:16px">教师回复</div>
+      <button type="button" class="btn" id="bl-refresh-replies">${SD_ICON.refresh} 刷新回复</button>
     </div>
     <div id="bl-replies" aria-live="polite"></div>
   </section>`;
@@ -1388,7 +1569,7 @@ function paintBulletin() {
       <article class="stu-reply">
         <div class="tiny muted">${esc(clsName(item.grade, item.class_name))} ${esc(item.replied_at ? new Date(item.replied_at).toLocaleString('zh-CN', { hour12: false }) : '')}</div>
         <p>${esc(item.reply)}</p>
-      </article>`).join('') : '<div class="tiny muted" style="padding:12px 0">暂无教师回复</div>';
+      </article>`).join('') : '<div class="sd-reply-empty"><span>💌</span><span>暂无教师回复</span></div>';
   };
   paintReplies(data?.bulletin);
   const refreshReplies = $('#bl-refresh-replies');
@@ -1433,6 +1614,9 @@ function paintBulletin() {
     if (clsSelect.value !== '__other__') savePref('bulletin_cls', clsSelect.value.trim());
   });
   syncCustom();
+  const blText = $('#bl-text');
+  const blCount = $('#bl-count');
+  if (blText && blCount) blText.addEventListener('input', () => { blCount.textContent = `${blText.value.length}/500`; });
   $('#bl-send')?.addEventListener('click', async () => {
     const customGrade = gradeSelect.value === '__other__';
     const grade = (customGrade ? gradeCustom.value : gradeSelect.value).trim();
