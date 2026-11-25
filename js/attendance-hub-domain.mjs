@@ -4,10 +4,15 @@
    设计原则：
    · 5 张表平级独立存储，各自一张本地表（att_hub_*），共用花名册的 teacher_id。
    · 年级 / 日期 / 学科只是查询筛选条件，不再是数据隔离边界。
+   · 部门 → 年级是两级配置（att_hub_departments），年级名单仍复用 /grades，
+     这样旧的年级工作台、花名册筛选下拉都不用改。
    · 本文件不碰 DOM、不碰 localStorage，方便在 Node 里直接跑单测。
    ========================================================================== */
 
 const SELECT = (list) => ({ type: 'select', options: list });
+
+/* 默认部门：老库升级上来时，已有年级自动挂到「高中部」下，记录一条都不丢。 */
+export const DEFAULT_DEPARTMENT = '高中部';
 
 /* 年级不再写死在前端：花名册顶部接入「年级管理 / 新建年级」后，
    年级下拉和新增表单都要读 /grades 的真实年级列表。
@@ -23,20 +28,19 @@ export const HUB_SHEETS = {
   roster: {
     key: 'roster', label: '花名册', table: 'att_hub_roster',
     title: '花名册 · 全部教师',
-    desc: '教师主数据，全年级统一编号；其余 4 张表通过教师 ID 关联',
+    desc: '教师主数据，全年级统一编号；其余 4 张表通过教师序号关联',
     columns: [
-      { key: 'teacher_id', label: '教师ID', type: 'text', width: 100 },
+      { key: 'teacher_id', label: '教师序号', type: 'text', width: 100 },
       { key: 'name', label: '姓名', type: 'text', required: true, width: 110 },
       { key: 'subject', label: '学科', type: 'text', width: 100 },
       { key: 'department', label: '所属部门', type: 'text', width: 120 },
       { key: 'grade', label: '年级', ...SELECT(['高一', '高二', '高三']), width: 90 },
-      { key: 'class_name', label: '任教班级', type: 'text', width: 110 },
       { key: 'status', label: '在职状态', ...SELECT(['在职', '休假', '离职']), width: 100 },
       { key: 'hire_date', label: '入职日期', type: 'date', width: 120 },
       { key: 'phone', label: '联系方式', type: 'text', width: 130 },
       { key: 'remark', label: '备注', type: 'text', width: 160 },
     ],
-    defaults: { status: '在职', grade: '高一' },
+    defaults: { status: '在职', department: '高中部' },
     filters: ['grade', 'subject', 'q'],
   },
   duty: {
@@ -45,7 +49,7 @@ export const HUB_SHEETS = {
     desc: '坐班记录独立存储，随时可进可录，不再要求先确认上课表',
     columns: [
       { key: 'date', label: '日期', type: 'date', required: true, width: 120 },
-      { key: 'teacher_id', label: '教师ID', type: 'text', width: 100 },
+      { key: 'teacher_id', label: '教师序号', type: 'text', width: 100 },
       { key: 'name', label: '姓名', type: 'text', required: true, width: 110 },
       { key: 'grade', label: '年级', ...SELECT(['高一', '高二', '高三']), width: 90 },
       { key: 'period', label: '节次', type: 'text', width: 90 },
@@ -64,7 +68,7 @@ export const HUB_SHEETS = {
     desc: '原「课程表」并入此处，上课记录不再挂在坐班表里',
     columns: [
       { key: 'date', label: '日期', type: 'date', required: true, width: 120 },
-      { key: 'teacher_id', label: '教师ID', type: 'text', width: 100 },
+      { key: 'teacher_id', label: '教师序号', type: 'text', width: 100 },
       { key: 'name', label: '姓名', type: 'text', required: true, width: 110 },
       { key: 'grade', label: '年级', ...SELECT(['高一', '高二', '高三']), width: 90 },
       { key: 'class_name', label: '班级', type: 'text', width: 110 },
@@ -82,7 +86,7 @@ export const HUB_SHEETS = {
     title: '请假表 · 全部记录',
     desc: '支持跨日期、跨年级登记与历史查询，不再只能登记当日',
     columns: [
-      { key: 'teacher_id', label: '教师ID', type: 'text', width: 100 },
+      { key: 'teacher_id', label: '教师序号', type: 'text', width: 100 },
       { key: 'name', label: '姓名', type: 'text', required: true, width: 110 },
       { key: 'grade', label: '年级', ...SELECT(['高一', '高二', '高三']), width: 90 },
       { key: 'leave_type', label: '请假类型', ...SELECT(['事假', '病假', '年假', '公假', '其他']), width: 100 },
@@ -174,11 +178,62 @@ export function gradeKey(v) {
   return String(v ?? '').trim().replace(/年级$/, '');
 }
 
-/* 统一筛选：年级 / 日期区间 / 关键词；年级和日期都只是筛选，不是存储边界 */
+/* ---------------- 部门 → 年级（两级配置） ----------------
+   年级名单仍然只有一份（/grades 的 u.settings.grades），部门只是给每个年级
+   记一个归属（u.settings.gradeDept）。这样花名册筛选、旧年级工作台、
+   导入导出全部不用改；部门管理页只负责建部门、把年级挂进去。 */
+
+/** 部门名去空白、限长；重名判断也走这里 */
+export function deptName(v) {
+  return String(v ?? '').trim().slice(0, 20);
+}
+
+/** 取某个部门下的年级（保持 /grades 里的原始顺序，去重） */
+export function gradesOfDepartment(grades, gradeDept, deptId) {
+  const all = Array.isArray(grades) ? grades : [];
+  const map = gradeDept && typeof gradeDept === 'object' ? gradeDept : {};
+  const key = String(deptId ?? '');
+  return [...new Set(all
+    .map((g) => String(g ?? '').trim())
+    .filter((g) => g && String(map[g] ?? '') === key))];
+}
+
+/** 花名册分表页签标题：高一年级 → 高一教师花名册 */
+export function rosterTabLabel(gradeName) {
+  const s = String(gradeName ?? '').trim();
+  /* 只把「高一年级 / 初二年级」这类「学段 + 序号 + 年级」规范成「高一 / 初二」。
+     不能直接套 gradeKey：它会剥掉任何「年级」后缀，把「七年级」削成「七」，
+     页签就变成「七教师花名册」了。 */
+  const g = /^(?:高|初|小)[一二三四五六七八九十0-9]+年级$/.test(s) ? s.slice(0, -2) : s;
+  return g ? `${g}教师花名册` : '分表';
+}
+
+/** 日期字符串 ±N 天（纯 UTC 日历运算，避免本地时区把日期带偏） */
+export function shiftDate(iso, delta) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? '').trim());
+  if (!m) return String(iso ?? '');
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  d.setUTCDate(d.getUTCDate() + (Number(delta) || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+/** 统计快捷区间：本日 / 本月 / 本年（今天用调用方给的北京日期） */
+export function periodRange(kind, today) {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(today ?? '')) ? String(today) : '';
+  if (!day) return { from: '', to: '', label: '全部' };
+  const y = day.slice(0, 4);
+  if (kind === 'day') return { from: day, to: day, label: `本日 ${day}` };
+  if (kind === 'month') return { from: `${y}-${day.slice(5, 7)}-01`, to: day, label: `本月 ${y}-${day.slice(5, 7)}` };
+  if (kind === 'year') return { from: `${y}-01-01`, to: day, label: `本年 ${y}` };
+  return { from: '', to: '', label: '全部' };
+}
+
+/* 统一筛选：部门 / 年级 / 日期区间 / 关键词；都只是筛选，不是存储边界 */
 export function filterRows(key, rows, f = {}) {
   const def = sheetDef(key);
   if (!def) return [];
   const grade = gradeKey(f.grade);
+  const dept = String(f.dept || f.department || '').trim();
   const from = String(f.from || '').trim();
   const to = String(f.to || '').trim();
   const q = String(f.q || '').trim().toLowerCase();
@@ -186,6 +241,10 @@ export function filterRows(key, rows, f = {}) {
   const dateKeyOf = (r) => String(r.date || r.start_at || r.period || '').slice(0, 10);
   return (Array.isArray(rows) ? rows : []).filter((r) => {
     if (r.deleted_at) return false;
+    /* 只有花名册有「所属部门」列；其余 4 张表不按部门过滤，
+       否则传了 dept 参数会把整张表筛空。 */
+    if (key === 'roster' && dept && String(r.department || '') !== dept
+        && !(dept === DEFAULT_DEPARTMENT && !String(r.department || '').trim())) return false;
     if (grade && gradeKey(r.grade) !== grade) return false;
     if (subject && String(r.subject || '') !== subject) return false;
     const d = dateKeyOf(r);
@@ -268,12 +327,27 @@ export function fromCsv(key, text) {
 }
 
 /* ---------------- 统计表自动汇总 ----------------
-   从 4 张业务表按 (周期, 年级) 聚合；手工修正过的行由调用方保留，不覆盖。 */
-export function calcStats({ roster = [], duty = [], klass = [], leave = [] }, period = '', grade = '全部') {
-  const inPeriod = (r) => !period || String(r.date || r.start_at || '').slice(0, 7) === String(period).slice(0, 7);
+   从 4 张业务表按 (周期, 年级) 聚合；手工修正过的行由调用方保留，不覆盖。
+   · 只统计「我记录的数据」：4 张业务表里的真实录入 / 导入 / 迁移记录。
+   · range = { from, to } 支持本日 / 本月 / 本年；period 是旧版的月份口径，
+     两个参数都不传时统计全部。 */
+export function calcStats({ roster = [], duty = [], klass = [], leave = [] }, period = '', grade = '全部', range = null) {
+  const from = String(range?.from || '').trim();
+  const to = String(range?.to || '').trim();
+  const month = String(period || '').slice(0, 7);
+  const inPeriod = (r) => {
+    const d = String(r.date || r.start_at || '').slice(0, 10);
+    if (from || to) {
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    }
+    return !month || d.slice(0, 7) === month;
+  };
   const inGrade = (r) => grade === '全部' || !grade || gradeKey(r.grade) === gradeKey(grade);
   const pick = (list) => list.filter((r) => !r.deleted_at && inPeriod(r) && inGrade(r));
-  const teachers = pick(roster);
+  const teachers = roster.filter((r) => !r.deleted_at && inGrade(r));
   const duties = pick(duty);
   const classes = pick(klass);
   const leaves = pick(leave);

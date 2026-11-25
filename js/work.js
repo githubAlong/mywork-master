@@ -144,11 +144,17 @@ registerView(async function work(main, { tab, third }) {
   }
   if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
-    /* 考勤只保留 5 个二级页面：花名册 / 坐班表 / 上课表 / 请假表 / 统计表。
+    /* 考勤只保留 6 个二级页面：部门管理 / 花名册 / 坐班表 / 上课表 / 请假表 / 统计表。
        旧「考勤管理首页（年级总览 + 年级考勤工作区）」已下线：侧栏点「考勤」、
        底部导航、旧收藏链接 #/attendance 都直接落到花名册。
        中文年级名仍按旧工作台渲染，让已有的年级工作台链接不白屏。 */
     const grade = third ? decodeURIComponent(third) : '';
+    /* v3：部门管理是独立页面，先建部门再在部门里建年级。 */
+    if (grade === 'departments') {
+      headEl.remove();
+      const { renderAttendanceDepartments } = await import('./attendance-departments.js');
+      return renderAttendanceDepartments(body);
+    }
     /* 二级 key 用英文，中文年级名（高一/高二/高三）不会撞上。
        年级 / 日期在二级页里只是筛选条件，不再是数据隔离边界。 */
     if (!grade || ['roster', 'duty', 'class', 'leave', 'stats'].includes(grade)) {

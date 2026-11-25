@@ -1,0 +1,659 @@
+/* ==========================================================================
+   学生端 · 课堂大屏设计稿（6 页视觉基线）
+   --------------------------------------------------------------------------
+   只做「换皮 + 任务页仪表盘」，不含任何业务逻辑，也不改学生端的数据接口。
+   加载顺序必须在 student-workbench.css / student-purple.css 之后。
+
+   设计稿要点：
+   1) 左侧栏：白底、紫色书本品牌、6 个线性图标菜单、选中浅紫底 + 左紫竖条
+   2) 每页顶部：紫色圆角方块图标 + 「欢迎来到本班课堂」+ 日期副标题；
+      任务页额外带搜索框和通知铃铛
+   3) 任务页：4 张统计卡 + 当前任务卡 + 快捷入口 / 最近任务 双栏
+   4) 其余 5 页：统一白卡、紫色主按钮、淡紫页底、轻装饰
+   ========================================================================== */
+
+.stu-workbench {
+  --sd-purple: #7157ec;
+  --sd-purple-deep: #5b43cf;
+  --sd-purple-soft: #f1edff;
+  --sd-purple-line: #e6dfff;
+  --sd-page: #f7f5ff;
+  --sd-ink: #1c1830;
+  --sd-ink-2: #4c4666;
+  --sd-ink-3: #8b85a3;
+  --sd-line: #ece9f6;
+  --sd-card: #ffffff;
+  --sd-radius: 18px;
+  --sd-shadow: 0 2px 6px rgba(60, 42, 130, .035), 0 14px 34px -14px rgba(60, 42, 130, .16);
+  --sp-rail: 200px;
+  --sp-accent: var(--sd-purple);
+  --sp-accent-deep: var(--sd-purple-deep);
+  --sp-accent-soft: var(--sd-purple-soft);
+  --sp-grad-1: #7c62f2;
+  --sp-grad-2: #6148d8;
+  --primary: var(--sd-purple);
+  --primary-deep: var(--sd-purple-deep);
+}
+
+body.stu-workbench {
+  background: linear-gradient(158deg, #f8f6ff 0%, #f2efff 48%, #faf9ff 100%) fixed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .stu-workbench {
+    --sd-page: #17161f;
+    --sd-card: #22202d;
+    --sd-ink: #f3f0fb;
+    --sd-ink-2: #c8c2da;
+    --sd-ink-3: #928ca8;
+    --sd-line: #343044;
+    --sd-purple-soft: #30284a;
+    --sd-purple-line: #42365f;
+    --sd-shadow: 0 2px 6px rgba(0, 0, 0, .25), 0 16px 34px -14px rgba(0, 0, 0, .55);
+  }
+  body.stu-workbench { background: #17161f; }
+}
+
+/* ---------- 左侧栏 ---------- */
+@media (min-width: 1024px) {
+  body.stu-workbench::before {
+    width: var(--sp-rail);
+    background: var(--sd-card);
+    border-right: 1px solid var(--sd-line);
+  }
+
+  .stu-workbench .stu-headwrap { background: transparent !important; box-shadow: none !important; }
+
+  .stu-workbench .stu-top {
+    padding: 26px 18px 18px;
+    gap: 10px;
+  }
+
+  .stu-workbench .stu-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(140deg, #8168f5, #6349db);
+    box-shadow: 0 5px 12px rgba(99, 73, 219, .28);
+    font-size: 0;
+  }
+  .stu-workbench .stu-logo svg { width: 20px; height: 20px; }
+
+  .stu-workbench .stu-title {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: .3px;
+    color: var(--sd-ink);
+  }
+
+  .stu-workbench .s-tabs {
+    gap: 2px;
+    padding: 6px 12px 24px;
+  }
+
+  .stu-workbench .s-tabs button {
+    position: relative;
+    height: 44px;
+    gap: 11px;
+    padding: 0 13px;
+    border-radius: 10px;
+    font-size: 14.5px;
+    font-weight: 550;
+    color: var(--sd-ink-2);
+    background: transparent;
+  }
+  .stu-workbench .s-tabs button svg { width: 18px; height: 18px; flex: 0 0 18px; }
+  .stu-workbench .s-tabs button:hover { background: #f8f6ff; color: var(--sd-ink); }
+  .stu-workbench .s-tabs button.on {
+    background: var(--sd-purple-soft);
+    color: var(--sd-purple);
+    font-weight: 700;
+    /* 页签按钮在 student.html 里带 overflow:hidden，外挂的 ::before 竖条会被裁掉；
+       改用 inset 阴影画在按钮内，各浏览器都能稳定显示设计稿那条紫色指示条。 */
+    box-shadow: inset 3px 0 0 var(--sd-purple);
+  }
+}
+
+/* ---------- 顶部欢迎头（复用 .stu-topbar 的位置） ---------- */
+.stu-workbench .stu-topbar {
+  display: block;
+  padding: 18px 18px 4px;
+  background: none;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (min-width: 1024px) {
+  .stu-workbench .stu-topbar {
+    padding: 26px 36px 8px;
+    max-width: 1280px;
+  }
+}
+
+.sd-welcome {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+}
+.sd-wico {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, #8168f5, #5f46d6);
+  box-shadow: 0 6px 14px rgba(99, 73, 219, .22);
+}
+.sd-wico svg { width: 24px; height: 24px; }
+.sd-wtxt { min-width: 0; flex: 1 1 240px; }
+.sd-wtxt h1 {
+  margin: 0;
+  font-size: 23px;
+  line-height: 1.3;
+  font-weight: 800;
+  color: var(--sd-ink);
+  letter-spacing: .2px;
+}
+.sd-wtxt p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--sd-ink-3);
+}
+.sd-wtools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.sd-search {
+  position: relative;
+  width: 300px;
+  max-width: 42vw;
+}
+.sd-search > svg {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  color: #9a94ad;
+  pointer-events: none;
+}
+.sd-search input {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 16px 0 42px;
+  border: 1px solid var(--sd-line);
+  border-radius: 22px;
+  background: var(--sd-card);
+  color: var(--sd-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  font-family: inherit;
+  text-indent: 0;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(60, 42, 130, .04);
+}
+.sd-search input::-webkit-search-cancel-button { display: none; }
+/* app.css 有全局规则 input:not(.auth-input input)::placeholder 用 !important
+   把普通输入框的占位文字设成透明（设计上只留字段名）；它的特异性是 (0,1,3)，
+   所以这里必须带 .stu-workbench 前缀抬到 (0,2,2) 才能把设计稿的提示文字显示出来。 */
+.stu-workbench .sd-search input::placeholder { color: #8d87a4 !important; opacity: 1 !important; }
+.stu-workbench .sd-search input::-webkit-input-placeholder { color: #8d87a4 !important; opacity: 1 !important; }
+.sd-search input:focus { border-color: #c3b4ff; box-shadow: 0 0 0 3px rgba(113, 87, 236, .12); }
+.sd-bell-wrap { position: relative; }
+.sd-bell {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 1px solid var(--sd-line);
+  border-radius: 50%;
+  background: var(--sd-card);
+  color: var(--sd-ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.sd-bell svg { width: 19px; height: 19px; }
+.sd-bell::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff5d6c;
+  border: 1.5px solid var(--sd-card);
+}
+.sd-bell:hover { color: var(--sd-purple); }
+.sd-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(340px, 90vw);
+  max-height: 340px;
+  overflow: auto;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--sd-line);
+  border-radius: 14px;
+  background: var(--sd-card);
+  box-shadow: 0 18px 40px -12px rgba(40, 26, 90, .3);
+}
+.sd-pop.search-pop { right: auto; left: 0; }
+.sd-pop button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sd-ink);
+  font: 13.5px/1.5 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.sd-pop button:hover { background: var(--sd-purple-soft); }
+.sd-pop .sd-pop-kind { display: block; font-size: 11px; color: var(--sd-ink-3); }
+.sd-pop .sd-pop-empty { padding: 16px 12px; font-size: 13px; color: var(--sd-ink-3); text-align: center; }
+
+/* ---------- 内容区 / 通用卡片 ---------- */
+.stu-workbench .s-wrap { padding: 12px 18px 60px; }
+@media (min-width: 1024px) {
+  .stu-workbench .s-wrap {
+    padding: 10px 36px 64px;
+    max-width: 1280px;
+  }
+}
+.stu-workbench #s-body { gap: 16px; }
+.stu-workbench .card {
+  border: 1px solid var(--sd-line);
+  border-radius: var(--sd-radius);
+  background: var(--sd-card);
+  box-shadow: var(--sd-shadow);
+}
+.stu-workbench .card-pad { padding: 22px 24px; }
+.stu-workbench .card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 750;
+  color: var(--sd-ink);
+}
+.stu-workbench .card-title svg { width: 19px; height: 19px; color: var(--sd-purple); }
+.stu-workbench .stu-section-head { border-bottom: 0; padding-bottom: 0; margin-bottom: 18px; }
+.stu-workbench .stu-section-head .tiny { color: var(--sd-ink-3); font-size: 12.5px; }
+.stu-workbench .muted, .stu-workbench .tiny.muted { color: var(--sd-ink-3); }
+.stu-workbench .field-label { font-size: 13px; font-weight: 650; color: var(--sd-ink-2); }
+.stu-workbench :is(.input, select.input, textarea.input) {
+  height: 44px;
+  border: 1px solid var(--sd-line);
+  border-radius: 10px;
+  background: var(--sd-card);
+  color: var(--sd-ink);
+  font-size: 14px;
+  box-shadow: none;
+}
+.stu-workbench textarea.input { height: auto; min-height: 108px; padding: 12px 14px; line-height: 1.6; resize: none; }
+.stu-workbench .btn svg { width: 15px; height: 15px; flex: 0 0 15px; vertical-align: -3px; }
+.stu-workbench :is(.input, select.input, textarea.input):focus {
+  border-color: #bda9ff;
+  box-shadow: 0 0 0 3px rgba(113, 87, 236, .12);
+  outline: none;
+}
+.stu-workbench .btn.primary {
+  border-radius: 11px;
+  background: linear-gradient(100deg, #7a5ff0, #6749dc);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 16px -4px rgba(103, 73, 220, .5);
+  border: 0;
+}
+.stu-workbench .btn.primary:hover { filter: brightness(1.06); }
+.stu-workbench .btn.primary:disabled { opacity: .55; box-shadow: none; }
+.stu-workbench .btn { border-radius: 10px; border-color: var(--sd-line); color: var(--sd-ink-2); }
+.stu-workbench .chip.blue { background: var(--sd-purple); color: #fff; border-radius: 20px; }
+
+/* ---------- 任务页：仪表盘 ---------- */
+.sd-dash { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.sd-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.sd-stat {
+  position: relative;
+  min-height: 94px;
+  padding: 17px 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--sd-line);
+  border-radius: 16px;
+  background: var(--sd-card);
+  box-shadow: var(--sd-shadow);
+  overflow: hidden;
+}
+.sd-stat-label { font-size: 13px; color: var(--sd-ink-3); }
+.sd-stat-num {
+  margin-top: 8px;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--sd-ink);
+  font-variant-numeric: tabular-nums;
+}
+.sd-stat-ico {
+  position: absolute;
+  right: 17px;
+  bottom: 17px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--sd-purple-soft);
+  color: var(--sd-purple);
+}
+.sd-stat-ico svg { width: 18px; height: 18px; }
+.sd-stat.warn .sd-stat-ico { background: #ffedef; color: #ef5c62; }
+
+.sd-main-task {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 22px 24px;
+  border: 1px solid var(--sd-line);
+  border-radius: var(--sd-radius);
+  background: var(--sd-card);
+  box-shadow: var(--sd-shadow);
+}
+.sd-main-left { flex: 1 1 auto; min-width: 0; }
+.sd-main-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sd-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 7px;
+  background: var(--sd-purple-soft);
+  color: var(--sd-purple);
+  font-size: 12px;
+  font-weight: 650;
+}
+.sd-deadline { margin-left: auto; font-size: 12.5px; color: var(--sd-ink-3); }
+.sd-main-title {
+  margin: 13px 0 5px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--sd-ink);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.sd-main-desc { margin: 0; font-size: 13.5px; color: var(--sd-ink-2); overflow-wrap: anywhere; }
+.sd-main-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--sd-ink-2);
+}
+.sd-main-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.sd-main-meta svg { width: 14px; height: 14px; color: var(--sd-purple); }
+.sd-state { padding: 3px 9px; border-radius: 7px; background: var(--sd-purple-soft); color: var(--sd-purple); font-weight: 650; }
+.sd-main-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 22px;
+  background: linear-gradient(100deg, #7a5ff0, #6749dc);
+  color: #fff;
+  font: 700 14px/1 inherit;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 7px 18px -5px rgba(103, 73, 220, .55);
+}
+.sd-main-btn:hover { filter: brightness(1.06); }
+.sd-main-btn svg { width: 15px; height: 15px; }
+
+.sd-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.sd-panel {
+  min-width: 0;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--sd-line);
+  border-radius: var(--sd-radius);
+  background: var(--sd-card);
+  box-shadow: var(--sd-shadow);
+}
+.sd-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.sd-panel-head h2 { margin: 0; font-size: 16px; font-weight: 750; color: var(--sd-ink); }
+.sd-link {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  color: var(--sd-purple); font-size: 12.5px; font-weight: 650; font-family: inherit;
+}
+.sd-link:hover { text-decoration: underline; }
+.sd-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sd-shortcut {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 6px 2px; border: 0; border-radius: 12px; background: transparent;
+  cursor: pointer; font-family: inherit; text-align: center;
+}
+.sd-shortcut:hover { background: #faf8ff; }
+.sd-shortcut-ico {
+  width: 48px; height: 48px; border-radius: 50%;
+  display: grid; place-items: center;
+}
+.sd-shortcut-ico svg { width: 24px; height: 24px; }
+.sd-sc-purple { background: #eee9ff; color: #7157ec; }
+.sd-sc-green { background: #e7f8ee; color: #22a06b; }
+.sd-sc-pink { background: #ffeaf0; color: #ef6b8c; }
+.sd-sc-violet { background: #ece9ff; color: #7a5af0; }
+.sd-shortcut b { font-size: 13px; font-weight: 700; color: var(--sd-ink); }
+.sd-shortcut small { font-size: 11px; color: var(--sd-ink-3); line-height: 1.3; }
+
+.sd-recent { display: grid; gap: 4px; }
+.sd-recent-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 4px; border-bottom: 1px solid var(--sd-line);
+}
+.sd-recent-item:last-child { border-bottom: 0; }
+.sd-recent-ico {
+  flex: 0 0 38px; width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--sd-purple-soft); color: var(--sd-purple);
+}
+.sd-recent-ico svg { width: 19px; height: 19px; }
+.sd-recent-txt { flex: 1; min-width: 0; }
+.sd-recent-txt b { display: block; font-size: 13.5px; font-weight: 700; color: var(--sd-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-recent-txt small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--sd-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-recent-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #22a06b; white-space: nowrap; }
+.sd-recent-state i { width: 7px; height: 7px; border-radius: 50%; background: #2bb673; }
+.sd-empty-line { padding: 18px 4px; font-size: 12.5px; color: var(--sd-ink-3); text-align: center; }
+
+/* 任务详情（点「查看任务」后展开，沿用旧版完整任务内容） */
+.sd-detail-back {
+  display: inline-flex; align-items: center; gap: 5px; margin-bottom: 12px;
+  border: 0; background: none; color: var(--sd-purple);
+  font: 650 13px/1 inherit; font-family: inherit; cursor: pointer;
+}
+.stu-workbench .stu-task-card.stu-task-display {
+  min-height: 0;
+  border: 1px solid var(--sd-line);
+  border-radius: var(--sd-radius);
+  background: var(--sd-card);
+  color: var(--sd-ink);
+  box-shadow: var(--sd-shadow);
+}
+.stu-workbench .stu-task-card.stu-task-display::after { display: none; }
+.stu-workbench .stu-task-card.stu-task-display .card-title { color: var(--sd-ink); }
+.stu-workbench .stu-task-card.stu-task-display .st-card-body {
+  border: 1px solid var(--sd-line);
+  border-radius: 12px;
+  background: #faf9ff;
+  color: var(--sd-ink);
+  min-height: 120px;
+  padding: 22px;
+  font-size: var(--task-font-size, 28px);
+}
+.stu-workbench .stu-task-card.stu-task-display .st-text,
+.stu-workbench .stu-task-card.stu-task-display .st-list { color: var(--sd-ink); }
+
+/* ---------- 各功能页细节 ---------- */
+.sd-section-title {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 17px; font-weight: 750; color: var(--sd-ink);
+}
+.sd-section-title svg { width: 20px; height: 20px; color: var(--sd-purple); }
+.sd-section-title.warn svg { color: #f08a2e; }
+.sd-section-sub { margin: 6px 0 0; font-size: 12.5px; color: var(--sd-ink-3); }
+
+/* 教材列表 */
+.stu-workbench .stu-materials { padding: 22px 24px 8px; }
+.stu-workbench .mat-card {
+  gap: 14px;
+  padding: 14px 6px;
+  border-bottom: 1px solid var(--sd-line);
+  border-radius: 0;
+}
+.stu-workbench .doc-ico {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px;
+  background: var(--sd-purple-soft); color: var(--sd-purple);
+}
+.stu-workbench .doc-ico svg { width: 21px; height: 21px; }
+.stu-workbench .stu-material-title { font-size: 14.5px; font-weight: 700; color: var(--sd-ink); }
+.stu-workbench .stu-material-meta { font-size: 12px; }
+.stu-workbench .stu-material-action { color: var(--sd-ink-3); font-size: 12.5px; }
+.stu-workbench .mat-card:hover { background: #faf8ff; border-radius: 10px; }
+
+/* 点名 */
+.stu-workbench .seg {
+  display: inline-flex; gap: 4px; padding: 4px;
+  border-radius: 11px; background: var(--sd-purple-soft);
+}
+.stu-workbench .seg button {
+  flex: 1; height: 34px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--sd-ink-2);
+  font: 600 13px/1 inherit; font-family: inherit; cursor: pointer;
+}
+.stu-workbench .seg button.on { background: var(--sd-card); color: var(--sd-purple); box-shadow: 0 2px 6px rgba(60, 42, 130, .12); }
+.stu-workbench .pk-nr { display: flex; align-items: center; gap: 7px; margin-top: 14px; font-size: 13px; color: var(--sd-ink-2); }
+.stu-workbench .pk-nr input { accent-color: var(--sd-purple); width: 16px; height: 16px; }
+.stu-workbench .pick-stage {
+  margin-top: 16px;
+  border: 1px dashed #d9d0f7;
+  border-radius: 14px;
+  background: #fbfaff;
+  min-height: 130px;
+}
+.stu-workbench #go { height: 50px; font-size: 15.5px; border-radius: 11px; }
+
+/* 盲盒 */
+.sd-box-card { position: relative; overflow: hidden; text-align: center; padding: 26px 28px 24px; }
+.sd-box-card .stu-section-head { margin-bottom: 16px; }
+.stu-workbench .box-stage {
+  min-height: 220px;
+  border: 1.5px dashed #d9cdf6;
+  border-radius: 16px;
+  background: linear-gradient(105deg, #fff5dc 0%, #f7ecff 52%, #eef0ff 100%);
+}
+.stu-workbench .box-icon { font-size: 76px; line-height: 1.1; }
+.stu-workbench .box-text { font-size: 15px; color: var(--sd-ink-2); }
+.stu-workbench #spin { max-width: 380px; margin: 18px auto 0; height: 50px; border-radius: 12px; }
+/* 旧工作台样式把 #spin 刷成了橙棕色，设计稿的「开箱」是紫色主按钮。
+   用同等特异性重写，保证覆盖而不是靠 !important。 */
+.stu-workbench #spin.primary:not(:disabled) {
+  background: linear-gradient(100deg, #7a5ff0, #6749dc);
+  box-shadow: 0 6px 16px -4px rgba(103, 73, 220, .5);
+  color: #fff;
+}
+.sd-box-deco {
+  position: absolute; right: -30px; bottom: -34px; width: 180px; height: 150px;
+  opacity: .5; pointer-events: none;
+  background: radial-gradient(circle at 30% 60%, #ddd2ff 0 18%, transparent 19%),
+              radial-gradient(circle at 70% 35%, #ffe2c9 0 13%, transparent 14%),
+              radial-gradient(circle at 85% 80%, #e3d9ff 0 22%, transparent 23%);
+}
+.sd-handwrite {
+  position: absolute; right: 26px; top: 16px;
+  font-size: 15px; color: #a38ad9; font-style: italic;
+  transform: rotate(-6deg); pointer-events: none;
+}
+
+/* 违纪 / 留言板 字数统计 */
+.sd-count { position: relative; }
+.sd-count .sd-counter {
+  position: absolute; right: 12px; bottom: 10px;
+  font-size: 11.5px; color: var(--sd-ink-3); pointer-events: none;
+}
+.stu-workbench .sd-count textarea.input { padding-bottom: 26px; }
+.sd-submit-row { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 14px; }
+.sd-submit-row .btn.primary { min-width: 108px; height: 42px; border-radius: 11px; }
+.sd-reply-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 0 8px; color: var(--sd-ink-3); font-size: 12.5px;
+}
+.sd-reply-empty span:first-child { font-size: 38px; opacity: .65; }
+.stu-workbench .stu-replies .stu-section-head { margin-bottom: 8px; }
+.stu-workbench #bl-replies { min-height: 46px; }
+
+/* 页面级淡紫装饰（盲盒 / 违纪 / 留言板） */
+.sd-deco-page { position: relative; }
+.sd-deco-page::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  right: 0; top: 0;
+  width: 46vw; height: 100vh;
+  pointer-events: none;
+  opacity: .55;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(184, 162, 255, .34) 0 9%, transparent 10%),
+    radial-gradient(circle at 70% 92%, rgba(255, 214, 186, .28) 0 12%, transparent 13%),
+    radial-gradient(circle at 100% 55%, rgba(196, 180, 255, .22) 0 16%, transparent 17%);
+}
+.sd-deco-page > * { position: relative; z-index: 1; }
+
+/* ---------- 手机 / 小屏 ---------- */
+@media (max-width: 1023px) {
+  .stu-workbench .stu-headwrap { display: none; }
+  .stu-workbench .s-wrap { padding: 12px 14px 72px; overflow-x: hidden; }
+  .stu-workbench .stu-topbar { padding: 16px 16px 2px; }
+  .sd-wico { width: 38px; height: 38px; flex-basis: 38px; border-radius: 11px; }
+  .sd-wico svg { width: 21px; height: 21px; }
+  .sd-wtxt h1 { font-size: 19px; }
+  .sd-wtools { width: 100%; }
+  .sd-search { width: 100%; max-width: none; flex: 1; }
+  .sd-bell { display: none; }
+  .sd-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .sd-stat { min-height: 82px; padding: 14px; }
+  .sd-stat-num { font-size: 26px; }
+  .sd-cols { grid-template-columns: minmax(0, 1fr); }
+  .sd-main-task { padding: 18px; }
+  .sd-deadline { margin-left: 0; }
+  .sd-main-btn { width: 100%; justify-content: center; }
+  .stu-workbench .card-pad { padding: 18px 16px; }
+  .stu-workbench .stu-materials { padding: 18px 16px 6px; }
+  .stu-workbench .s-tabs button { font-size: 11px; }
+}
+@media (max-width: 620px) {
+  .stu-workbench .stu-form-grid { grid-template-columns: 1fr; gap: 0; }
+  .sd-shortcuts { gap: 4px; }
+  .sd-shortcut-ico { width: 42px; height: 42px; }
+  .sd-shortcut b { font-size: 12px; }
+  .sd-shortcut small { font-size: 10px; }
+}

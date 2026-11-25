@@ -1,13 +1,21 @@
 /* ============================================================================
-   attendance-hub.js —— 考勤一级导航下 5 个二级导航的独立页面
+   attendance-hub.js —— 考勤一级导航下 6 个二级导航的独立页面
 
-   由 work.js 在 #/attendance/<sheetKey> 时按需加载。
-   5 个页面共用这一套版式：标题 + 筛选条 + 批量操作 + 独立表格 + 分页。
+   由 work.js 在 #/attendance/<sheetKey> 时按需加载（部门管理走独立模块）。
+   5 张数据表共用这一套版式：标题 + 筛选条 + 批量操作 + 独立表格 + 分页。
    数据走 /att-hub/* 接口，各自存在独立的 att_hub_* 表里。
+
+   v3：
+   · 花名册 = 部门分组 + 「总花名册 / 高一教师花名册 / 高二教师花名册」页签，
+     页签只是同一份数据的筛选视图，不复制数据；新增部门/年级自动多页签。
+   · 坐班 / 上课 / 请假：按日期「上一天 / 下一天」翻页查看当天记录。
+   · 统计：本日 / 本月 / 本年，只汇总真实录入 / 导入 / 迁移的记录。
+   · 每表原有功能（增删改、批量导入、导出 CSV、搜索、筛选、分页）一个不删。
    ========================================================================== */
 import { api, esc, toast, confirmDialog, saveBlob } from './core.js';
 import {
   HUB_SHEETS, sheetDef, blankRow, toCsv, fromCsv, validateRow, gradeOptions,
+  gradeKey, rosterTabLabel, shiftDate, periodRange, DEFAULT_DEPARTMENT,
 } from './attendance-hub-domain.mjs';
 
 const PAGE_SIZE = 20;
@@ -24,9 +32,16 @@ function statusCls(v) {
   return '';
 }
 
-function fieldHTML(col, value) {
+function fieldHTML(col, value, extra = {}) {
   const v = value == null ? '' : String(value);
   const id = `ahub-f-${col.key}`;
+  /* 所属部门由「部门管理」带出，不再手填：渲染成部门下拉 */
+  if (extra.departmentOptions && col.key === 'department') {
+    const opts = extra.departmentOptions;
+    const merged = v && !opts.includes(v) ? [v, ...opts] : opts;
+    return `<label class="ahub-field"><span>${esc(col.label)}${col.required ? ' <i>*</i>' : ''}</span>
+      <select name="${esc(col.key)}" id="${esc(id)}">${optionHTML(merged, v)}</select></label>`;
+  }
   if (col.type === 'select') {
     /* 编辑历史记录时，旧年级可能已经从年级列表里删掉了；
        把当前值补进选项，避免打开编辑框就静默丢掉一个字段。 */
@@ -57,40 +72,78 @@ function overlay(title, body, { wide = false } = {}) {
   return { wrap, close };
 }
 
+/* 北京日期：与服务端口径一致，凌晨 0~8 点不会差一天 */
+function todayCn() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   const key = HUB_SHEETS[sheet] ? sheet : 'roster';
   const def = HUB_SHEETS[key];
+  const isRoster = key === 'roster';
+  const isStats = key === 'stats';
+  const hasDate = def.filters.includes('from');
   const S = {
     key, def,
-    filters: { grade: '', subject: '', from: '', to: '', q: '' },
+    filters: { dept: '', grade: '', subject: '', from: '', to: '', q: '' },
     page: 1, list: [], total: 0, busy: false,
     grades: gradeOptions(null),
+    deptView: null, deptId: '', tab: 'all',
+    day: todayCn(), period: '',
   };
 
   root.innerHTML = `
     <div class="ahub">
-      <header class="ahub-head${key === 'roster' ? ' ahub-head-roster' : ''}">
+      <header class="ahub-head${isRoster ? ' ahub-head-roster' : ''}">
         <div>
           <div class="ahub-crumb">考勤 <span>/</span> ${esc(def.label)}</div>
           <h1>${esc(def.title)}</h1>
           <p>${esc(def.desc)}</p>
         </div>
         <div class="ahub-head-right">
-          ${key === 'roster' ? `<div class="ahub-grade-actions">
-            <button type="button" class="ahub-btn" id="ahub-grade-manage">年级管理</button>
-            <button type="button" class="ahub-btn primary" id="ahub-grade-add">＋ 新建年级</button>
-          </div>` : ''}
           <span class="ahub-tag">独立表 · ${esc(HUB_SHEETS[key].table)}</span>
           <span class="ahub-count" id="ahub-count">—</span>
         </div>
       </header>
+
+      ${isRoster ? `<section class="ahub-card">
+        <div class="ahub-deptbar" id="ahub-deptbar">
+          <span class="ahub-deptbar-label">部门</span>
+          <select id="ahub-dept"><option value="">全部部门</option></select>
+          <div class="ahub-tablist" id="ahub-tablist"></div>
+          <a class="ahub-deptbar-link" href="#/attendance/departments">部门管理 →</a>
+        </div>
+      </section>` : ''}
+
+      ${hasDate && !isStats ? `<section class="ahub-card">
+        <div class="ahub-daynav">
+          <span class="ahub-daynav-label">按日期翻页查看当天记录</span>
+          <button class="ahub-btn ghost" id="ahub-prev-day">← 上一天</button>
+          <input type="date" id="ahub-day" value="${esc(S.day)}">
+          <button class="ahub-btn ghost" id="ahub-next-day">下一天 →</button>
+          <button class="ahub-btn ghost" id="ahub-all-days">全部日期</button>
+          <span class="ahub-daynav-state" id="ahub-day-state">当前：全部日期</span>
+        </div>
+      </section>` : ''}
+
+      ${isStats ? `<section class="ahub-card">
+        <div class="ahub-periods">
+          <span class="ahub-daynav-label">统计我记录的考勤数据</span>
+          <button class="ahub-btn ghost" data-period="day">本日</button>
+          <button class="ahub-btn ghost" data-period="month">本月</button>
+          <button class="ahub-btn ghost" data-period="year">本年</button>
+          <button class="ahub-btn ghost" data-period="">全部</button>
+          <span class="ahub-periods-state" id="ahub-period-state">当前：全部记录</span>
+        </div>
+      </section>` : ''}
 
       <section class="ahub-card ahub-filters">
         <label class="ahub-field"><span>年级</span>
           <select id="ahub-grade"><option value="">全部年级</option>${optionHTML(S.grades, '')}</select></label>
         ${def.filters.includes('subject') ? `<label class="ahub-field"><span>学科</span>
           <input id="ahub-subject" placeholder="如 语文" autocomplete="off"></label>` : ''}
-        ${def.filters.includes('from') ? `<label class="ahub-field"><span>起始日期</span><input type="date" id="ahub-from"></label>
+        ${hasDate ? `<label class="ahub-field"><span>起始日期</span><input type="date" id="ahub-from"></label>
         <label class="ahub-field"><span>结束日期</span><input type="date" id="ahub-to"></label>` : ''}
         <label class="ahub-field grow"><span>搜索</span>
           <input id="ahub-q" placeholder="姓名 / 学科 / 备注等任意字段" autocomplete="off"></label>
@@ -103,10 +156,9 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
             <button class="ahub-btn primary" id="ahub-add">＋ 新增记录</button>
             <button class="ahub-btn" id="ahub-import">批量导入 CSV</button>
             <button class="ahub-btn" id="ahub-export">导出 CSV</button>
-            ${key === 'stats' ? '<button class="ahub-btn" id="ahub-refresh">刷新汇总</button>' : ''}
-            <button class="ahub-btn ghost" id="ahub-migrate" title="把旧年级工作台里的历史数据同步到这 5 张表">同步旧数据</button>
+            ${isStats ? '<button class="ahub-btn" id="ahub-refresh">刷新汇总</button>' : ''}
           </div>
-          <span class="ahub-tip">年级 / 日期只是筛选条件，切换不会隐藏或清除已存数据</span>
+          <span class="ahub-tip">部门 / 年级 / 日期只是筛选条件，切换不会隐藏或清除已存数据</span>
         </div>
         <div class="ahub-table-wrap">
           <table class="ahub-table">
@@ -124,12 +176,65 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
 
   const $ = (sel) => root.querySelector(sel);
 
-  /* ---------------- 年级管理 ----------------
-     旧「考勤管理首页」下线后，「年级管理 / 新建年级」搬到花名册标题行。
-     年级列表来自 /grades，一个年级都没建过时给三项兜底。 */
+  /* ---------------- 部门 / 年级配置 ---------------- */
+  async function loadDepts() {
+    const data = await api.get('/departments').catch(() => null);
+    S.deptView = data;
+    const list = Array.isArray(data?.list) ? data.list : [];
+    /* 默认停在「全部部门」：所有部门下的年级分表都要出现在页签里。
+       以前默认选中「高中部」，新建部门 / 年级后花名册仍只显示高中部那几张表，
+       用户会以为新部门没生效。只有用户手动选过部门才保留选择。 */
+    if (S.deptId && !list.some((d) => String(d.id) === String(S.deptId))) S.deptId = '';
+    const sel = $('#ahub-dept');
+    if (sel) {
+      sel.innerHTML = `<option value="">全部部门</option>${list.map((d) =>
+        `<option value="${esc(d.id)}"${String(d.id) === String(S.deptId) ? ' selected' : ''}>${esc(d.name)}</option>`).join('')}`;
+    }
+    /* 花名册筛选下拉用同一份年级名单，避免两处不同步 */
+    if (data && Array.isArray(data.grades) && data.grades.length) {
+      S.grades = [...new Set(data.grades.map((g) => String(g).trim()).filter(Boolean))];
+      const gsel = $('#ahub-grade');
+      if (gsel) gsel.innerHTML = `<option value="">全部年级</option>${optionHTML(S.grades, S.filters.grade)}`;
+    }
+    paintTabs();
+  }
+
+  function currentDept() {
+    return (S.deptView?.list || []).find((d) => String(d.id) === String(S.deptId)) || null;
+  }
+
+  function paintTabs() {
+    const box = $('#ahub-tablist');
+    if (!box) return;
+    const d = currentDept();
+    /* 选「全部部门」时把所有部门的年级合起来做页签，避免分表凭空消失 */
+    const allGrades = (S.deptView?.list || []).flatMap((x) => x.grades || []);
+    const grades = d ? d.grades : allGrades;
+    /* 总表计数取部门配置的真实统计，不用 S.total —— 后者是当前筛选后的行数，
+       切到某个年级页签时「总花名册 · N」会跟着变小，看起来像数据丢了。 */
+    const totalAll = [...allGrades, ...(S.deptView?.unassigned || [])]
+      .reduce((s, g) => s + (Number(g.teacherCount) || 0), 0);
+    const tabs = [{ k: 'all', label: '总花名册', count: d ? d.teacherCount : (totalAll || S.total) }];
+    for (const g of grades) {
+      tabs.push({ k: g.name, label: rosterTabLabel(g.name), count: g.teacherCount || 0 });
+    }
+    if (!tabs.some((t) => t.k === S.tab)) S.tab = 'all';
+    box.innerHTML = tabs.map((t) =>
+      `<button type="button" class="ahub-tab${String(t.k) === String(S.tab) ? ' on' : ''}" data-tab="${esc(t.k)}">${esc(t.label)} · ${Number(t.count) || 0}</button>`).join('');
+    box.querySelectorAll('[data-tab]').forEach((btn) => {
+      btn.onclick = () => {
+        S.tab = btn.dataset.tab;
+        S.filters.grade = S.tab === 'all' ? '' : S.tab;
+        S.page = 1;
+        paintTabs();
+        load({ silent: true });
+      };
+    });
+  }
+
   async function loadGrades() {
     const data = await api.get('/grades').catch(() => null);
-    S.grades = gradeOptions(data);
+    if (!S.deptView) S.grades = gradeOptions(data);
     const sel = $('#ahub-grade');
     if (!sel) return;
     const cur = sel.value || '';
@@ -138,12 +243,17 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     sel.innerHTML = `<option value="">全部年级</option>${optionHTML(list, cur)}`;
   }
 
-  async function refreshAfterGradeChange() {
-    await loadGrades();
-    await load({ silent: true });
+  /* ---------------- 数据加载 ---------------- */
+  /* 花名册增删改之后重新取一次部门配置，页签上的「· N」才不会停在旧数字。
+     只更新数据，不重建部门下拉、不改动用户当前选中的部门。 */
+  async function refreshDeptCounts() {
+    const data = await api.get('/departments').catch(() => null);
+    if (data && Array.isArray(data.list)) {
+      S.deptView = { ...(S.deptView || {}), ...data };
+      paintTabs();
+    }
   }
 
-  /* ---------------- 数据加载 ---------------- */
   async function load({ silent = false } = {}) {
     if (S.busy) return;
     S.busy = true;
@@ -157,6 +267,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
       S.list = Array.isArray(data.list) ? data.list : [];
       S.total = Number(data.total) || S.list.length;
       paint();
+      if (isRoster) await refreshDeptCounts();
     } catch (e) {
       if (!silent) toast('加载失败：' + (e.message || e), 'warn', 4000);
       $('#ahub-tbody').innerHTML = `<tr><td colspan="12" class="ahub-empty">加载失败，请刷新重试</td></tr>`;
@@ -201,11 +312,18 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   function openForm(row = null) {
     const editing = !!row;
     const values = { ...blankRow(key), ...(row || {}) };
+    if (!row && isRoster) {
+      /* 所属部门 / 年级由部门分组和当前页签自动带出，不用手填 */
+      values.department = currentDept()?.name || DEFAULT_DEPARTMENT;
+      if (S.tab !== 'all') values.grade = S.tab;
+      else if (!values.grade) values.grade = gradeKey(S.grades[0] || '') || '';
+    }
     if (!row && values.grade && !S.grades.includes(values.grade)) values.grade = S.grades[0] || '';
+    const deptOptions = (S.deptView?.list || []).map((d) => d.name);
     /* 年级下拉用动态列表，其余列保持字段契约里的固定选项 */
     const cols = S.def.columns.map((c) => (c.key === 'grade' ? { ...c, options: S.grades } : c));
     const body = `<form id="ahub-form" class="ahub-form">
-      ${cols.map((c) => fieldHTML(c, values[c.key])).join('')}
+      ${cols.map((c) => fieldHTML(c, values[c.key], { departmentOptions: isRoster ? deptOptions : null })).join('')}
       <div class="ahub-form-err" id="ahub-form-err"></div>
       <div class="ahub-form-actions">
         <button type="button" class="ahub-btn ghost" data-close>取消</button>
@@ -233,7 +351,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   }
 
   async function removeRow(row) {
-    const ok = await confirmDialog(`确定删除这条${def.label}记录吗？删除后可在回收站之外通过重新同步旧数据找回（如来自迁移）。`, { title: '删除记录', okText: '删除', danger: true });
+    const ok = await confirmDialog(`确定删除这条${def.label}记录吗？`, { title: '删除记录', okText: '删除', danger: true });
     if (!ok) return;
     try {
       await api.del(`/att-hub/${key}/${row.id}`);
@@ -299,47 +417,118 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
     if (el.tagName === 'SELECT') el.onchange = apply;
     else { let timer; el.oninput = () => { clearTimeout(timer); timer = setTimeout(apply, 280); }; }
   };
+  if ($('#ahub-dept')) {
+    $('#ahub-dept').onchange = () => {
+      S.deptId = $('#ahub-dept').value;
+      const d = currentDept();
+      S.filters.dept = d ? d.name : '';
+      S.filters.grade = ''; S.tab = 'all'; S.page = 1;
+      paintTabs(); load({ silent: true });
+    };
+  }
   bindFilter('#ahub-grade', 'grade');
+  /* 年级下拉与三张表页签是同一个筛选条件，必须双向同步：
+     手动选年级时高亮对应页签（或回到总花名册），否则会出现「表格是高一、页签却停在总表」。 */
+  const gradeSel = $('#ahub-grade');
+  if (gradeSel && isRoster) {
+    const prev = gradeSel.onchange;
+    gradeSel.onchange = () => {
+      prev?.();
+      /* 「全部部门」下没有 currentDept()，要用全部部门的年级池来匹配页签，
+         否则手动选年级后页签会错误地跳回总花名册。 */
+      const pool = currentDept()?.grades || (S.deptView?.list || []).flatMap((x) => x.grades || []);
+      const match = pool.find((g) => gradeKey(g.name) === gradeKey(S.filters.grade));
+      S.tab = S.filters.grade ? (match?.name || 'all') : 'all';
+      paintTabs();
+    };
+  }
   bindFilter('#ahub-subject', 'subject');
   bindFilter('#ahub-from', 'from');
   bindFilter('#ahub-to', 'to');
   bindFilter('#ahub-q', 'q');
   $('#ahub-reset').onclick = () => {
-    S.filters = { grade: '', subject: '', from: '', to: '', q: '' };
+    S.filters = { dept: S.filters.dept, grade: '', subject: '', from: '', to: '', q: '' };
     ['#ahub-grade', '#ahub-subject', '#ahub-from', '#ahub-to', '#ahub-q'].forEach((s) => { const e = $(s); if (e) e.value = ''; });
+    S.tab = 'all'; S.day = todayCn(); S.period = '';
+    paintTabs(); paintDayState(); paintPeriodState();
     S.page = 1; load({ silent: true });
   };
-  if ($('#ahub-grade-add')) {
-    $('#ahub-grade-add').onclick = async () => {
-      const m = await import('./attgrade.js');
-      m.addGradeDialog(() => refreshAfterGradeChange());
-    };
-    $('#ahub-grade-manage').onclick = async () => {
-      const m = await import('./attgrade.js');
-      await m.gradeManageDialog(() => refreshAfterGradeChange(), () => refreshAfterGradeChange());
+
+  /* 按日期翻页：选中某天时 from=to=该天；「全部日期」清掉日期筛选 */
+  function paintDayState() {
+    const el = $('#ahub-day-state');
+    if (!el) return;
+    el.textContent = S.filters.from && S.filters.from === S.filters.to
+      ? `当前：${S.filters.from} 的记录` : '当前：全部日期';
+  }
+  function setDay(d) {
+    S.day = d;
+    const input = $('#ahub-day');
+    if (input) input.value = d;
+    S.filters.from = d; S.filters.to = d;
+    const f = $('#ahub-from'), t = $('#ahub-to');
+    if (f) f.value = d; if (t) t.value = d;
+    S.page = 1;
+    paintDayState();
+    load({ silent: true });
+  }
+  if ($('#ahub-prev-day')) {
+    $('#ahub-prev-day').onclick = () => setDay(shiftDate(S.day, -1));
+    $('#ahub-next-day').onclick = () => setDay(shiftDate(S.day, 1));
+    $('#ahub-day').onchange = (e) => { if (e.target.value) setDay(e.target.value); };
+    $('#ahub-all-days').onclick = () => {
+      S.filters.from = ''; S.filters.to = '';
+      const f = $('#ahub-from'), t = $('#ahub-to');
+      if (f) f.value = ''; if (t) t.value = '';
+      S.page = 1; paintDayState(); load({ silent: true });
     };
   }
+
+  /* 统计：本日 / 本月 / 本年 */
+  function paintPeriodState() {
+    const el = $('#ahub-period-state');
+    if (!el) return;
+    el.textContent = S.period ? `当前：${periodRange(S.period, todayCn()).label}` : '当前：全部记录';
+    root.querySelectorAll('[data-period]').forEach((b) => b.classList.toggle('on', b.dataset.period === S.period));
+  }
+  root.querySelectorAll('[data-period]').forEach((btn) => {
+    btn.onclick = async () => {
+      S.period = btn.dataset.period || '';
+      const r = periodRange(S.period, todayCn());
+      S.filters.from = r.from; S.filters.to = r.to;
+      const f = $('#ahub-from'), t = $('#ahub-to');
+      if (f) f.value = r.from; if (t) t.value = r.to;
+      S.page = 1;
+      paintPeriodState();
+      try {
+        const res = await api.post('/att-hub-refresh', {
+          from: r.from, to: r.to, label: r.label, grade: S.filters.grade || '全部',
+        });
+        toast(`已按「${r.label}」重算 ${res.count} 条汇总（手工修正的记录保留）`, 'ok', 3500);
+      } catch (e) { toast('汇总失败：' + (e.message || e), 'warn'); }
+      await load({ silent: true });
+    };
+  });
+
   $('#ahub-add').onclick = () => openForm();
   $('#ahub-import').onclick = openImport;
   $('#ahub-export').onclick = exportCsv;
   $('#ahub-prev').onclick = () => { if (S.page > 1) { S.page -= 1; paint(); } };
   $('#ahub-next').onclick = () => { if (S.page * PAGE_SIZE < S.list.length) { S.page += 1; paint(); } };
-  $('#ahub-migrate').onclick = async () => {
-    try {
-      const res = await api.post('/att-hub-migrate');
-      const sum = Object.entries(res.migrated || {}).map(([k, v]) => `${HUB_SHEETS[k].label} ${v}`).join('、');
-      toast(`同步完成：${sum || '没有新增数据'}`, 'ok', 4200);
-      await load({ silent: true });
-    } catch (e) { toast('同步失败：' + (e.message || e), 'warn'); }
-  };
   if ($('#ahub-refresh')) $('#ahub-refresh').onclick = async () => {
     try {
-      const res = await api.post('/att-hub-refresh', { period: S.filters.from || '', grade: S.filters.grade || '全部' });
+      const r = periodRange(S.period, todayCn());
+      const res = await api.post('/att-hub-refresh', {
+        period: S.filters.from || '', grade: S.filters.grade || '全部',
+        from: S.filters.from, to: S.filters.to, label: r.label || '全部',
+      });
       toast(`已重算 ${res.count} 条汇总（手工修正的记录保留）`, 'ok', 3500);
       await load({ silent: true });
     } catch (e) { toast('汇总失败：' + (e.message || e), 'warn'); }
   };
 
+  await loadDepts();
+  if (isRoster && currentDept()) S.filters.dept = currentDept().name;
   await loadGrades();
   await load();
 }

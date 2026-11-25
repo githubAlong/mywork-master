@@ -41,6 +41,7 @@ import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.m
 import {
   HUB_SHEETS, HUB_SHEET_KEYS, HUB_TABLES, sheetDef, isHubSheet,
   normalizeRow, validateRow, filterRows, calcStats, migrationKey,
+  DEFAULT_DEPARTMENT, gradesOfDepartment, deptName,
 } from './attendance-hub-domain.mjs';
 
 /* ============================ 基础工具 ============================ */
@@ -1492,6 +1493,9 @@ const hubStamp = () => nowISO();
 on('GET', '/att-hub/:sheet', ({ params, query }) => {
   const t = hubTable(params.sheet);
   const def = sheetDef(params.sheet);
+  /* 老库升级：进花名册时顺带做一次性清洗与部门初始化（幂等），
+     否则已迁移的 100 条会一直顶着 T-0100 编号和「由原花名册迁移」备注。 */
+  if (params.sheet === 'roster') ensureHubV3();
   const list = filterRows(params.sheet, hubRows(t), query);
   return {
     sheet: params.sheet, label: def.label, title: def.title, desc: def.desc,
@@ -1574,13 +1578,15 @@ on('POST', '/att-hub-migrate', () => {
     return true;
   };
 
-  /* 花名册：教师主数据全量迁，统一编号作为其余 4 张表的主键来源 */
+  /* 花名册：教师主数据全量迁，按 v3 口径落库 —— 教师序号纯数字、
+     所属部门统一高中部、备注清空、不写「任教班级」。 */
   const teachers = rowsOf('teachers');
   teachers.forEach((t, i) => push('roster', {
-    teacher_id: 'T-' + String(num(t.id) || i + 1).padStart(4, '0'),
+    teacher_id: String(i + 1),
     name: t.name, subject: t.subject || '', grade: t.grade || '',
+    department: DEFAULT_DEPARTMENT,
     status: num(t.active) === 0 ? '离职' : '在职',
-    phone: t.phone || '', remark: '由原花名册迁移',
+    phone: t.phone || '', remark: '',
   }, migrationKey('roster', 'teachers', t.id)));
 
   /* 其余 4 张：旧考勤表逐行展开。教研表并入上课表，不再单独占页签。 */
@@ -1613,10 +1619,14 @@ on('POST', '/att-hub-migrate', () => {
   return { migrated, teachers: teachers.length, tables: tables.length };
 });
 
-/* 统计表：从 4 张业务表重算。旧的「自动汇总」行软删，手工修正的行保留。 */
+/* 统计表：从 4 张业务表重算。旧的「自动汇总」行软删，手工修正的行保留。
+   range = { from, to } 支持本日 / 本月 / 本年「我记录的考勤数据」。 */
 on('POST', '/att-hub-refresh', ({ body }) => {
   const period = String(body?.period || '').trim();
   const grade = String(body?.grade || '全部').trim() || '全部';
+  const from = String(body?.from || '').trim();
+  const to = String(body?.to || '').trim();
+  const label = String(body?.label || '').trim() || period || '全部';
   const t = HUB_SHEETS.stats.table;
   for (const r of T(t)) {
     if (!r.deleted_at && String(r.remark || '').includes('自动汇总')) {
@@ -1628,12 +1638,246 @@ on('POST', '/att-hub-refresh', ({ body }) => {
     duty: rowsOf(HUB_SHEETS.duty.table),
     klass: rowsOf(HUB_SHEETS.class.table),
     leave: rowsOf(HUB_SHEETS.leave.table),
-  }, period, grade);
+  }, period, grade, from || to ? { from, to } : null);
   for (const raw of rows) {
-    T(t).push({ id: hubNextId(t), ...normalizeRow('stats', raw), created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null });
+    T(t).push({ id: hubNextId(t), ...normalizeRow('stats', { ...raw, period: label }), created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null });
   }
   save();
-  return { count: rows.length, period, grade };
+  return { count: rows.length, period: label, grade, from, to };
+});
+
+/* ==========================================================================
+   部门管理（v3）：部门 → 年级 两级配置
+   --------------------------------------------------------------------------
+   · 部门存在新表 att_hub_departments；年级名单仍复用 /grades 的
+     u.settings.grades，归属记在 u.settings.gradeDept（{ 年级名: 部门 id }）。
+     这样花名册筛选下拉、旧年级工作台、导入导出全都不用改。
+   · 老库升级：首次读取时自动建「高中部」，把已有年级挂进去，
+     并把已迁移的花名册一次性清洗成「教师序号 / 高中部 / 备注清空」。
+   · 删除年级只解除关联，任何教师与考勤记录都不删。
+   ========================================================================== */
+const DEPT_TABLE = 'att_hub_departments';
+const deptRows = () => rowsOf(DEPT_TABLE).sort((a, b) => num(a.id) - num(b.id));
+const deptNextId = () => T(DEPT_TABLE).reduce((mx, r) => Math.max(mx, num(r.id)), 0) + 1;
+const gradeDeptMap = () => {
+  const u = currentUser();
+  u.settings = u.settings || {};
+  if (!u.settings.gradeDept || typeof u.settings.gradeDept !== 'object') u.settings.gradeDept = {};
+  return u.settings.gradeDept;
+};
+const gradeNameList = () => {
+  const u = currentUser();
+  const off = (u.settings?.gradeOff || []).filter(Boolean);
+  return [...new Set((u.settings?.grades || []).filter(Boolean)
+    .map((g) => String(g).trim()).filter((g) => g && !off.includes(g)))];
+};
+const gradeCountOf = (g) => rowsOf(HUB_SHEETS.roster.table)
+  .filter((r) => String(r.grade || '').trim().replace(/年级$/, '') === String(g).trim().replace(/年级$/, '')).length;
+
+/* 年级改名：5 张考勤表 + 老名册 / 老考勤表 + 归属映射一起同步，
+   避免「部门管理」改完名字，花名册筛选和已有记录对不上。 */
+function renameGradeEverywhere(oldName, newName) {
+  const map = gradeDeptMap();
+  let hub = 0; let teachers = 0; let tables = 0;
+  if (oldName !== newName) {
+    for (const t of HUB_TABLES) {
+      for (const r of rowsOf(t)) {
+        if (r.grade === oldName) { r.grade = newName; r.updated_at = nowISO(); hub += 1; }
+      }
+    }
+    for (const r of rowsOf('teachers')) {
+      if (r.grade === oldName) { r.grade = newName; r.updated_at = nowISO(); teachers += 1; }
+    }
+    for (const r of T('attendance_tables')) {
+      if (r.grade === oldName) { r.grade = newName; r.updated_at = nowISO(); tables += 1; }
+    }
+    const u = currentUser();
+    u.settings = u.settings || {};
+    u.settings.grades = [...new Set((u.settings.grades || []).map((g) => (g === oldName ? newName : g)))];
+    if (Object.prototype.hasOwnProperty.call(map, oldName)) {
+      map[newName] = map[oldName]; delete map[oldName];
+    }
+  }
+  return { hub, teachers, tables };
+}
+
+/* 一次性初始化 + 老数据清洗，幂等。GET /departments 与 GET /att-hub/roster 都会触发。 */
+function ensureHubV3() {
+  const db = load();
+  const u = currentUser();
+  u.settings = u.settings || {};
+  const map = gradeDeptMap();
+  let dirty = false;
+
+  if (!db.meta.attHubDeptSeeded) {
+    dirty = true;
+    if (!deptRows().length) {
+      T(DEPT_TABLE).push({ id: 1, name: DEFAULT_DEPARTMENT, created_at: nowISO(), updated_at: nowISO(), deleted_at: null });
+    }
+    /* 年级名单：优先用已建年级；再把花名册里实际出现的年级补进来；
+       全新空库给「高一 / 高二」两个初始年级，保证总表 + 两张分表能出现。 */
+    const known = gradeNameList();
+    /* 「高一」与「高一年级」是同一个年级，只留名单里的写法，避免生成重复页签 */
+    const norm = (g) => String(g || '').trim().replace(/年级$/, '');
+    for (const r of rowsOf(HUB_SHEETS.roster.table)) {
+      const g = String(r.grade || '').trim();
+      if (g && g !== '全部' && !known.some((k) => norm(k) === norm(g))) {
+        known.push(g);
+        u.settings.grades = [...new Set([...(u.settings.grades || []), g])];
+      }
+    }
+    if (!known.length) {
+      known.push('高一', '高二');
+      u.settings.grades = [...new Set([...(u.settings.grades || []), '高一', '高二'])];
+    }
+    const first = deptRows()[0];
+    for (const g of known) if (!map[g]) map[g] = num(first.id);
+    db.meta.attHubDeptSeeded = 1;
+  }
+
+  /* 老花名册一次性清洗：教师序号纯数字、所属部门补高中部、备注清空、
+     去掉已下线的「任教班级」残留值。只跑一次，不碰其它字段、不删记录。 */
+  if (!db.meta.attHubV3Cleaned) {
+    dirty = true;
+    const roster = rowsOf(HUB_SHEETS.roster.table).sort((a, b) => num(a.id) - num(b.id));
+    roster.forEach((r, i) => {
+      r.teacher_id = String(i + 1);
+      if (!String(r.department || '').trim()) r.department = DEFAULT_DEPARTMENT;
+      r.remark = '';
+      if ('class_name' in r) delete r.class_name;
+      r.updated_at = nowISO();
+    });
+    db.meta.attHubV3Cleaned = 1;
+  }
+  /* 幂等：只在首次升级时落盘，平时 GET 不产生写操作 */
+  if (dirty) { saveUser(u); save(); }
+}
+
+function deptView() {
+  ensureHubV3();
+  const map = gradeDeptMap();
+  const allGrades = gradeNameList();
+  const list = deptRows().map((d) => {
+    const grades = gradesOfDepartment(allGrades, map, d.id)
+      .map((g) => ({ name: g, teacherCount: gradeCountOf(g) }));
+    return {
+      id: d.id, name: String(d.name || ''),
+      grades,
+      gradeCount: grades.length,
+      teacherCount: grades.reduce((s, g) => s + g.teacherCount, 0),
+    };
+  });
+  const assigned = new Set(list.flatMap((d) => d.grades.map((g) => g.name)));
+  return {
+    list,
+    grades: allGrades,
+    unassigned: allGrades.filter((g) => !assigned.has(g)).map((g) => ({ name: g, teacherCount: gradeCountOf(g) })),
+    defaultDepartment: DEFAULT_DEPARTMENT,
+  };
+}
+
+on('GET', '/departments', () => deptView());
+
+on('POST', '/departments', ({ body }) => {
+  ensureHubV3();
+  const name = deptName(body?.name);
+  if (!name) fail(400, '部门名不能为空');
+  if (deptRows().some((d) => String(d.name) === name)) fail(400, '已经有叫这个名字的部门了');
+  const item = { id: deptNextId(), name, created_at: nowISO(), updated_at: nowISO(), deleted_at: null };
+  T(DEPT_TABLE).push(item);
+  save();
+  return { item, ...deptView() };
+});
+
+on('PATCH', '/departments/:id', ({ params, body }) => {
+  ensureHubV3();
+  const row = byId(DEPT_TABLE, params.id);
+  if (!row) fail(404, '没有这个部门');
+  const name = deptName(body?.name);
+  if (!name) fail(400, '部门名不能为空');
+  if (deptRows().some((d) => String(d.id) !== String(row.id) && String(d.name) === name)) fail(400, '已经有叫这个名字的部门了');
+  const old = String(row.name);
+  let hub = 0;
+  if (old !== name) {
+    for (const r of rowsOf(HUB_SHEETS.roster.table)) {
+      if (r.department === old) { r.department = name; r.updated_at = nowISO(); hub += 1; }
+    }
+  }
+  row.name = name; row.updated_at = nowISO();
+  save();
+  return { item: row, renamedRows: hub, ...deptView() };
+});
+
+/* 删除部门：有年级或教师数据时默认只返回影响范围（blocked），
+   前端二次确认后带 ?force=1 才真删；年级变为「未分配」，记录一条不删。 */
+on('DELETE', '/departments/:id', ({ params, query }) => {
+  ensureHubV3();
+  const row = byId(DEPT_TABLE, params.id);
+  if (!row) fail(404, '没有这个部门');
+  const view = deptView();
+  const me = view.list.find((d) => String(d.id) === String(row.id)) || { grades: [], teacherCount: 0 };
+  if (String(query?.force || '') !== '1' && (me.gradeCount || me.teacherCount)) {
+    return { ok: true, blocked: true, gradeCount: me.gradeCount, teacherCount: me.teacherCount };
+  }
+  const map = gradeDeptMap();
+  for (const g of me.grades) if (String(map[g.name]) === String(row.id)) delete map[g.name];
+  row.deleted_at = nowISO(); row.updated_at = nowISO();
+  save();
+  return { ok: true, blocked: false, ...deptView() };
+});
+
+/* 在部门下新建年级：同时写年级名单和归属，已建过的名字直接复用（可改归属）。 */
+on('POST', '/departments/:id/grades', ({ params, body }) => {
+  ensureHubV3();
+  const row = byId(DEPT_TABLE, params.id);
+  if (!row) fail(404, '没有这个部门');
+  const name = String(body?.name || '').trim().slice(0, 12);
+  if (!name) fail(400, '年级名不能为空');
+  const u = currentUser();
+  u.settings = u.settings || {};
+  const all = gradeNameList();
+  if (all.includes(name)) fail(400, '已经有叫这个名字的年级了');
+  u.settings.grades = [...new Set([...(u.settings.grades || []), name])];
+  /* 名字曾被关掉过（gradeOff）时重新打开，否则 /grades 读不到 */
+  u.settings.gradeOff = (u.settings.gradeOff || []).filter((g) => g !== name);
+  gradeDeptMap()[name] = num(row.id);
+  saveUser(u);
+  save();
+  return { item: { name, departmentId: row.id }, ...deptView() };
+});
+
+on('PATCH', '/departments/grades/:name', ({ params, body }) => {
+  ensureHubV3();
+  const oldName = decodeURIComponent(params.name);
+  const all = gradeNameList();
+  if (!all.includes(oldName)) fail(404, '没有这个年级');
+  const name = String(body?.name || '').trim().slice(0, 12) || oldName;
+  if (name !== oldName && all.includes(name)) fail(400, '已经有叫这个名字的年级了');
+  if (name.length > 12) fail(400, '年级名不能超过 12 个字');
+  const migrated = renameGradeEverywhere(oldName, name);
+  const deptId = String(body?.departmentId || '').trim();
+  if (deptId) {
+    if (!byId(DEPT_TABLE, deptId)) fail(404, '没有这个部门');
+    gradeDeptMap()[name] = num(deptId);
+  }
+  save();
+  return { ok: true, migrated, ...deptView() };
+});
+
+/* 删除年级：只从名单与归属里移除，教师与 5 张考勤表的记录全部保留。 */
+on('DELETE', '/departments/grades/:name', ({ params }) => {
+  ensureHubV3();
+  const name = decodeURIComponent(params.name);
+  const u = currentUser();
+  u.settings = u.settings || {};
+  if (!gradeNameList().includes(name)) fail(404, '没有这个年级');
+  u.settings.grades = (u.settings.grades || []).filter((g) => g !== name);
+  u.settings.gradeOff = [...new Set([...(u.settings.gradeOff || []), name])];
+  const map = gradeDeptMap();
+  delete map[name];
+  saveUser(u);
+  save();
+  return { ok: true, keptRecords: true, ...deptView() };
 });
 
 /* ---- 账号 ---- */
@@ -3305,6 +3549,13 @@ on('POST', '/grades', ({ body }) => {
   const u = currentUser();
   u.settings = u.settings || {};
   u.settings.grades = [...new Set([...(u.settings.grades || []), name])];
+  /* v3：走旧接口新建的年级也要归到默认部门，否则部门管理页会把它显示成「未分配」。 */
+  ensureHubV3();
+  const map = gradeDeptMap();
+  if (!map[name]) {
+    const first = deptRows()[0];
+    if (first) map[name] = num(first.id);
+  }
   saveUser(u);
   return { grades: [...new Set([...DEFAULT_GRADES, ...u.settings.grades])] };
 });
@@ -3353,6 +3604,9 @@ on('PATCH', '/grades/:name', async ({ params, body }) => {
   if (name !== old) {
     u.settings.grades = [...new Set(extra.map((g) => (g === old ? name : g)).concat(extra.includes(old) ? [] : [name]))];
     if (DEFAULT_GRADES.includes(old) && !off.includes(old)) off.push(old);
+    /* v3：归属映射的 key 跟着年级改名一起换，否则该年级会从部门里掉出来。 */
+    const map = gradeDeptMap();
+    if (Object.prototype.hasOwnProperty.call(map, old)) { map[name] = map[old]; delete map[old]; }
   }
   saveUser(u);
   save();
@@ -3388,6 +3642,7 @@ on('DELETE', '/grades/:name', async ({ params }) => {
   }
   u.settings.grades = extra.filter((g) => g !== name);
   if (DEFAULT_GRADES.includes(name) && !off.includes(name)) off.push(name);
+  delete gradeDeptMap()[name];
   saveUser(u);
   save();
   return {

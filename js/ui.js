@@ -108,9 +108,11 @@ export const NAV = [
       /* 备课紧接课表：课前看图、课后备课，动线是连着的。 */
       { id: 'prep', label: '备课', icon: 'book' },
       { id: 'repairs', label: '维修', icon: 'wrench' },
-      /* 考勤是唯一的一级导航，下面 5 个二级导航各自是独立页面 + 独立数据表。
-         侧栏渲染层（navHTML / subNavHTML）原生支持 sub，不需要另写一套菜单。 */
+      /* 考勤一级导航下面 6 个二级导航各自是独立页面。
+         v3 新增「部门管理」：放在花名册上面、考勤下面，统一管新建部门 / 新建年级。
+         部门是年级的上级，花名册分表页签由这里的配置自动生成。 */
       { id: 'attendance', label: '考勤', icon: 'users', sub: [
+        { id: 'departments', label: '部门管理', icon: 'users' },
         { id: 'roster', label: '花名册', icon: 'users' },
         { id: 'duty', label: '坐班表', icon: 'clock' },
         { id: 'class', label: '上课表', icon: 'book' },

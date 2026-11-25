@@ -142,6 +142,8 @@ const EXTRA_TABLES = [
   /* 考勤二级导航的 5 张独立表：和旧的 attendance_tables/rows 完全解耦，
      行里带 grade / date 但那只是筛选条件，不再按年级+日期建表隔离。 */
   'att_hub_roster', 'att_hub_duty', 'att_hub_class', 'att_hub_leave', 'att_hub_stats',
+  /* v3 部门管理：部门 → 年级 两级配置（年级名单仍复用 /grades） */
+  'att_hub_departments',
 ];
 const ALL_TABLES = [...Object.keys(TABLES), ...EXTRA_TABLES];
 
