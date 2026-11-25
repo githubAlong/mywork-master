@@ -20,7 +20,9 @@
 .org {
   display: flex; flex-direction: column; gap: 14px;
   padding: 2px 0 36px;
-  max-width: 1120px;
+  /* v428：这一页要铺满内容区。原来限死 1120px 且没有 margin:auto，
+     宽屏下内容全挤在左边、右侧空一大片；宽度交给外层 .main 决定。 */
+  max-width: none;
   color: var(--org-ink);
   font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
