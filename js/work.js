@@ -10,6 +10,7 @@ import { renderPreps } from './prep.js';
 import { renderTripManagement } from './trips.js';
 import { syncMaterialSharing } from './material-sharing.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
+import { PUNISH_SEEDS } from './punish-seeds.mjs';
 
 const M = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 /* 备注字段统一生成器。
@@ -2358,7 +2359,7 @@ function paintPunishCard(items, records) {
         <div class="small muted">学生点「盲盒」随机弹一个，点到什么这里立刻能看到。</div>
       </div>
       <button class="btn ghost sm" id="pb-add">${icon('plus', 15)} 加任务</button>
-      ${items.length ? `<button class="btn ghost sm" id="pb-seed">补经典任务</button>` : ''}
+      <button class="btn ghost sm" id="pb-seed">补齐到 100 个</button>
     </div>
     ${items.length ? `<div class="pb-list">
       ${items.map((p) => `<div class="pb-row">
@@ -2367,7 +2368,7 @@ function paintPunishCard(items, records) {
         <button class="icon-btn sm" data-pb-edit="${p.id}">${icon('edit', 14)}</button>
         <button class="icon-btn sm" data-pb-del="${p.id}">${icon('close', 13)}</button>
       </div>`).join('')}
-    </div>` : '<div class="empty" style="padding:18px 0">还没有任务，点「加任务」或「补默认任务」开始</div>'}
+    </div>` : '<div class="empty" style="padding:18px 0">还没有任务，点「加任务」或「补齐到 100 个」开始</div>'}
     ${today.length ? `<div class="pb-recent">
       <div class="tiny muted" style="margin:10px 0 6px">今天学生点到的（${today.length} 条）</div>
       ${today.slice(0, 6).map((r) => `<div class="pb-rec">
@@ -3068,7 +3069,7 @@ async function renderStudentModule(box, key) {
       </div>
       <div class="row wrap" style="gap:8px;margin:16px 0 4px">
         <button class="btn primary sm" id="mb-add">${icon('plus', 15)} 加任务</button>
-        ${punishes.length ? '<button class="btn ghost sm" id="mb-seed">补经典任务</button>' : ''}
+        <button class="btn ghost sm" id="mb-seed">补齐到 100 个</button>
         <span style="flex:1"></span>
         <span class="tiny muted">学生那边这一轮不重复，点完自动洗牌</span>
       </div>
@@ -3095,25 +3096,17 @@ async function renderStudentModule(box, key) {
     paintList();
     inner.querySelector('#mb-add')?.addEventListener('click', () => punishEditor(null, () => renderStudentModule(box, key)));
     inner.querySelector('#mb-seed')?.addEventListener('click', async () => {
-      if (!(await confirmDialog('补一批经典任务（12 个，自动跳过已有的）？'))) return;
       const have = new Set(punishes.map((p) => p.text.trim()));
-      const seeds = [
-        ['唱歌 30 秒：随便唱一首，全班跟拍', 'light'],
-        ['讲个笑话，要让人笑出来', 'light'],
-        ['做 20 个深蹲', 'heavy'],
-        ['做 15 个开合跳', 'average'],
-        ['领读今天的课文段落', 'average'],
-        ['当小老师：给全班讲一道题', 'average'],
-        ['用一句话总结这节课的重点', 'average'],
-        ['30 秒英文自我介绍', 'heavy'],
-        ['背诵一句名言并解释意思', 'light'],
-        ['给同桌讲一遍刚才的题目', 'average'],
-        ['下节课开头用 1 分钟回顾今天内容', 'heavy'],
-        ['整理讲台与板书', 'light'],
-      ].filter(([t]) => !have.has(t));
-      if (!seeds.length) return toast('这些任务都已经有了');
-      for (const [text, level] of seeds) await api.post('/punishments', { text, level, active: 1 }).catch(() => { });
-      toast(`已补 ${seeds.length} 个任务`);
+      const seeds = PUNISH_SEEDS.filter(([t]) => !have.has(t));
+      if (!seeds.length) return toast(`已经有全部 ${PUNISH_SEEDS.length} 个任务了`);
+      if (!(await confirmDialog(`补齐到 ${PUNISH_SEEDS.length} 个课堂小惩罚？现有 ${have.size} 个会自动跳过，不会重复。`))) return;
+      toast(`正在补齐 ${seeds.length} 个任务…`);
+      const queue = seeds.slice();
+      while (queue.length) {
+        const batch = queue.splice(0, 8);
+        await Promise.all(batch.map(([text, level]) => api.post('/punishments', { text, level, active: 1 }).catch(() => { })));
+      }
+      toast(`已补 ${seeds.length} 个任务，现在共 ${have.size + seeds.length} 个`);
       renderStudentModule(box, key);
     });
 
@@ -3742,27 +3735,18 @@ async function renderMaterials(box) {
       };
     });
     box.querySelector('#pb-seed')?.addEventListener('click', async () => {
-      if (!(await confirmDialog('补一批经典任务（唱歌、深蹲、领读等 12 个，自动跳过已有的）？'))) return;
       const have = new Set(punishes.map((p) => p.text.trim()));
-      const seeds = [
-        ['唱歌 30 秒：随便唱一首，全班跟拍', 'light'],
-        ['讲个笑话，要让人笑出来', 'light'],
-        ['做 20 个深蹲', 'heavy'],
-        ['做 15 个开合跳', 'average'],
-        ['领读今天的课文段落', 'average'],
-        ['当小老师：给全班讲一道题', 'average'],
-        ['用一句话总结这节课的重点', 'average'],
-        ['30 秒英文自我介绍', 'heavy'],
-        ['背诵一句名言并解释意思', 'light'],
-        ['给同桌讲一遍刚才的题目', 'average'],
-        ['下节课开头用 1 分钟回顾今天内容', 'heavy'],
-        ['整理讲台与板书', 'light'],
-      ].filter(([t]) => !have.has(t));
-      if (!seeds.length) return toast('这些任务都已经有了');
-      for (const [text, level] of seeds) {
-        await api.post('/punishments', { text, level, active: 1 }).catch(() => {});
+      const seeds = PUNISH_SEEDS.filter(([t]) => !have.has(t));
+      if (!seeds.length) return toast(`已经有全部 ${PUNISH_SEEDS.length} 个任务了`);
+      if (!(await confirmDialog(`补齐到 ${PUNISH_SEEDS.length} 个课堂小惩罚？现有 ${have.size} 个会自动跳过，不会重复。`))) return;
+      /* 88 条一个个串行 await 要等半分钟，用户会以为卡死。分批并发，每批 8 个。 */
+      toast(`正在补齐 ${seeds.length} 个任务…`);
+      const queue = seeds.slice();
+      while (queue.length) {
+        const batch = queue.splice(0, 8);
+        await Promise.all(batch.map(([text, level]) => api.post('/punishments', { text, level, active: 1 }).catch(() => {})));
       }
-      toast(`已补 ${seeds.length} 个任务`); load();
+      toast(`已补 ${seeds.length} 个任务，现在共 ${have.size + seeds.length} 个`); load();
     });
     box.querySelector('#mat-search').oninput = (e) => {
       const q = e.target.value.trim();

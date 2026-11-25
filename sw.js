@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v405-no-edit-btn';
+const CACHE = 'wb-v406-punish-100';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -97,6 +97,7 @@ const ASSETS = [
   './js/weather-location.mjs',
   './js/weather-view.mjs',
   './js/work.js',
+  './js/punish-seeds.mjs',
   './js/material-sharing.mjs',
   './js/material-compress.mjs',
   './student.html',
