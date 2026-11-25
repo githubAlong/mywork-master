@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v425-attendance-tabs';
+const CACHE = 'wb-v426-org-manage';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -54,6 +54,7 @@ const ASSETS = [
   './css/attendance-workspace.css',
   './css/attendance-prd.css',
   './css/attendance-hub.css',
+  './css/attendance-org.css',
   './css/workbench-unified.css',
   './css/timetable-redesign.css',
   './css/sticky-notes.css',
@@ -150,6 +151,7 @@ const ASSETS = [
   './js/attendance-hub.js',
   './js/attendance-hub-domain.mjs',
   './js/attendance-departments.js',
+  './js/attendance-org.js',
   './js/attendance-legacy-restore.mjs',
   './js/attendance-tab-route.mjs',
   './js/attendance-export.mjs',

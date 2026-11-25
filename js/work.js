@@ -146,10 +146,16 @@ registerView(async function work(main, { tab, third }) {
   if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
     /* 2026-11-26 v425 设计确认（方案 C）：仍是旧版 PRD 单页六页签工作台，
-       但侧栏「考勤」下六张表的入口回来了，点某一项直接落到对应页签。
-       v417~v423 的独立表页面与部门管理仍不挂路由（源码全部保留）。
-       老链接里的英文 key 也映射到页签，中文年级名仍作为初始年级，都不白屏。 */
+       侧栏「考勤」下六张表的入口回来了，点某一项直接落到对应页签。
+       v426：「组织管理」（原部门管理）独立成一页四页签，见 attendance-org.js，
+       不落到工作台，也不映射成年级。
+       老链接里的英文 key 映射到页签，中文年级名仍作为初始年级，都不白屏。 */
     const raw = third ? decodeURIComponent(third) : '';
+    if (raw === 'organization') {
+      headEl.remove();
+      const { renderAttendanceOrg } = await import('./attendance-org.js');
+      return renderAttendanceOrg(body);
+    }
     const initialTab = attendanceTabOf(raw);
     const initialGrade = initialTab ? '' : raw;
     /* 历史数据自动补齐：v417~v423 期间录进 5 张独立表的数据回填到旧版数据源。

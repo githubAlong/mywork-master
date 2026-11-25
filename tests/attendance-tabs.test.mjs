@@ -49,5 +49,4 @@ test('新模块进 SW 预缓存清单，缓存版本按规范递增', async () =
   const sw = await read('sw.js');
   assert.match(sw, /'\.\/js\/attendance-tab-route\.mjs'/, 'SW 要预缓存页签映射模块');
   assert.match(sw, /const CACHE = 'wb-v\d+-[a-z0-9-]+'/);
-  assert.match(sw, /const CACHE = 'wb-v425-attendance-tabs'/);
 });

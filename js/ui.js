@@ -110,9 +110,12 @@ export const NAV = [
       { id: 'repairs', label: '维修', icon: 'wrench' },
       /* 2026-11-26 v425 设计确认（方案 C）：保持旧版单页工作台的六页签，
          但把「考勤」下面六张表的入口加回来 —— 点某一项直接落到工作台对应页签，
-         不再各自开独立页面。部门管理仍下线；v412 已下线的年级卡片首页不恢复。
-         独立表源码全部保留，随时可切回。 */
+         不再各自开独立页面。
+         v426：「部门管理」正式更名为「组织管理」，作为第一个二级项，
+         页面内部是部门 / 年级 / 教师 / 科目四个页签（attendance-org.js）。
+         v412 已下线的年级卡片首页不恢复；独立表源码全部保留，随时可切回。 */
       { id: 'attendance', label: '考勤', icon: 'users', sub: [
+        { id: 'organization', label: '组织管理', icon: 'users' },
         { id: 'roster', label: '花名册', icon: 'users' },
         { id: 'seat', label: '坐班表', icon: 'clock' },
         { id: 'class', label: '上课表', icon: 'book' },

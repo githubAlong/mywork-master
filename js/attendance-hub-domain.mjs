@@ -280,6 +280,28 @@ export function sortHubRows(key, rows) {
   });
 }
 
+/* ---------------- 科目分类（组织管理 · 科目管理用） ----------------
+   科目只有名字，分类按名字归到四类，科目管理页的「科目分类 N」就是这里的去重数。
+   新增科目时不用手填分类，界面保持设计稿那样只有一个名称输入框。 */
+export const SUBJECT_CATEGORY = {
+  语文: '语言与人文', 英语: '语言与人文', 日语: '语言与人文', 俄语: '语言与人文',
+  历史: '语言与人文', 政治: '语言与人文', 道德与法治: '语言与人文',
+  数学: '数学与科学', 物理: '数学与科学', 化学: '数学与科学', 生物: '数学与科学',
+  科学: '数学与科学', 信息技术: '数学与科学', 通用技术: '数学与科学',
+  音乐: '艺术与体育', 美术: '艺术与体育', 体育: '艺术与体育', 体育与健康: '艺术与体育',
+  书法: '艺术与体育', 舞蹈: '艺术与体育',
+};
+export function subjectCategory(name) {
+  const key = String(name ?? '').trim();
+  if (!key) return '';
+  if (SUBJECT_CATEGORY[key]) return SUBJECT_CATEGORY[key];
+  /* 「体育与健康」「道德与法治」这类带后缀的写法，按包含关系兜底 */
+  for (const [k, v] of Object.entries(SUBJECT_CATEGORY)) {
+    if (key.includes(k)) return v;
+  }
+  return '其他';
+}
+
 /* ---------------- CSV 批量导入 / 导出 ---------------- */
 export function csvEscape(v) {
   const s = String(v ?? '');

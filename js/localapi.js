@@ -41,7 +41,7 @@ import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.m
 import {
   HUB_SHEETS, HUB_SHEET_KEYS, HUB_TABLES, sheetDef, isHubSheet,
   normalizeRow, validateRow, filterRows, calcStats, migrationKey,
-  DEFAULT_DEPARTMENT, gradesOfDepartment, deptName, gradeKey,
+  DEFAULT_DEPARTMENT, gradesOfDepartment, deptName, gradeKey, subjectCategory,
 } from './attendance-hub-domain.mjs';
 import {
   LEGACY_RESTORE_VERSION, HUB_RESTORE_KEYS, freshHubRows, planHubBackfill,
@@ -1951,6 +1951,194 @@ on('DELETE', '/departments/grades/:name', ({ params }) => {
   saveUser(u);
   save();
   return { ok: true, keptRecords: true, ...deptView() };
+});
+
+/* ---- 组织管理 · 教师（v425） ----
+   教师管理读写的是花名册（att_hub_roster）这份主数据，序号、部门、年级、学科都在里面。
+   旧版工作台的花名册存在 teachers 表（只有年级/姓名/学科，没有部门），
+   两边可能各加过人，所以读取时把 teachers 里花名册没有的人补进花名册，
+   保证「教师总数」与用户在旧工作台看到的人数一致，不会少人。 */
+function ensureRosterFromTeachers() {
+  const tableName = HUB_SHEETS.roster.table;
+  const table = T(tableName);
+  const rows = rowsOf(tableName).filter((r) => !r.deleted_at);
+  /* 花名册还是空的就不动：等用户自己导入或用旧工作台建名单 */
+  if (!rows.length) return 0;
+  const names = new Set(rows.map((r) => String(r.name || '').trim()).filter(Boolean));
+  let seq = rows.reduce((mx, r) => Math.max(mx, num(String(r.teacher_id || '').match(/\d+/)?.[0]) || 0), 0);
+  let added = 0;
+  for (const t of T('teachers')) {
+    if (t.deleted_at) continue;
+    const name = String(t.name || '').trim();
+    if (!name || names.has(name)) continue;
+    seq += 1;
+    table.push({
+      id: hubNextId(tableName), teacher_id: String(seq), name,
+      subject: String(t.subject || ''), grade: String(t.grade || ''),
+      department: deptNameOfGrade(t.grade), status: '在职',
+      created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
+    });
+    names.add(name); added += 1;
+  }
+  if (added) save();
+  return added;
+}
+
+/* 年级 → 所属部门名（找不到归属时落默认部门） */
+function deptNameOfGrade(grade) {
+  const key = gradeKey(grade);
+  if (!key) return DEFAULT_DEPARTMENT;
+  const map = gradeDeptMap();
+  const hit = Object.keys(map).find((g) => gradeKey(g) === key);
+  const d = hit ? deptRows().find((x) => String(x.id) === String(map[hit])) : null;
+  return d ? String(d.name || '') : DEFAULT_DEPARTMENT;
+}
+
+const orgTeacherView = () => {
+  const list = rowsOf(HUB_SHEETS.roster.table).filter((r) => !r.deleted_at);
+  return { list, total: list.length };
+};
+
+on('GET', '/org/teachers', () => {
+  ensureHubV3();
+  ensureRosterFromTeachers();
+  return orgTeacherView();
+});
+
+on('POST', '/org/teachers', ({ body }) => {
+  ensureHubV3();
+  const table = T(HUB_SHEETS.roster.table);
+  const name = String(body?.name || '').trim().slice(0, 20);
+  if (!name) fail(400, '姓名不能为空');
+  const grade = String(body?.grade || '').trim();
+  const department = String(body?.department || '').trim() || deptNameOfGrade(grade);
+  const seq = rowsOf(table).reduce((mx, r) => Math.max(mx, num(String(r.teacher_id || '').match(/\d+/)?.[0]) || 0), 0) + 1;
+  const item = {
+    id: hubNextId(HUB_SHEETS.roster.table), teacher_id: String(seq), name,
+    subject: String(body?.subject || '').trim(), grade, department,
+    status: String(body?.status || '在职'),
+    created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
+  };
+  table.push(item);
+  save();
+  return { item, ...orgTeacherView() };
+});
+
+on('PATCH', '/org/teachers/:id', ({ params, body }) => {
+  ensureHubV3();
+  const row = byId(HUB_SHEETS.roster.table, params.id);
+  if (!row || row.deleted_at) fail(404, '没有这位教师');
+  const name = String(body?.name ?? row.name ?? '').trim().slice(0, 20);
+  if (!name) fail(400, '姓名不能为空');
+  row.name = name;
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'subject')) row.subject = String(body.subject || '').trim();
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'grade')) row.grade = String(body.grade || '').trim();
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'department')) {
+    row.department = String(body.department || '').trim() || deptNameOfGrade(row.grade);
+  }
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'status')) row.status = String(body.status || '在职');
+  row.updated_at = nowISO();
+  save();
+  return { item: row, ...orgTeacherView() };
+});
+
+on('DELETE', '/org/teachers/:id', ({ params }) => {
+  ensureHubV3();
+  const row = byId(HUB_SHEETS.roster.table, params.id);
+  if (!row || row.deleted_at) fail(404, '没有这位教师');
+  row.deleted_at = nowISO(); row.updated_at = nowISO();
+  save();
+  return { ok: true, keptRecords: true, ...orgTeacherView() };
+});
+
+/* ==========================================================================
+   组织管理 · 科目管理（v425）
+   --------------------------------------------------------------------------
+   · 科目独立存 att_hub_subjects，只存名字；分类按名字自动归档（subjectCategory）。
+   · 「人数」不落库，每次按花名册里同一学科的教师数实时统计，
+     教师改学科、删教师，科目人数立刻跟着变，不会出现两张表对不上。
+   · 首次打开时用花名册里已有的学科做一次种子，用户看到的不是空列表。
+   ========================================================================== */
+const SUBJECT_TABLE = 'att_hub_subjects';
+const subjectRows = () => rowsOf(SUBJECT_TABLE).sort((a, b) => num(a.id) - num(b.id));
+const subjectNextId = () => T(SUBJECT_TABLE).reduce((mx, r) => Math.max(mx, num(r.id)), 0) + 1;
+const subjectUsed = (name) => rowsOf(HUB_SHEETS.roster.table)
+  .filter((r) => String(r.subject || '').trim() === String(name || '').trim()).length;
+
+/* 首次打开：把花名册里出现过的学科收进科目表（幂等，不重复插） */
+function ensureSubjectSeed() {
+  const table = T(SUBJECT_TABLE);
+  const known = new Set(table.filter((r) => !r.deleted_at).map((r) => String(r.name || '').trim()));
+  const fromRoster = [...new Set(rowsOf(HUB_SHEETS.roster.table)
+    .map((r) => String(r.subject || '').trim()).filter(Boolean))];
+  let added = 0;
+  for (const name of fromRoster) {
+    if (known.has(name)) continue;
+    table.push({ id: subjectNextId() + added, name, created_at: nowISO(), updated_at: nowISO(), deleted_at: null });
+    added += 1;
+  }
+  if (added) save();
+  return added;
+}
+
+const subjectView = () => {
+  const list = subjectRows().filter((r) => !r.deleted_at).map((r) => ({
+    id: r.id,
+    name: String(r.name || ''),
+    category: subjectCategory(r.name),
+    count: subjectUsed(r.name),
+  }));
+  return { list, categories: [...new Set(list.map((s) => s.category).filter(Boolean))] };
+};
+
+on('GET', '/org/subjects', () => {
+  ensureHubV3();
+  ensureSubjectSeed();
+  return subjectView();
+});
+
+on('POST', '/org/subjects', ({ body }) => {
+  ensureHubV3();
+  ensureSubjectSeed();
+  const name = String(body?.name || '').trim().slice(0, 12);
+  if (!name) fail(400, '科目名不能为空');
+  if (subjectRows().some((r) => !r.deleted_at && String(r.name) === name)) fail(400, '已经有这个科目了');
+  const item = { id: subjectNextId(), name, created_at: nowISO(), updated_at: nowISO(), deleted_at: null };
+  T(SUBJECT_TABLE).push(item);
+  save();
+  return { item, ...subjectView() };
+});
+
+on('PATCH', '/org/subjects/:id', ({ params, body }) => {
+  ensureHubV3();
+  const row = byId(SUBJECT_TABLE, params.id);
+  if (!row || row.deleted_at) fail(404, '没有这个科目');
+  const name = String(body?.name || '').trim().slice(0, 12);
+  if (!name) fail(400, '科目名不能为空');
+  if (subjectRows().some((r) => !r.deleted_at && String(r.id) !== String(row.id) && String(r.name) === name)) {
+    fail(400, '已经有这个科目了');
+  }
+  const old = String(row.name || '');
+  let renamed = 0;
+  /* 改名同步花名册里的学科：否则科目列表改了名，教师还挂在旧学科下，人数变 0 */
+  if (old && old !== name) {
+    for (const r of rowsOf(HUB_SHEETS.roster.table)) {
+      if (String(r.subject || '').trim() === old) { r.subject = name; r.updated_at = nowISO(); renamed += 1; }
+    }
+  }
+  row.name = name; row.updated_at = nowISO();
+  save();
+  return { item: row, renamed, ...subjectView() };
+});
+
+on('DELETE', '/org/subjects/:id', ({ params }) => {
+  ensureHubV3();
+  const row = byId(SUBJECT_TABLE, params.id);
+  if (!row || row.deleted_at) fail(404, '没有这个科目');
+  /* 只删科目本身，教师资料不动：删除科目 ≠ 把老师改成没学科 */
+  row.deleted_at = nowISO(); row.updated_at = nowISO();
+  save();
+  return { ok: true, keptTeachers: true, ...subjectView() };
 });
 
 /* ---- 账号 ---- */

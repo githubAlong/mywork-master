@@ -144,6 +144,8 @@ const EXTRA_TABLES = [
   'att_hub_roster', 'att_hub_duty', 'att_hub_class', 'att_hub_leave', 'att_hub_stats',
   /* v3 部门管理：部门 → 年级 两级配置（年级名单仍复用 /grades） */
   'att_hub_departments',
+  /* 组织管理 · 科目管理：科目是独立表，人数按花名册里该学科的教师数实时统计 */
+  'att_hub_subjects',
 ];
 const ALL_TABLES = [...Object.keys(TABLES), ...EXTRA_TABLES];
 
