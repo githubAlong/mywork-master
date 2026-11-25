@@ -2,7 +2,11 @@
    attendance-hub.css —— 考勤 5 个二级导航页面的统一样式
    沿用教师工作台取色：底 #F3F7FF / 白卡 / 主色 #2563EB / 12px 圆角
    ========================================================================== */
-.ahub {
+/* 变量定义在 :root，而不是 .ahub 里。
+   原因：弹窗 .ahub-mask 是 position:fixed 且被 append 到 document.body，
+   它不在 .ahub 子树内，取不到 --ahub-blue 等变量 → 主按钮变成「白字 + 透明底 + 无边框」。
+   放 :root 后 .ahub 与 body 下的弹窗都能拿到。 */
+:root {
   --ahub-bg: #F3F7FF;
   --ahub-card: #FFFFFF;
   --ahub-line: #E5EDF9;
@@ -11,6 +15,9 @@
   --ahub-ink: #172B4D;
   --ahub-sub: #637B9D;
   --ahub-mute: #8DA0BC;
+}
+
+.ahub {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -96,6 +103,8 @@
 .ahub-dash { color: #B7C6DA; }
 .ahub-empty { text-align: center; color: var(--ahub-sub); padding: 34px 12px !important; white-space: normal !important; }
 .ahub-ops { text-align: right; white-space: nowrap; }
+/* th 的 text-align:left 特异性更高，操作列表头单独压回右对齐 */
+.ahub-table th.ahub-ops { text-align: right; }
 .ahub-link {
   border: 0; background: none; color: var(--ahub-blue); font-size: 12px;
   cursor: pointer; padding: 2px 6px; font-family: inherit;
@@ -122,19 +131,41 @@
   background: #FFF; border-radius: 14px; box-shadow: 0 18px 60px rgba(16,32,58,.24);
 }
 .ahub-dialog.wide { width: min(760px, 100%); }
+.ahub-dialog.sm { width: min(440px, 100%); }
 .ahub-dialog-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px; border-bottom: 1px solid var(--ahub-line); font-size: 15px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 18px 22px 16px; border-bottom: 1px solid var(--ahub-line);
 }
-.ahub-x { border: 0; background: none; font-size: 22px; line-height: 1; color: var(--ahub-sub); cursor: pointer; }
-.ahub-dialog-body { padding: 18px 20px 20px; }
+.ahub-dialog-tt b { display: block; font-size: 16px; font-weight: 700; line-height: 1.4; color: var(--ahub-ink); }
+.ahub-dialog-tt p { margin: 6px 0 0; font-size: 12.5px; color: var(--ahub-sub); line-height: 1.6; }
+.ahub-x {
+  flex: none; width: 30px; height: 30px; border: 0; border-radius: 6px; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 24px; line-height: 1; color: var(--ahub-mute); cursor: pointer; transition: .15s;
+}
+.ahub-x:hover { background: #F1F5FC; color: var(--ahub-ink); }
+.ahub-dialog-body { padding: 20px 22px; }
+.ahub-dialog .ahub-field > span { font-size: 12.5px; }
+.ahub-dialog .ahub-field input,
+.ahub-dialog .ahub-field select { padding: 12px; font-size: 13.5px; }
+/* 字段下方的辅助说明（如「2-10 个字，重名会提示已存在」） */
+.ahub-field-hint { grid-column: 1 / -1; font-size: 11.5px; color: var(--ahub-mute); line-height: 1.6; margin-top: -4px; }
 .ahub-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+/* 只有一个字段的弹窗（新建/编辑部门）：单列铺满，输入框不半宽 */
+.ahub-form.one { grid-template-columns: 1fr; }
 .ahub-form .ahub-field { min-width: 0; }
 .ahub-form-err { grid-column: 1 / -1; color: #DC2626; font-size: 12.5px; min-height: 16px; }
 .ahub-form-actions, .ahub-import .ahub-form-actions {
   grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px;
   margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--ahub-line);
 }
+/* 弹窗底面：按钮区整宽贴边，分隔线从卡片左沿拉到右沿 */
+.ahub-dialog-body .ahub-form-actions {
+  margin: 6px -22px -20px; padding: 14px 22px;
+  background: #FCFDFF;
+  border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;
+}
+.ahub-dialog-body .ahub-form-actions .ahub-btn { padding: 9px 22px; font-size: 13px; }
 .ahub-import p { font-size: 12.5px; color: var(--ahub-sub); line-height: 1.7; margin: 0 0 12px; }
 .ahub-import .ahub-field { margin-bottom: 12px; }
 .ahub-code {
@@ -157,19 +188,24 @@
    v3 · 部门管理页 + 花名册分表页签 + 按日期翻页 + 本日/本月/本年
    ========================================================================== */
 
-/* ---- 部门管理：新建顺序条 ---- */
-.ahub-dept-steps { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #F6F9FF; }
+/* ---- 部门管理：新建顺序条（单行流式：新建顺序 ①… → ②… → ③…） ---- */
+.ahub-dept-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #F6F9FF; padding: 11px 16px; }
 .ahub-dept-steps-t { font-size: 13px; font-weight: 700; color: var(--ahub-blue-dark); white-space: nowrap; }
-.ahub-dept-step { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ahub-ink); background: #FFF; border: 1px solid var(--ahub-line); border-radius: 20px; padding: 6px 12px 6px 6px; }
-.ahub-dept-step i { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 50%; background: var(--ahub-blue); color: #FFF; font-size: 11px; font-style: normal; font-weight: 700; }
-.ahub-dept-step b { color: var(--ahub-blue-dark); }
+.ahub-dept-step { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ahub-ink); line-height: 1.6; }
+.ahub-dept-step b { color: var(--ahub-blue-dark); font-weight: 600; }
+.ahub-dept-arrow { color: #B7C6DA; font-size: 12px; }
 
 /* ---- 部门管理：树形列表 ---- */
-.ahub-dept-table { min-width: 760px; }
-.ahub-dept-row td { background: #F6F9FF; font-size: 13px; }
+.ahub-dept-table { min-width: 720px; }
+.ahub-dept-table th:nth-child(2), .ahub-dept-table td:nth-child(2) { width: 110px; }
+.ahub-dept-table th:nth-child(3), .ahub-dept-table td:nth-child(3) { width: 160px; }
+.ahub-dept-table th:nth-child(4), .ahub-dept-table td:nth-child(4) { width: 120px; }
+.ahub-dept-row td { background: #F8FBFF; font-size: 13px; }
 .ahub-dept-sub td { font-size: 12.5px; }
+.ahub-dept-name { display: inline-flex; align-items: center; gap: 8px; }
+.ahub-dept-name .ahub-pill { margin-left: 0; }
 .ahub-dept-foot { color: var(--ahub-mute); font-size: 12px; background: #FCFDFF; }
-.ahub-pill { display: inline-block; border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.ahub-pill { display: inline-block; border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .ahub-pill.blue { background: #EAF1FF; color: #0062CC; }
 .ahub-pill.gray { background: #F1F4F9; color: #637B9D; }
 .ahub-pill.orange { background: #FFF3D6; color: #9A5B00; margin-left: 6px; }
@@ -178,7 +214,21 @@
 .ahub-note { border-radius: 10px; padding: 13px 16px; font-size: 12.5px; line-height: 1.8; }
 .ahub .ok { background: #EEF7FF; border: 1px solid #CDE1FF; color: #0062CC; }
 .ahub .note { background: #FFF8E9; border: 1px solid #F1D49D; color: #8C4B0C; }
+
+/* ---- 部门管理：底部说明合并成一条，左右两栏 ---- */
+.ahub-note-bar {
+  display: grid; grid-template-columns: 1fr 1fr;
+  background: #F7FAFF; border: 1px solid var(--ahub-line); border-radius: 10px;
+  font-size: 12.5px; color: var(--ahub-sub); line-height: 1.8;
+}
+.ahub-note-bar > div { padding: 12px 18px; }
+.ahub-note-bar > div + div { border-left: 1px solid var(--ahub-line); }
+.ahub-note-bar b { color: var(--ahub-ink); font-weight: 600; }
 .ahub-dept .ahub-head-right { flex: 1 1 auto; justify-content: flex-end; }
+/* 部门管理标题行：计数紧贴标题右侧 */
+.ahub-dept-titlerow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ahub-dept-titlerow h1 { margin: 0 0 6px; }
+.ahub-dept-titlerow .ahub-count { color: var(--ahub-sub); font-size: 12.5px; }
 
 /* ---- 花名册：部门分组 + 三张表页签 ---- */
 .ahub-deptbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; background: #F6F9FF; border: 1px solid var(--ahub-line); border-radius: 10px; margin-bottom: 14px; }
@@ -204,7 +254,10 @@
 .ahub-periods-state { margin-left: auto; font-size: 12px; color: var(--ahub-blue-dark); font-weight: 600; align-self: center; }
 
 @media (max-width: 760px) {
-  .ahub-dept-steps { flex-direction: column; align-items: flex-start; }
+  .ahub-dept-steps { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .ahub-dept-arrow { display: none; }
+  .ahub-note-bar { grid-template-columns: 1fr; }
+  .ahub-note-bar > div + div { border-left: 0; border-top: 1px solid var(--ahub-line); }
   .ahub-deptbar-link { margin-left: 0; }
   .ahub-periods-state { margin-left: 0; }
 }

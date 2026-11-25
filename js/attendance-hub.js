@@ -63,12 +63,15 @@ function overlay(title, body, { wide = false } = {}) {
     <div class="ahub-dialog-body">${body}</div>
   </div>`;
   document.body.appendChild(wrap);
-  const close = () => wrap.remove();
-  wrap.querySelector('[data-close]').onclick = close;
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  function close() {
+    document.removeEventListener('keydown', onKey);
+    wrap.remove();
+  }
+  /* ×、表单里的「取消」都带 data-close，全部绑定；原来只 querySelector 第一个会导致「取消」失效 */
+  wrap.querySelectorAll('[data-close]').forEach((b) => { b.onclick = close; });
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
-  document.addEventListener('keydown', function onKey(e) {
-    if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
-  });
+  document.addEventListener('keydown', onKey);
   return { wrap, close };
 }
 
