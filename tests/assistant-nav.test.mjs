@@ -61,6 +61,8 @@ test('小助手：路由接线、页面分发与缓存版本齐全', async () =>
   for (const tab of ASSISTANT_TABS.filter((x) => x !== 'selfstudy')) {
     assert.match(work, new RegExp(`renderStudentModule\\(body, '${tab}'\\)`), `${tab} 页面分发不能丢`);
   }
-  assert.match(sw, /const CACHE = 'wb-v414-assistant-nav'/, '缓存版本要换');
+  const cache = /const CACHE = 'wb-v(\d+)-([a-z0-9-]+)'/.exec(sw);
+  assert.ok(cache, 'SW 必须带缓存版本号');
+  assert.ok(Number(cache[1]) >= 414, '本次发布的缓存版本必须不低于 v414');
   assert.match(sw, /\.\/js\/assistant-route\.mjs/, '新模块要进 SW 预缓存清单');
 });

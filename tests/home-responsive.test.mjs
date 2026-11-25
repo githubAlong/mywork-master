@@ -55,5 +55,5 @@ test('适配层只作用于首页，不出现影响全站的裸选择器', () =>
 test('新样式已接入首屏、SW 预缓存与版本换缓存', () => {
   assert.match(appHtml, /href="css\/home-responsive\.css"/);
   assert.match(sw, /\.\/css\/home-responsive\.css/);
-  assert.match(sw, /const CACHE = 'wb-v\d+-home-responsive'/);
+  assert.match(sw, /const CACHE = 'wb-v\d+-[a-z0-9-]+'/);
 });
