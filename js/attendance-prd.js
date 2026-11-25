@@ -110,6 +110,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const editKey = type => (type==='summary' ? summaryDraftKey() : grade+'|'+date)+'|'+resultKey(type);
   const isEditing = type => editingSheet===editKey(type);
+  /* 「编辑」按钮已全部去掉（用户 11-25）：坐班/上课/教研的表格随时可直接点写，
+     第一次写已确认的表时自动切回「编辑中」，确认生成语义保持不变。 */
+  const beginSheetEdit = type => { if (TYPE[type] && confirmedResult(type) && !isEditing(type)) editingSheet = editKey(type); };
   const editConfirmedSheet = () => {
     if (confirmedResult(tab)) editingSheet=editKey(tab);
   };
@@ -1502,23 +1505,27 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   const voiceButtonHtml = locked => '<button type="button" class="aprd-voice" data-workspace-voice'
     +(locked?' disabled':'')+'>'+icon('speak',15)+'语音速记</button>';
   /* 「新增」按页签各点各的：花名册开新增教师表单，坐班/上课/教研登记一条本表记录，
-     请假开请假表单，汇总表手工补一行。按钮位置六张表一致。
-     和编辑态对齐：已确认生成又没点「编辑」时，新增跟着锁住，避免误改历史。 */
+     请假开请假表单，汇总表手工补一行。按钮位置六张表一致。 */
   const ADD_ACTIONS = {
     roster:['data-add','新增教师'],seat:['data-add-record','新增坐班'],class:['data-add-record','新增上课'],
     research:['data-add-record','新增教研'],leave:['data-add-leave','新增请假'],summary:['data-add-summary','新增统计'],
   };
-  /* 花名册新增不再要求先进编辑态：新增卡片本身就承担新增+编辑（用户 11-25 要求） */
-  const addButtonLocked = type => type!=='roster' && (!!confirmedResult(type) && !isEditing(type));
+  /* 坐班/上课/教研的新增不再被「已确认」锁住（编辑按钮已去掉，用户 11-25）：
+     点新增本身就进入编辑态（openAddRecord 里会设置）。请假/汇总保留原有节奏。 */
+  const addButtonLocked = type => (type==='leave'||type==='summary') && (!!confirmedResult(type) && !isEditing(type));
   const addButtonHtml = (type,locked) => {
     const [action,label]=ADD_ACTIONS[type]||['data-add','新增'];
     const text=type==='roster'&&showAddTeacher?'收起新增教师':'＋ '+label;
     return '<button type="button" class="primary aprd-add-btn" '+action+(locked||addButtonLocked(type)?' disabled':'')+'>'+esc(text)+'</button>';
   };
-  const editButtonHtml = (type,locked) => '<button type="button" class="aprd-op" data-edit-sheet'
-    +(locked||isEditing(type)?' disabled':'')+'>编辑</button>';
   const generateButtonHtml = locked => '<button type="button" class="primary" data-generate'
     +(locked||generating?' disabled':'')+'>确认生成</button>';
+  /* 「编辑」按钮只保留在请假表和汇总表（用户 11-25 只点名去掉坐班/上课/教研的）：
+     坐班/上课/教研随时可直接写，写已确认的表会自动切回编辑中。 */
+  const editButtonHtml = (type,locked) => (type==='leave'||type==='summary')
+    ? '<button type="button" class="aprd-op" data-edit-sheet'
+      +(locked||isEditing(type)?' disabled':'')+'>编辑</button>'
+    : '';
   const sheetStatusHtml = (type,locked,statusNote) => {
     /* 加载中的月度快照也要禁写，但它不是「只读累计」，状态别说成回看。 */
     if(locked)return '<span class="aprd-filter-count" role="status">'+esc(statusNote||rangeLabel()+'累计 · 只读回看')+'</span>';
@@ -1528,12 +1535,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     return status?'<span class="aprd-filter-count" role="status">'+status+'</span>':'';
   };
   const countOf = value => String(Number(value) || 0);
-  /* 六张表下方按钮统一：学科筛选 / 搜索框 / 语音速记 / 新增 / 编辑 / 确认生成。
+  /* 六张表下方按钮统一：学科筛选 / 搜索框 / 语音速记 / 新增 / (请假·汇总保留编辑) / 确认生成。
      学科管理按钮已去掉：学科改在花名册新增卡片里就地创建（用户 11-25 要求）。
-     花名册不再有「编辑」按钮：编辑并进新增卡片 + 行内操作。
+     坐班/上课/教研/花名册的「编辑」按钮已去掉（用户 11-25 要求）：表格随时可直接编辑。
      月/年查看态下写操作的按钮一起锁住，只留筛选可用。 */
   const toolbarMainHtml = (type, extra = '', locked = false, statusNote = '') => teacherFiltersHtml()+voiceButtonHtml(locked)
-    +addButtonHtml(type,locked)+(type==='roster'?'':editButtonHtml(type,locked))
+    +addButtonHtml(type,locked)+editButtonHtml(type,locked)
     +generateButtonHtml(locked)+sheetStatusHtml(type,locked,statusNote)+extra;
   /* 草稿与已确认快照逐行比对，只在「编辑中」算差异：
      未确认变更 = 这次编辑里改了但还没重新确认生成的行数。 */
@@ -1577,7 +1584,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     ? '<button type="button" class="aprd-op" '+importAction+'>批量导入</button>' : '') + exportMenuHtml(count);
   const rosterHtml = (type = 'roster') => {
     const result = isEditing(type) ? null : confirmedResult(type);
-    const editable = type !== 'roster' && !result;
+    /* 「编辑」按钮去掉后（用户 11-25），坐班/上课/教研不再分查看态和编辑态：
+       已确认的表展示确认快照，一旦点写任何格子就自动切回编辑中的草稿。 */
+    const editable = type !== 'roster';
     const isWorksheet=type==='class'||type==='research';
     const dirtyKeys = sheetDirtyKeys(type);
     const entries = type==='roster' ? visibleTeachers().map(teacher=>({teacher}))
@@ -2116,12 +2125,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       catch(e){toast(attendanceErrorText(e),'err');}
       finally{generating=false;if(confirmButton.isConnected){confirmButton.disabled=false;confirmButton.textContent=label;}}
     };
-    root.querySelector('[data-edit-sheet]')?.addEventListener('click',()=>{
-      if(generating)return;
-      editingSheet=editKey(tab);
-      if(tab==='leave')leaveOnlyDate=date;
-      paint();
-    });
     root.querySelector('[data-add-record]')?.addEventListener('click',()=>{if(!busy&&!generating)openAddRecord();});
     root.querySelector('[data-add-summary]')?.addEventListener('click',()=>{if(!busy&&!generating)openAddSummary();});
     root.querySelector('[data-summary-import]')?.addEventListener('click',()=>{if(!generating)openSummaryImport();});
@@ -2188,7 +2191,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const teacher = teachers.find(item => String(item.id) === control.dataset.gridPerson);
       if (!teacher || !TYPE[tab]) return;
       const key = control.dataset.gridKey;
-      const update = value => updateWorksheet(teacher,tab,key,value);
+      const update = value => { beginSheetEdit(tab); updateWorksheet(teacher,tab,key,value); };
       if (['class','sit','listen','research'].includes(key)) control.onclick = async () => {
         if(generating)return;
         const draft=getDraftRows(tab);
@@ -2248,6 +2251,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
           paint();
           return;
         }
+        beginSheetEdit(tab);
         updateWorksheet(teacher, tab, 'leave_time', normalized);
         scheduleAutoSave(tab);
         paint();

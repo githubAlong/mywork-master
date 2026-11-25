@@ -182,23 +182,27 @@ test('切页签不再重拉接口：按日视图只重绘，月/年累计才现�
   assert.ok(gets.length>before,'按月/按年是累计快照，仍要现拉');
 });
 
-test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/编辑/确认生成（花名册无编辑，学科管理已去掉）',async()=>{
+test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/确认生成（坐班/上课/教研/花名册无编辑，学科管理已去掉）',async()=>{
   const {root}=await setup();
   /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。
      用户 11-25 裁决：学科管理按钮去掉，学科改在花名册新增卡片就地创建；
-     花名册不再有「编辑」按钮，编辑并进新增卡片与行内操作。 */
+     花名册与坐班/上课/教研不再有「编辑」按钮，表格随时可直接编辑；
+     请假表和汇总表保留「编辑」按钮（用户 11-25 只点名前三张）。 */
   const addSelector={roster:'data-add',seat:'data-add-record',class:'data-add-record',
     research:'data-add-record',leave:'data-add-leave',summary:'data-add-summary'};
   for(const type of ['roster','seat','class','research','leave','summary']) {
     await root.querySelector('[data-tab="'+type+'"]').click();
     const html=root.innerHTML;
     const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice',addSelector[type]];
-    if(type!=='roster')markers.push('data-edit-sheet');
+    if(type==='leave'||type==='summary')markers.push('data-edit-sheet');
     markers.push('data-generate');
     const positions=markers.map(marker=>html.indexOf(marker));
     const missing=markers.filter((marker,index)=>positions[index]<0);
     assert.deepEqual(missing,[],type+' 表缺少统一按钮：'+missing.join(','));
     assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),type+' 表按钮顺序不是 学科筛选/搜索框/语音/新增/编辑/确认生成');
+    if(['roster','seat','class','research'].includes(type)){
+      assert.doesNotMatch(html,/data-edit-sheet/,type+' 表不应再有「编辑」按钮');
+    }
     assert.doesNotMatch(html,/data-subject-manager/,'学科管理按钮已去掉');
     assert.doesNotMatch(html.slice(html.indexOf('data-workspace-voice'),html.indexOf('</button>',html.indexOf('data-workspace-voice'))),/语音登记/,'按钮统一叫「语音速记」');
   }
@@ -225,8 +229,9 @@ test('按月按年查看：每人一行累计，写操作整排锁住只能回�
     const html=root.innerHTML;
     assert.match(html,/累计教师/,'切到按'+period+'要有累计统计条');
     assert.match(html,/只读回看/,'按'+period+'要标出只读');
-    for(const selector of ['data-add-record','data-edit-sheet','data-generate','data-workspace-voice'])
+    for(const selector of ['data-add-record','data-generate','data-workspace-voice'])
       assert.match(html,new RegExp(selector+'[^>]*disabled'),'按'+period+'时 '+selector+' 必须禁用');
+    assert.doesNotMatch(html,/data-edit-sheet/,'按'+period+'时坐班表不应再有「编辑」按钮');
     /* 只读列不再吐出可点的格子，避免在累计视图里改历史 */
     assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
     assert.match(html,/<label>查看 <select id="aprd-view-period">/,'查看周期在筛选行里，六张表共用');
@@ -318,19 +323,18 @@ test('确认坐班表后语音速记紧邻新增按钮，保留行操作并隐�
   const checkActions=()=>{
     assert.doesNotMatch(root.innerHTML,/已确认/);
     assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音速记<\/button><button[^>]* data-add-record[ >]/);
-    for(const selector of ['[data-add-record]','[data-edit-sheet]','[data-generate]',
+    for(const selector of ['[data-add-record]','[data-generate]',
       '[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
       assert.ok(root.querySelector(selector),selector);
     }
-    /* 确认后没点「编辑」之前，行内的编辑/删除与新增、确认生成一起锁住 */
-    assert.match(root.innerHTML,/<button[^>]*data-add-record[^>]*disabled/);
-    assert.match(root.innerHTML,/<button[^>]*data-edit="1"[^>]*disabled/);
+    /* 「编辑」按钮已去掉（用户 11-25）：确认后新增与行内编辑/删除直接可用 */
+    assert.doesNotMatch(root.innerHTML,/data-edit-sheet/);
+    assert.doesNotMatch(root.innerHTML,/<button[^>]*data-add-record[^>]*disabled/);
+    assert.doesNotMatch(root.innerHTML,/<button[^>]*data-edit="1"[^>]*disabled/);
   };
   checkActions();
   await reopen();
   checkActions();
-  await root.querySelector('[data-edit-sheet]').click();
-  assert.doesNotMatch(root.innerHTML,/<button[^>]*data-add-record[^>]*disabled/,'进编辑态后要能继续新增');
   await root.querySelector('[data-tab="summary"]').click();
   await root.querySelector('[data-generate]').click();
   assert.ok(root.querySelector('[data-summary-edit-row="0"]'));
@@ -369,7 +373,6 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   assert.match(control(root,'class').attributes.class,/ y$/);
   await control(root,'remark').change('补充记录');
   await select('seat');
-  await root.querySelector('[data-edit-sheet]').click();
   await control(root,'research','2').click();
   await select('research');
   assert.match(control(root,'research','2').attributes['aria-label'],/教研：未登记/);
@@ -385,7 +388,6 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
   /* 名单统一后删记录不是把整行删掉，而是这一格回到空白 */
   assert.match(control(root,'class').attributes['aria-label'],/上课：未登记/,'删除子表记录后本表格子回到空白');
   await select('seat');
-  await root.querySelector('[data-edit-sheet]').click();
   assert.match(control(root,'class').attributes.class,/ y$/,'删除子表记录保留坐班表和教师');
 });
 
@@ -402,7 +404,6 @@ test('确认后才生成当节请假记录，重新确认更新同一条',async(
   assert.equal(root.querySelectorAll('[data-edit-leave]').length,1);
   assert.match(root.innerHTML,/<td>事假<\/td>/);
   await select('seat');
-  await root.querySelector('[data-edit-sheet]').click();
   await control(root,'leave').change('病假');
   await root.querySelector('[data-generate]').click();
   await select('leave');
@@ -650,10 +651,9 @@ test('编辑已确认的坐班表：改一行才报未确认变更，并在那�
   const {root}=await setup();
   await root.querySelector('[data-generate]').click();
   assert.doesNotMatch(root.innerHTML,/未确认变更/);
-  const editSheet=root.querySelector('[data-edit-sheet]');
-  assert.ok(editSheet,'确认后应可再次编辑');
-  await editSheet.click();
-  /* 刚进编辑态、一行都没动：不能虚报变更，这是这条功能最容易被挑刺的地方。 */
+  /* 「编辑」按钮已去掉（用户 11-25）：确认后的表随时可直接点格子写。 */
+  assert.doesNotMatch(root.innerHTML,/data-edit-sheet/,'坐班表不应再有「编辑」按钮');
+  /* 没动任何格子前：不能虚报变更，这是这条功能最容易被挑刺的地方。 */
   assert.doesNotMatch(root.innerHTML,/未确认变更/);
   assert.doesNotMatch(root.innerHTML,/已修改/);
   await control(root,'sit').click();
