@@ -210,6 +210,28 @@
 .org-subj-ico[data-c="体育"] { background: #EAF3FF; color: #2F6FB5; }
 .org-subj-ico[data-c="日语"] { background: #F0EFFF; color: #5B57C8; }
 
+/* ---------------- 教师名单分页器（列表卡右下角） ---------------- */
+.org-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px 14px;
+  padding: 12px 4px 0; font-size: 12px; color: var(--org-sub);
+}
+.org-pager-total { white-space: nowrap; }
+.org-pager-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.org-pagesize { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.org-pagesize select {
+  font-family: inherit; font-size: 12px; color: var(--org-ink);
+  padding: 4px 6px; border: 1px solid var(--org-line); border-radius: 8px;
+  background: #FFF; cursor: pointer;
+}
+.org-pagesize select:focus { outline: none; border-color: var(--org-blue); }
+.org-btn.ghost {
+  height: 30px; padding: 0 12px; font-size: 12px;
+  color: var(--org-blue); background: #FFF;
+}
+.org-btn.ghost:hover:not(:disabled) { border-color: #CFDDF4; background: #F7FAFF; }
+.org-btn:disabled { color: var(--org-mute); opacity: .55; cursor: not-allowed; }
+
 /* ---------------- 底部虚线提示 ---------------- */
 .org-foot {
   margin-top: 12px;
@@ -236,4 +258,6 @@
   .org-tabs { gap: 2px; padding: 6px; }
   .org-tab { padding: 8px 6px; font-size: 12.5px; gap: 4px; }
   .org-tab-ico { display: none; }
+  .org-pager { justify-content: center; }
+  .org-pager-right { margin-left: 0; flex-wrap: wrap; justify-content: center; }
 }

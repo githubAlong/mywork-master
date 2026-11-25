@@ -139,3 +139,47 @@ test('组织管理页：四个页签、统计卡、底部提示、导航与路�
   assert.ok(sw.includes("./css/attendance-org.css'"), 'SW 要缓存页面样式');
   assert.match(sw, /const CACHE = 'wb-v\d+-[^']+'/);
 });
+
+test('教师名单分页：每页 10 / 20 条，右下角分页器，切条数回到第 1 页', async () => {
+  const js = await read('js/attendance-org.js');
+
+  /* 只给教师名单加 10 / 20，两档都要有，默认 20 */
+  assert.match(js, /const TEACHER_PAGE_SIZES = \[10, 20\];/);
+  assert.match(js, /const TEACHER_PAGE_DEFAULT = 20;/);
+  assert.match(js, /const TEACHER_PAGE_KEY = 'org\.teacherPageSize';/);
+
+  /* 记忆选择：读不出来就落默认，写失败（隐私模式）不报错 */
+  assert.match(js, /function readTeacherPageSize\(\)[\s\S]{0,220}TEACHER_PAGE_SIZES\.includes\(n\) \? n : TEACHER_PAGE_DEFAULT/);
+  assert.match(js, /function saveTeacherPageSize\(n\)[\s\S]{0,140}localStorage\.setItem\(TEACHER_PAGE_KEY, String\(n\)\)/);
+
+  /* 分页器结构：左侧范围 + 上一页 / 页码 / 下一页 + 每页条数 */
+  assert.match(js, /class="org-pager"/);
+  assert.match(js, /id="org-page-total">显示 \$\{start \+ 1\}–\$\{start \+ pageList\.length\} 条 \/ 共 \$\{list\.length\} 名教师/);
+  assert.match(js, /id="org-prev"/);
+  assert.match(js, /id="org-next"/);
+  assert.match(js, /id="org-pagesize"/);
+
+  /* 序号跟着整份名单走，翻页不从头数 */
+  assert.match(js, /<span class="org-no">\$\{start \+ i \+ 1\}<\/span>/);
+
+  /* 切每页条数后回到第 1 页并记住 */
+  assert.match(js, /S\.pageSize = TEACHER_PAGE_SIZES\.includes\(n\) \? n : TEACHER_PAGE_DEFAULT;[\s\S]{0,80}S\.page = 1;/);
+  assert.match(js, /saveTeacherPageSize\(S\.pageSize\)/);
+
+  /* 数据变少（删教师 / 重载）时页码要收回到有效范围 */
+  assert.match(js, /S\.page = Math\.min\(Math\.max\(1, S\.page\), pages\)/);
+
+  /* 只有教师页签带分页器，其他三个页签不传 pager */
+  const deptBody = js.slice(js.indexOf('function paintDept'), js.indexOf('function paintGrade'));
+  const gradeBody = js.slice(js.indexOf('function paintGrade'), js.indexOf('/* ---------------- 教师管理'));
+  const subjectBody = js.slice(js.indexOf('function paintSubject'), js.indexOf('/* ---------------- 行内操作绑定'));
+  for (const [name, body] of [['部门', deptBody], ['年级', gradeBody], ['科目', subjectBody]]) {
+    assert.ok(!body.includes('org-pager'), `${name}页签不该出现分页器`);
+  }
+
+  const css = await read('css/attendance-org.css');
+  for (const cls of ['.org-pager {', '.org-pager-right', '.org-pagesize', '.org-btn.ghost', '.org-btn:disabled']) {
+    assert.ok(css.includes(cls), `缺分页样式 ${cls}`);
+  }
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.org-pager \{ justify-content: center; \}/);
+});

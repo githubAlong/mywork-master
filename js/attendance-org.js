@@ -77,8 +77,25 @@ const TABS = [
   { id: 'subject', label: '科目管理', icon: ICONS.subjectTab },
 ];
 
+/* 教师名单分页：每页 10 / 20 条，选过就记住（和花名册同一套手感） */
+const TEACHER_PAGE_SIZES = [10, 20];
+const TEACHER_PAGE_DEFAULT = 20;
+const TEACHER_PAGE_KEY = 'org.teacherPageSize';
+function readTeacherPageSize() {
+  try {
+    const n = Number(localStorage.getItem(TEACHER_PAGE_KEY));
+    return TEACHER_PAGE_SIZES.includes(n) ? n : TEACHER_PAGE_DEFAULT;
+  } catch { return TEACHER_PAGE_DEFAULT; }
+}
+function saveTeacherPageSize(n) {
+  try { localStorage.setItem(TEACHER_PAGE_KEY, String(n)); } catch { /* 隐私模式忽略 */ }
+}
+
 export async function renderAttendanceOrg(root) {
-  const S = { tab: 'dept', depts: null, teachers: [], subjects: [], busy: false };
+  const S = {
+    tab: 'dept', depts: null, teachers: [], subjects: [], busy: false,
+    page: 1, pageSize: readTeacherPageSize(), jumpLast: false,
+  };
 
   root.innerHTML = `
     <div class="org">
@@ -147,7 +164,7 @@ export async function renderAttendanceOrg(root) {
   }
 
   /* 公共骨架：标题 + 徽标 + 操作按钮 + 两张统计卡 + 列表卡 + 底部虚线提示 */
-  function shell({ title, badge, actionId, actionLabel, stats, listTitle, listHint, body, foot }) {
+  function shell({ title, badge, actionId, actionLabel, stats, listTitle, listHint, body, pager = '', foot }) {
     return `
       <div class="org-head">
         <h1 class="org-title">${esc(title)} <span class="org-badge">${esc(badge)}</span></h1>
@@ -168,6 +185,7 @@ export async function renderAttendanceOrg(root) {
           <button class="org-btn org-refresh" id="org-refresh">${ICONS.refresh}刷新</button>
         </div>
         <div class="org-list" id="org-list">${body}</div>
+        ${pager}
         <div class="org-foot"><span class="org-foot-ico">${ICONS.bulb}</span>${esc(foot)}</div>
       </section>`;
   }
@@ -256,8 +274,16 @@ export async function renderAttendanceOrg(root) {
   function paintTeacher(panel) {
     const list = teacherRows();
     const subjects = new Set(list.map((t) => String(t.subject || '').trim()).filter(Boolean));
-    const rows = list.map((t, i) => `<div class="org-row">
-      <span class="org-no">${i + 1}</span>
+    const size = S.pageSize;
+    const pages = Math.max(1, Math.ceil(list.length / size));
+    if (S.jumpLast) { S.page = pages; S.jumpLast = false; }
+    S.page = Math.min(Math.max(1, S.page), pages);
+    const start = (S.page - 1) * size;
+    const pageList = list.slice(start, start + size);
+
+    /* 序号沿用整份名单的顺序，翻页后接着数，不从头开始 */
+    const rows = pageList.map((t, i) => `<div class="org-row">
+      <span class="org-no">${start + i + 1}</span>
       <b class="org-name">${esc(t.name || '')}</b>
       ${t.subject ? `<span class="org-subj" data-c="${esc(t.subject)}">${esc(t.subject)}</span>` : ''}
       <div class="org-cell"><span class="org-cell-lb">所属部门</span><b>${esc(t.department || '—')}</b></div>
@@ -267,6 +293,19 @@ export async function renderAttendanceOrg(root) {
         <button class="org-link danger" data-act="teacher-del" data-id="${esc(t.id)}">删除</button>
       </div>
     </div>`).join('');
+
+    const pager = list.length ? `<div class="org-pager">
+      <span class="org-pager-total" id="org-page-total">显示 ${start + 1}–${start + pageList.length} 条 / 共 ${list.length} 名教师</span>
+      <div class="org-pager-right">
+        <button class="org-btn ghost" id="org-prev"${S.page <= 1 ? ' disabled' : ''}>← 上一页</button>
+        <span id="org-page">第 ${S.page} / ${pages} 页</span>
+        <button class="org-btn ghost" id="org-next"${S.page >= pages ? ' disabled' : ''}>下一页 →</button>
+        <label class="org-pagesize">每页
+          <select id="org-pagesize">${TEACHER_PAGE_SIZES.map((n) =>
+            `<option value="${n}"${n === size ? ' selected' : ''}>${n}</option>`).join('')}</select>
+          条</label>
+      </div>
+    </div>` : '';
 
     panel.innerHTML = shell({
       title: '教师管理',
@@ -278,11 +317,29 @@ export async function renderAttendanceOrg(root) {
       ],
       listTitle: '教师名单', listHint: '每行均可编辑、删除',
       body: rows || `<div class="org-empty">还没有教师，点右上角「＋ 新增教师」开始录入。</div>`,
+      pager,
       foot: '＋ 新增教师后，这里自动多一条',
     });
 
     $('#org-teacher-add').onclick = () => openTeacherForm(null);
     bindRowActs(panel);
+    bindTeacherPager(panel, list.length);
+  }
+
+  /* 教师名单分页事件：上一页 / 下一页 / 每页条数 */
+  function bindTeacherPager(panel, total) {
+    const prev = panel.querySelector('#org-prev');
+    if (prev) prev.onclick = () => { if (S.page > 1) { S.page -= 1; paint(); } };
+    const next = panel.querySelector('#org-next');
+    if (next) next.onclick = () => { if (S.page * S.pageSize < total) { S.page += 1; paint(); } };
+    const sizeSel = panel.querySelector('#org-pagesize');
+    if (sizeSel) sizeSel.onchange = () => {
+      const n = Number(sizeSel.value);
+      S.pageSize = TEACHER_PAGE_SIZES.includes(n) ? n : TEACHER_PAGE_DEFAULT;
+      saveTeacherPageSize(S.pageSize);
+      S.page = 1;
+      paint();
+    };
   }
 
   /* ---------------- 科目管理 ---------------- */
@@ -523,7 +580,10 @@ export async function renderAttendanceOrg(root) {
       if (!String(data.name || '').trim()) { wrap.querySelector('#org-err').textContent = '请填写姓名'; return; }
       try {
         if (editing) await api.patch(`/org/teachers/${encodeURIComponent(id)}`, data);
-        else await api.post('/org/teachers', data);
+        else {
+          await api.post('/org/teachers', data);
+          S.jumpLast = true; /* 新增的人序号顺延在末尾，翻到最后一页让他直接看见 */
+        }
         close(); toast(editing ? '已保存' : '已新增教师', 'ok');
         await load({ silent: true });
       } catch (ex) { wrap.querySelector('#org-err').textContent = ex.message || String(ex); }
