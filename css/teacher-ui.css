@@ -1325,7 +1325,7 @@ html[data-theme="dark"] .home-redesign .home-welcome-card { background:radial-gr
 html[data-theme="dark"] .home-redesign .home-welcome-card .clk-greet,
 html[data-theme="dark"] .home-redesign .home-welcome-card .clock { color:#eef5ff; }
 html[data-theme="dark"] .home-redesign .home-welcome-card .home-welcome-stats button { background:#22354d;border-color:#344b67; }
-@media(max-width:1180px) {
+@media(max-width:1599px) {
   .home-redesign .home-shortcuts { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
 @media(max-width:860px) {
@@ -2942,7 +2942,7 @@ html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-week-ba
 
 
 /* 首页桌面端整屏平铺：搜索栏保留自然高度，六张主卡片填满剩余视口 */
-@media (min-width: 1180px) {
+@media (min-width: 1600px) {
   .app:has(#home-grid) {
     height: 100vh;
     min-height: 100vh;
@@ -3021,7 +3021,7 @@ html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-week-ba
   stroke-width: 2.9;
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1599px) {
   .app:has(#home-grid) {
     height: auto;
     min-height: 100vh;
@@ -3042,7 +3042,7 @@ html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-week-ba
   }
 }
 /* 首页桌面端整屏平铺：搜索栏保留自然高度，主卡片填满剩余视口 */
-@media (min-width: 1180px) {
+@media (min-width: 1600px) {
   .app:has(#home-grid) {
     height: 100vh;
     min-height: 100vh;
@@ -3113,7 +3113,7 @@ html[data-theme="dark"] .home-redesign .home-clock-top .clock-date .home-week-ba
   stroke-width: 2.9;
 }
 
-@media (max-width: 1179px) {
+@media (max-width: 1599px) {
   .app:has(#home-grid) {
     height: auto;
     min-height: 100vh;

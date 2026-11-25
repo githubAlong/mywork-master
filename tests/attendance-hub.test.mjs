@@ -203,7 +203,9 @@ test('接线：侧栏 5 个二级导航 / 路由分派 / CSS / SW 资源清单',
   assert.match(hub, /gradeOptions/);
   assert.match(attgrade, /花名册的年级筛选/);
   assert.match(appHtml, /attendance-hub\.css/);
-  assert.match(sw, /const CACHE = 'wb-v412-attendance-grade'/);
+  /* CACHE 每次发布都会递增，不能写死某一个版本号，否则后续任何发布都会挂在这里。
+     这里只校验「存在且符合 wb-v<数字>-<名字> 的换缓存命名规范」。 */
+  assert.match(sw, /const CACHE = 'wb-v\d+-[a-z0-9-]+'/);
   for (const f of ['./js/attendance-hub.js', './js/attendance-hub-domain.mjs', './css/attendance-hub.css']) {
     assert.ok(sw.includes(`'${f}'`), `SW 缺资源 ${f}`);
   }

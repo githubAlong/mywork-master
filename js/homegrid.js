@@ -33,10 +33,15 @@ export const COLS = 12;
 const ROW_H = 52;      /* 新首页卡片基准行高；h=4 约为一张标准首屏卡片 */
 const GAP = 14;        /* 卡片间距，和 CSS 里的 gap 必须一致 */
 
-const BP = {
-  desktop: 1180,
-  tablet: 860,
-};
+/* 首页响应式统一断点，与 css/home-responsive.css 的媒体查询共用同一组数值：
+     1600 及以上 = 大屏，用 desktop 三列布局整屏平铺；
+     860–1599   = 小屏 / 平板，用 tablet 两列布局自然纵向滚动；
+     860 以下    = 手机，强制单列按序堆叠；
+     520 以下    = 极窄屏微调（纯 CSS）。
+   1100 是 app.css 的全局「侧栏折成抽屉 + 顶部二级条 + 底部导航」档位，
+   只由 CSS 处理，JS 不需要在这一档重画，避免拖窗口时重复重排。 */
+export const HOME_BP = Object.freeze({ desktop: 1600, tablet: 860, narrow: 520 });
+const BP = { desktop: HOME_BP.desktop, tablet: HOME_BP.tablet };
 
 /* 卡片清单。顺序 = 卡片管理面板里的顺序 = 默认布局顺序 */
 export const CARDS = [
