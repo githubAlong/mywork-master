@@ -107,7 +107,15 @@ export const NAV = [
       /* 备课紧接课表：课前看图、课后备课，动线是连着的。 */
       { id: 'prep', label: '备课', icon: 'book' },
       { id: 'repairs', label: '维修', icon: 'wrench' },
-      { id: 'attendance', label: '考勤', icon: 'users' },
+      /* 考勤是唯一的一级导航，下面 5 个二级导航各自是独立页面 + 独立数据表。
+         侧栏渲染层（navHTML / subNavHTML）原生支持 sub，不需要另写一套菜单。 */
+      { id: 'attendance', label: '考勤', icon: 'users', sub: [
+        { id: 'roster', label: '花名册', icon: 'users' },
+        { id: 'duty', label: '坐班表', icon: 'clock' },
+        { id: 'class', label: '上课表', icon: 'book' },
+        { id: 'leave', label: '请假表', icon: 'cal' },
+        { id: 'stats', label: '统计表', icon: 'zap' },
+      ] },
       { id: 'invigilation', label: '监考', icon: 'shield' },
       { id: 'trips', label: '出差', icon: 'car' },
       { id: 'notes', label: '笔记', icon: 'edit' },

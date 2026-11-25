@@ -148,6 +148,14 @@ registerView(async function work(main, { tab, third }) {
        没有年级参数时恢复原有年级总览；选择年级后进入当前考勤工作台。
        中文年级名需要解码，URL 形如 #/work/attendance/高一。 */
     const grade = third ? decodeURIComponent(third) : '';
+    /* 【考勤二级导航】#/attendance/roster|duty|class|leave|stats
+       5 个独立页面 + 5 张独立数据表；年级 / 日期在这里只是筛选条件。
+       二级 key 用英文，中文年级名（高一/高二/高三）不会撞上，旧收藏链接继续可用。 */
+    if (['roster', 'duty', 'class', 'leave', 'stats'].includes(grade)) {
+      headEl.remove();
+      const { renderAttendanceHub } = await import('./attendance-hub.js');
+      return renderAttendanceHub(body, { sheet: grade });
+    }
     if (!grade) {
       headEl.remove();
       return renderAttendance(body);

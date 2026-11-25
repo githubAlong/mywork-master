@@ -139,6 +139,9 @@ const EXTRA_TABLES = [
   'items', 'todos', 'reminders', 'messages', 'links', 'roll_sessions', 'roll_records',
   'attachments', 'recycle', 'homework_records', 'punish_records', 'invig_rules', 'trip_rules',
   'misconduct_records', 'bulletin_records',
+  /* 考勤二级导航的 5 张独立表：和旧的 attendance_tables/rows 完全解耦，
+     行里带 grade / date 但那只是筛选条件，不再按年级+日期建表隔离。 */
+  'att_hub_roster', 'att_hub_duty', 'att_hub_class', 'att_hub_leave', 'att_hub_stats',
 ];
 const ALL_TABLES = [...Object.keys(TABLES), ...EXTRA_TABLES];
 

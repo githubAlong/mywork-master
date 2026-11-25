@@ -38,6 +38,10 @@ import {
 } from './attendance-domain.mjs';
 import { cleanPeriodTime, normalizeTimetablePeriods, completeTimetablePeriods } from './timetable-periods.mjs';
 import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.mjs';
+import {
+  HUB_SHEETS, HUB_SHEET_KEYS, sheetDef, isHubSheet,
+  normalizeRow, validateRow, filterRows, calcStats, migrationKey,
+} from './attendance-hub-domain.mjs';
 
 /* ============================ 基础工具 ============================ */
 
@@ -1467,6 +1471,170 @@ const on = (method, pattern, fn) => {
   const re = new RegExp('^' + pattern.replace(/:([a-zA-Z_]+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
   R.push({ method, re, keys, fn });
 };
+
+/* ==========================================================================
+   考勤二级导航：5 张平级独立数据表（/att-hub/*）
+   --------------------------------------------------------------------------
+   和旧「年级工作台」的区别：
+     · 旧表按 grade + sheet_date + sheet_type 建表，数据天然被年级和日期切开；
+     · 新表一张业务表一个实体，行里带 grade / date 字段，但那只是**筛选条件**；
+     · 五张表共用花名册的 teacher_id，随时可增删改、批量导入导出。
+   路由放在路由表最前面，避免被后面的通用 CRUD 通配规则抢走。
+   ========================================================================== */
+const hubTable = (sheet) => {
+  if (!isHubSheet(sheet)) fail(404, '未知考勤数据表：' + sheet);
+  return sheetDef(sheet).table;
+};
+const hubRows = (t) => rowsOf(t).sort((a, b) => num(b.id) - num(a.id));
+const hubNextId = (t) => T(t).reduce((mx, r) => Math.max(mx, num(r.id)), 0) + 1;
+const hubStamp = () => nowISO();
+
+on('GET', '/att-hub/:sheet', ({ params, query }) => {
+  const t = hubTable(params.sheet);
+  const def = sheetDef(params.sheet);
+  const list = filterRows(params.sheet, hubRows(t), query);
+  return {
+    sheet: params.sheet, label: def.label, title: def.title, desc: def.desc,
+    columns: def.columns, filters: def.filters, list, total: rowsOf(t).length,
+    needsMigration: !load().meta.attHubMigrated,
+  };
+});
+
+on('POST', '/att-hub/:sheet', ({ params, body }) => {
+  const key = params.sheet;
+  const t = hubTable(key);
+  const row = normalizeRow(key, body || {});
+  const err = validateRow(key, row);
+  if (err) fail(400, err);
+  const item = { id: hubNextId(t), ...row, created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null };
+  T(t).push(item);
+  save();
+  return { item };
+});
+
+on('POST', '/att-hub/:sheet/import', ({ params, body }) => {
+  const key = params.sheet;
+  const t = hubTable(key);
+  const items = Array.isArray(body?.items) ? body.items : [];
+  if (!items.length) fail(400, '没有可导入的数据');
+  const accepted = []; const rejected = [];
+  items.forEach((raw, i) => {
+    const row = normalizeRow(key, raw || {});
+    const err = validateRow(key, row);
+    if (err) { rejected.push({ index: i + 1, reason: err }); return; }
+    accepted.push({ id: hubNextId(t) + accepted.length, ...row, created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null });
+  });
+  if (!accepted.length) fail(400, rejected.slice(0, 3).map((x) => `第${x.index}条${x.reason}`).join('；') || '没有有效数据');
+  T(t).push(...accepted);
+  save();
+  return { added: accepted.length, rejected };
+});
+
+on('PATCH', '/att-hub/:sheet/:id', ({ params, body }) => {
+  const key = params.sheet;
+  const t = hubTable(key);
+  const row = byId(t, params.id);
+  if (!row) fail(404, '记录不存在或已被删除');
+  const merged = normalizeRow(key, { ...row, ...(body || {}) });
+  const err = validateRow(key, merged);
+  if (err) fail(400, err);
+  Object.assign(row, merged, { updated_at: hubStamp() });
+  save();
+  return { item: row };
+});
+
+on('DELETE', '/att-hub/:sheet/:id', ({ params }) => {
+  const t = hubTable(params.sheet);
+  const row = byId(t, params.id);
+  if (!row) fail(404, '记录不存在或已被删除');
+  row.deleted_at = hubStamp();
+  row.updated_at = hubStamp();
+  save();
+  return { ok: true };
+});
+
+/* 历史数据迁移：把旧 teachers / attendance_tables / attendance_rows 展开进 5 张新表。
+   带 _src 幂等标记，可反复执行；页面上也提供手动「重新同步」按钮。 */
+on('POST', '/att-hub-migrate', () => {
+  const db = load();
+  const migrated = { roster: 0, duty: 0, class: 0, leave: 0, stats: 0 };
+  const seen = new Set();
+  for (const key of HUB_SHEET_KEYS) {
+    for (const r of T(HUB_SHEETS[key].table)) if (r._src) seen.add(String(r._src));
+  }
+  const push = (key, raw, src) => {
+    const k = String(src || '');
+    if (k && seen.has(k)) return false;
+    const row = normalizeRow(key, raw);
+    if (validateRow(key, row)) return false;
+    const t = HUB_SHEETS[key].table;
+    T(t).push({ id: hubNextId(t), ...row, _src: k, created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null });
+    if (k) seen.add(k);
+    migrated[key] += 1;
+    return true;
+  };
+
+  /* 花名册：教师主数据全量迁，统一编号作为其余 4 张表的主键来源 */
+  const teachers = rowsOf('teachers');
+  teachers.forEach((t, i) => push('roster', {
+    teacher_id: 'T-' + String(num(t.id) || i + 1).padStart(4, '0'),
+    name: t.name, subject: t.subject || '', grade: t.grade || '',
+    status: num(t.active) === 0 ? '离职' : '在职',
+    phone: t.phone || '', remark: '由原花名册迁移',
+  }, migrationKey('roster', 'teachers', t.id)));
+
+  /* 其余 4 张：旧考勤表逐行展开。教研表并入上课表，不再单独占页签。 */
+  const TYPE_MAP = { seat: 'duty', class: 'class', leave: 'leave', summary: 'stats', research: 'class' };
+  const tables = rowsOf('attendance_tables');
+  const allRows = rowsOf('attendance_rows');
+  for (const t of tables) {
+    const key = TYPE_MAP[tableTypeOf(t)] || '';
+    if (!key) continue;
+    const date = String(t.sheet_date || t.month || '').slice(0, 10);
+    const cols = attCols(t);
+    for (const r of allRows.filter((x) => String(x.table_id) === String(t.id))) {
+      const d = safeJSON(r.data, {});
+      const marks = cols.filter((c) => d[c.key] === '1').map((c) => String(c.label || ''));
+      const name = String(r.teacher || '').trim();
+      if (!name) continue;
+      const base = { date, teacher_id: '', name, grade: t.grade || '', period: '', remark: '由旧考勤表迁移' };
+      let raw;
+      if (key === 'duty') raw = { ...base, status: /迟到/.test(marks.join()) ? '迟到' : /缺勤/.test(marks.join()) ? '缺勤' : '在岗', place: '' };
+      else if (key === 'class') raw = { ...base, subject: r.subject || '', class_name: '', status: '已上课', room: '' };
+      else if (key === 'leave') raw = { teacher_id: '', name, grade: t.grade || '', leave_type: '事假', start_at: date, end_at: date, hours: '', reason: marks.join('、'), approve_status: '已通过', registrar: '', remark: '由旧请假表迁移' };
+      else raw = { period: date.slice(0, 7) || '全部', grade: t.grade || '全部', teacher: name, expected: 1, actual: 1, duty_minutes: 0, class_count: 0, leave_count: 0, absent_count: 0, remark: '由旧汇总表迁移' };
+      push(key, raw, migrationKey(key, t.id, r.id));
+    }
+  }
+  /* 空库（新账号 / e2e）不要写「已迁移」标记：否则等用户后来导入了花名册，
+     自动迁移就再也不会跑，花名册会一直空着。有旧数据才落标记。 */
+  if (teachers.length || tables.length) db.meta.attHubMigrated = 1;
+  save();
+  return { migrated, teachers: teachers.length, tables: tables.length };
+});
+
+/* 统计表：从 4 张业务表重算。旧的「自动汇总」行软删，手工修正的行保留。 */
+on('POST', '/att-hub-refresh', ({ body }) => {
+  const period = String(body?.period || '').trim();
+  const grade = String(body?.grade || '全部').trim() || '全部';
+  const t = HUB_SHEETS.stats.table;
+  for (const r of T(t)) {
+    if (!r.deleted_at && String(r.remark || '').includes('自动汇总')) {
+      r.deleted_at = hubStamp(); r.updated_at = hubStamp();
+    }
+  }
+  const rows = calcStats({
+    roster: rowsOf(HUB_SHEETS.roster.table),
+    duty: rowsOf(HUB_SHEETS.duty.table),
+    klass: rowsOf(HUB_SHEETS.class.table),
+    leave: rowsOf(HUB_SHEETS.leave.table),
+  }, period, grade);
+  for (const raw of rows) {
+    T(t).push({ id: hubNextId(t), ...normalizeRow('stats', raw), created_at: hubStamp(), updated_at: hubStamp(), deleted_at: null });
+  }
+  save();
+  return { count: rows.length, period, grade };
+});
 
 /* ---- 账号 ---- */
 on('GET', '/auth/config', () => ({
