@@ -41,7 +41,7 @@ import { AUTUMN_2026_SCHEDULE, resolveDefinitions } from './timetable-schedule.m
 import {
   HUB_SHEETS, HUB_SHEET_KEYS, HUB_TABLES, sheetDef, isHubSheet,
   normalizeRow, validateRow, filterRows, calcStats, migrationKey,
-  DEFAULT_DEPARTMENT, gradesOfDepartment, deptName,
+  DEFAULT_DEPARTMENT, gradesOfDepartment, deptName, gradeKey,
 } from './attendance-hub-domain.mjs';
 
 /* ============================ 基础工具 ============================ */
@@ -1701,6 +1701,73 @@ function renameGradeEverywhere(oldName, newName) {
   return { hub, teachers, tables };
 }
 
+/* ---------------- 花名册年级回填（一次性） ----------------
+   线上真实问题：v411 把旧名册迁移进 att_hub_roster 时，100 位老师的年级全落成了
+   「高一」，于是页签是「高一教师花名册 · 100 / 高二教师花名册 · 0」——
+   高二那 50 多位老师明明在库里，却全被算成高一。
+
+   年级的唯一真值就是老师最初给的那四张纸表（SEED_ROSTER：高一 46 / 高二 56，
+   姓名互不重复、也没有同名跨年级），所以按姓名回填一次：
+     · 新花名册（att_hub_roster）和旧名册（teachers，年级工作台用的那份）一起改，
+       两处口径一致，坐班表 / 上课表 / 教研表按年级取名单才对得上；
+     · 补进来的年级同时写进年级名单并挂到第一个部门下，页签立刻出现；
+     · 只跑一次；花名册里已经出现两个以上年级就说明用户自己分过了，直接跳过。 */
+const LEGACY_GRADE_BY_NAME = (() => {
+  const map = new Map();
+  for (const [grade, people] of Object.entries(SEED_ROSTER)) {
+    for (const [name] of people) {
+      const key = String(name || '').replace(/\s+/g, '');
+      if (key && !map.has(key)) map.set(key, grade);
+    }
+  }
+  return map;
+})();
+
+function syncRosterGrades(db, u) {
+  if (db.meta.rosterGradeSynced) return false;
+  const rows = rowsOf(HUB_SHEETS.roster.table);
+  /* 空库不动，也不打标记：新账号以后导入花名册时还要靠这次回填 */
+  if (!rows.length) return false;
+
+  const sameGrade = (a, b) => gradeKey(a) === gradeKey(b);
+  /* 已经有两个以上年级 = 用户自己分过了，不覆盖，只落标记 */
+  const kinds = new Set(rows.map((r) => gradeKey(r.grade)).filter(Boolean));
+  if (kinds.size > 1) { db.meta.rosterGradeSynced = 1; return true; }
+
+  /* 年级名可能写成「高一年级」，回填沿用名单里已有的写法，避免多出一张空分表 */
+  const list = [...new Set((u.settings.grades || []).map((g) => String(g).trim()).filter(Boolean))];
+  const canon = (g) => list.find((x) => sameGrade(x, g)) || g;
+
+  const legacy = new Map();
+  for (const t of rowsOf('teachers')) {
+    const key = String(t.name || '').replace(/\s+/g, '');
+    if (key && !legacy.has(key)) legacy.set(key, t);
+  }
+
+  const touched = new Set();
+  for (const r of rows) {
+    const key = String(r.name || '').replace(/\s+/g, '');
+    const grade = LEGACY_GRADE_BY_NAME.get(key);
+    if (!grade) continue;
+    const target = canon(grade);
+    touched.add(target);
+    if (!sameGrade(r.grade, target)) { r.grade = target; r.updated_at = nowISO(); }
+    /* 旧名册同步改：年级工作台的高一 / 高二名单也要跟着分开 */
+    const t = legacy.get(key);
+    if (t && !sameGrade(t.grade, target)) { t.grade = target; t.updated_at = nowISO(); }
+  }
+
+  for (const g of touched) if (!list.some((x) => sameGrade(x, g))) list.push(g);
+  u.settings.grades = list;
+
+  const map = gradeDeptMap();
+  const first = deptRows()[0];
+  if (first) for (const g of touched) if (!map[g]) map[g] = num(first.id);
+
+  db.meta.rosterGradeSynced = 1;
+  return true;
+}
+
 /* 一次性初始化 + 老数据清洗，幂等。GET /departments 与 GET /att-hub/roster 都会触发。 */
 function ensureHubV3() {
   const db = load();
@@ -1708,6 +1775,9 @@ function ensureHubV3() {
   u.settings = u.settings || {};
   const map = gradeDeptMap();
   let dirty = false;
+
+  /* 年级回填必须排在最前面：后面 seed 部门 / 年级名单时要按花名册里真实的年级来建页签 */
+  if (syncRosterGrades(db, u)) dirty = true;
 
   if (!db.meta.attHubDeptSeeded) {
     dirty = true;
