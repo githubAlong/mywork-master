@@ -15,10 +15,12 @@
 import { api, esc, toast, confirmDialog, saveBlob } from './core.js';
 import {
   HUB_SHEETS, sheetDef, blankRow, toCsv, fromCsv, validateRow, gradeOptions,
-  gradeKey, rosterTabLabel, shiftDate, periodRange, DEFAULT_DEPARTMENT,
+  gradeKey, rosterTabLabel, shiftDate, periodRange, DEFAULT_DEPARTMENT, sortHubRows,
 } from './attendance-hub-domain.mjs';
 
-const PAGE_SIZE = 20;
+/* 每页条数：默认 20，右下角可切 10 / 20 / 50 / 100 */
+const PAGE_SIZES = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
 /* 年级列表从 /grades 动态读取（见 loadGrades），这里不再写死。 */
 
 const optionHTML = (list, cur) => list.map((v) =>
@@ -90,7 +92,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   const S = {
     key, def,
     filters: { dept: '', grade: '', subject: '', from: '', to: '', q: '' },
-    page: 1, list: [], total: 0, busy: false,
+    page: 1, pageSize: DEFAULT_PAGE_SIZE, list: [], total: 0, busy: false,
     grades: gradeOptions(null),
     deptView: null, deptId: '', tab: 'all',
     day: todayCn(), period: '',
@@ -170,9 +172,16 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
           </table>
         </div>
         <div class="ahub-pager">
-          <button class="ahub-btn ghost" id="ahub-prev">← 上一页</button>
-          <span id="ahub-page">第 1 页</span>
-          <button class="ahub-btn ghost" id="ahub-next">下一页 →</button>
+          <span class="ahub-pager-total" id="ahub-page-total">—</span>
+          <div class="ahub-pager-right">
+            <button class="ahub-btn ghost" id="ahub-prev">← 上一页</button>
+            <span id="ahub-page">第 1 页</span>
+            <button class="ahub-btn ghost" id="ahub-next">下一页 →</button>
+            <label class="ahub-pagesize">每页
+              <select id="ahub-pagesize">${PAGE_SIZES.map((n) =>
+                `<option value="${n}"${n === DEFAULT_PAGE_SIZE ? ' selected' : ''}>${n}</option>`).join('')}</select>
+              条</label>
+          </div>
         </div>
       </section>
     </div>`;
@@ -267,7 +276,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
         data = await api.get(`/att-hub/${key}`, S.filters);
         if (!silent) toast('已把原考勤工作台的历史数据同步到 5 张新表', 'ok', 3200);
       }
-      S.list = Array.isArray(data.list) ? data.list : [];
+      S.list = sortHubRows(key, Array.isArray(data.list) ? data.list : []);
       S.total = Number(data.total) || S.list.length;
       paint();
       if (isRoster) await refreshDeptCounts();
@@ -282,10 +291,11 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   function paint() {
     const cols = S.def.columns;
     $('#ahub-thead').innerHTML = cols.map((c) => `<th style="min-width:${c.width || 100}px">${esc(c.label)}</th>`).join('') + '<th class="ahub-ops">操作</th>';
-    const pages = Math.max(1, Math.ceil(S.list.length / PAGE_SIZE));
+    const size = S.pageSize || DEFAULT_PAGE_SIZE;
+    const pages = Math.max(1, Math.ceil(S.list.length / size));
     if (S.page > pages) S.page = pages;
-    const start = (S.page - 1) * PAGE_SIZE;
-    const pageRows = S.list.slice(start, start + PAGE_SIZE);
+    const start = (S.page - 1) * size;
+    const pageRows = S.list.slice(start, start + size);
     $('#ahub-tbody').innerHTML = pageRows.length
       ? pageRows.map((r) => `<tr data-id="${esc(r.id)}">${cols.map((c) => {
         const v = r[c.key];
@@ -297,6 +307,12 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
       : `<tr><td colspan="${cols.length + 1}" class="ahub-empty">暂无记录。点「＋ 新增记录」开始录入，或用「批量导入 CSV」一次导入。</td></tr>`;
     $('#ahub-count').textContent = `共 ${S.total} 条 · 当前筛选 ${S.list.length} 条`;
     $('#ahub-page').textContent = `第 ${S.page} / ${pages} 页`;
+    const totalEl = $('#ahub-page-total');
+    if (totalEl) {
+      const from = S.list.length ? start + 1 : 0;
+      const to = Math.min(start + size, S.list.length);
+      totalEl.textContent = `显示 ${from}–${to} 条 / 共 ${S.list.length} 条`;
+    }
     $('#ahub-prev').disabled = S.page <= 1;
     $('#ahub-next').disabled = S.page >= pages;
 
@@ -517,7 +533,15 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   $('#ahub-import').onclick = openImport;
   $('#ahub-export').onclick = exportCsv;
   $('#ahub-prev').onclick = () => { if (S.page > 1) { S.page -= 1; paint(); } };
-  $('#ahub-next').onclick = () => { if (S.page * PAGE_SIZE < S.list.length) { S.page += 1; paint(); } };
+  $('#ahub-next').onclick = () => { if (S.page * S.pageSize < S.list.length) { S.page += 1; paint(); } };
+  /* 每页条数：切换后回到第 1 页，不改变筛选条件与数据 */
+  const sizeSel = $('#ahub-pagesize');
+  if (sizeSel) sizeSel.onchange = () => {
+    const n = Number(sizeSel.value);
+    S.pageSize = PAGE_SIZES.includes(n) ? n : DEFAULT_PAGE_SIZE;
+    S.page = 1;
+    paint();
+  };
   if ($('#ahub-refresh')) $('#ahub-refresh').onclick = async () => {
     try {
       const r = periodRange(S.period, todayCn());

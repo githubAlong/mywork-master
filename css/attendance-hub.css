@@ -116,9 +116,25 @@
 .ahub-st-warn { color: #B45309 !important; }
 .ahub-st-bad { color: #DC2626 !important; }
 
+/* 分页器：整体落在表格右下角 —— 左侧「显示 x–y 条 / 共 N 条」，
+   右侧翻页 + 每页条数（10 / 20 / 50 / 100） */
 .ahub-pager {
-  display: flex; align-items: center; justify-content: center; gap: 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px 14px;
   padding-top: 14px; font-size: 12px; color: var(--ahub-sub);
+}
+.ahub-pager-total { white-space: nowrap; }
+.ahub-pager-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.ahub-pagesize { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ahub-pagesize select {
+  font-family: inherit; font-size: 12px; color: var(--ahub-ink);
+  padding: 4px 6px; border: 1px solid var(--ahub-line); border-radius: 8px;
+  background: #FFF; cursor: pointer;
+}
+.ahub-pagesize select:focus { outline: none; border-color: var(--ahub-blue); }
+@media (max-width: 720px) {
+  .ahub-pager { justify-content: center; }
+  .ahub-pager-right { margin-left: 0; flex-wrap: wrap; justify-content: center; }
 }
 
 /* ---------------- 弹窗 ---------------- */

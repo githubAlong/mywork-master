@@ -262,6 +262,24 @@ export function filterRows(key, rows, f = {}) {
   });
 }
 
+/* 花名册按「教师序号」升序：1 号在最前、100 号在最后。
+   序号可能是纯数字、带 T- 前缀，也可能为空（手工新增还没编号），
+   统一取第一段数字比较；没有序号的排最后，序号相同按 id 升序保持稳定。
+   其余 4 张记录表保持后端默认顺序（新记录在前），不受影响。 */
+export function sortHubRows(key, rows) {
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  if (key !== 'roster') return list;
+  const noOf = (r) => {
+    const m = String(r?.teacher_id ?? '').match(/\d+/);
+    return m ? Number(m[0]) : Number.POSITIVE_INFINITY;
+  };
+  return list.sort((a, b) => {
+    const d = noOf(a) - noOf(b);
+    if (Number.isFinite(d) && d !== 0) return d;
+    return (Number(a?.id) || 0) - (Number(b?.id) || 0);
+  });
+}
+
 /* ---------------- CSV 批量导入 / 导出 ---------------- */
 export function csvEscape(v) {
   const s = String(v ?? '');
