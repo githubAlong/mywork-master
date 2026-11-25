@@ -997,13 +997,14 @@ export async function renderTimetable(box) {
       'table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}th,td{border:1px solid #D8DEE8;padding:7px 5px;vertical-align:middle;white-space:pre-wrap;overflow-wrap:anywhere}th{background:#F2F5FA}' +
       'th:first-child,td:first-child{width:90px;background:#F7F8FA;font-weight:700}th:nth-child(2),td:nth-child(2){width:120px;background:#F7F8FA}' +
       '@page{size:A4 landscape;margin:10mm}' +
-      '</style><h2>' + esc(title) + '</h2><div class="meta">' + esc(appliedType + ' · ' + (appliedGrade === '全部' ? '全部年级总课表' : appliedGrade) + ' · 导出时间：' + new Date().toLocaleString('zh-CN')) + '</div><table>' + htmlRows + '</table>' +
+      '</style><h2>' + esc(title) + '</h2><table>' + htmlRows + '</table>' +
       '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},250)})<\/script></html>');
     win.document.close();
   }
 
   /* 导出 PNG：按教师工作台课表的真实视觉重绘
-     —— 提醒卡（正在上课 / 下一节课 + 倒计时）、课表标题、节次 + 时间双列、课程块、午休条。 */
+     —— 只保留「我的课表」标题 + 课表卡片（卡内标题、节次 + 时间双列、课程块、午休条）。
+        冬令时/年级说明、导出时间、提醒卡与倒计时均不再输出，导出结果只呈现课表本身。 */
   async function exportPng(visible, periods) {
     const C = {
       page: '#F3F7FF', card: '#FFFFFF', text: '#172B4D', text2: '#637B9D', text3: '#8DA0BC',
@@ -1027,9 +1028,8 @@ export async function renderTimetable(box) {
     const W = 1680, PAD = 32, CONTENT = W - PAD * 2;
     const PERIOD_W = 92, TIME_W = 138, HEAD_H = 46, ROW_H = 66, LUNCH_H = 50;
     const DAY_W = (CONTENT - PERIOD_W - TIME_W) / Math.max(1, days.length);
-    const TOP = 26, TITLE_BLOCK = 82, REM_H = 150, GRID_TITLE_H = 56;
-    const remindTop = TOP + TITLE_BLOCK + 12;
-    const cardTop = remindTop + REM_H + 16;
+    const TOP = 26, TITLE_BLOCK = 44, GRID_TITLE_H = 56;
+    const cardTop = TOP + TITLE_BLOCK + 14;
     const tableTop = cardTop + GRID_TITLE_H;
     const tableH = HEAD_H + rows.reduce((sum, row) => sum + (row.isLunch ? LUNCH_H : ROW_H), 0);
     const cardBottom = tableTop + tableH;
@@ -1070,80 +1070,15 @@ export async function renderTimetable(box) {
     ctx.fillStyle = C.page;
     ctx.fillRect(0, 0, W, H);
 
-    /* 顶部标题区（图片内部保留原有三行内容） */
-    ctx.textAlign = 'left';
+    /* 顶部标题：只保留「我的课表」，居中显示；冬令时/年级说明、导出时间、提醒卡与倒计时都不再输出 */
+    ctx.textAlign = 'center';
     setFont('700', 26); ctx.fillStyle = C.text;
-    ctx.fillText('我的课表', PAD, TOP + 28);
-    setFont('400', 14); ctx.fillStyle = C.text2;
-    ctx.fillText(appliedType + ' · ' + (appliedGrade === '全部' ? '全部年级总课表' : appliedGrade), PAD, TOP + 54);
-    setFont('400', 12.5); ctx.fillStyle = C.text3;
-    ctx.fillText('导出时间：' + new Date().toLocaleString('zh-CN'), PAD, TOP + 76);
+    ctx.fillText('我的课表', W / 2, TOP + 28);
+    ctx.textAlign = 'left';
 
-    /* 提醒卡：与平台一致（正在上课 / 下一节课 + 班级 + 时间 + 倒计时） */
+    /* 当前节 / 下一节仍用于课程块描边高亮，但不绘制提醒卡 */
     const now = new Date();
     const info = currentLesson(visible);
-    const lesson = info.current || info.next;
-    let kicker = '今日无课';
-    let countLabel = '今日课程安排';
-    let target = null;
-    if (info.current) {
-      kicker = '正在上课';
-      countLabel = '距离下课';
-      target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(info.current.end / 60), info.current.end % 60);
-    } else if (info.next) {
-      kicker = '下一节课';
-      countLabel = '距离上课还有';
-      target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(info.next.start / 60), info.next.start % 60);
-    }
-    const remaining = info.todayCourses.filter((item) => item.end > info.now).length;
-    const lessonClass = lesson ? (gradeClass(lesson.course.grade, lesson.course.class_name) || '班级待填写') : '今天没有安排课程';
-    const lessonTime = lesson ? courseTime(lesson.course, lesson.period, periodTimes, appliedType) : '';
-    const lessonMeta = lesson
-      ? [lesson.course.subject || '课程', lesson.period ? periodName(lesson.period) : '节次待设置', '今日还剩 ' + remaining + ' 节'].join(' · ')
-      : '今天暂无课程安排，适合备课、整理资料或处理其他事务。';
-
-    fillRR(PAD, remindTop, CONTENT, REM_H, 14, C.card);
-    strokeRR(PAD, remindTop, CONTENT, REM_H, 14, C.line, 1);
-    const innerX = PAD + 26;
-    const rightX = PAD + CONTENT - 26;
-    const asideW = 232;
-    const pairMax = CONTENT - 26 * 2 - asideW - 30;
-    let bigSize = 42;
-    setFont('800', bigSize);
-    let classW = ctx.measureText(lessonClass).width;
-    let timeW = lessonTime ? ctx.measureText(lessonTime).width : 0;
-    while (bigSize > 22 && classW + timeW + 60 > pairMax) {
-      bigSize -= 2;
-      setFont('800', bigSize);
-      classW = ctx.measureText(lessonClass).width;
-      timeW = lessonTime ? ctx.measureText(lessonTime).width : 0;
-    }
-    setFont('700', 13); ctx.fillStyle = C.primary;
-    ctx.fillText(kicker, innerX, remindTop + 38);
-    setFont('800', bigSize); ctx.fillStyle = C.text;
-    ctx.fillText(fit(lessonClass, pairMax - timeW - 60, bigSize, '800'), innerX, remindTop + 92);
-    setFont('800', bigSize);
-    const drawnClassW = Math.min(classW, pairMax - timeW - 60);
-    const dividerX = innerX + drawnClassW + 22;
-    if (lessonTime) {
-      ctx.fillStyle = C.line;
-      ctx.fillRect(dividerX, remindTop + 62, 1, 52);
-      setFont('800', bigSize); ctx.fillStyle = C.primary;
-      ctx.fillText(lessonTime, dividerX + 22, remindTop + 92);
-    }
-    setFont('400', 13); ctx.fillStyle = C.text2;
-    ctx.fillText(fit(lessonMeta, pairMax + 10, 13, '400'), innerX, remindTop + 124);
-
-    ctx.fillStyle = C.line;
-    ctx.fillRect(rightX - asideW, remindTop + 26, 1, REM_H - 52);
-    ctx.textAlign = 'right';
-    setFont('400', 12); ctx.fillStyle = C.text3;
-    ctx.fillText(formatDate(now) + ' 周' + WD_SHORT[now.getDay()], rightX, remindTop + 48);
-    setFont('400', 12); ctx.fillStyle = C.text2;
-    ctx.fillText(countLabel, rightX, remindTop + 82);
-    setFont('700', 26); ctx.fillStyle = C.text;
-    ctx.fillText(target ? countdownText(target.getTime() - now.getTime()) : '—', rightX, remindTop + 116);
-    ctx.textAlign = 'left';
 
     /* 卡片：课表标题 + 表格，整体圆角 */
     ctx.save();
