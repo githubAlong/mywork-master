@@ -53,6 +53,9 @@ test('页面接入排序，分页器提供 10/20/50/100 且靠右下角', async 
   assert.match(js, /id="ahub-pagesize"/);
   /* 切每页条数后回到第 1 页，避免停在不存在的页码 */
   assert.match(js, /S\.pageSize = PAGE_SIZES\.includes\(n\) \? n : DEFAULT_PAGE_SIZE;[\s\S]{0,80}S\.page = 1;/);
+  /* 选过的条数要记住：换页签 / 换表后不回到 20 */
+  assert.match(js, /pageSize: readPageSize\(\)/);
+  assert.match(js, /savePageSize\(S\.pageSize\)/);
 
   const css = await readFile(path.join(root, 'css/attendance-hub.css'), 'utf8');
   const pager = css.match(/\.ahub-pager \{[\s\S]*?\}/);

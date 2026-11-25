@@ -18,9 +18,20 @@ import {
   gradeKey, rosterTabLabel, shiftDate, periodRange, DEFAULT_DEPARTMENT, sortHubRows,
 } from './attendance-hub-domain.mjs';
 
-/* 每页条数：默认 20，右下角可切 10 / 20 / 50 / 100 */
+/* 每页条数：默认 20，右下角可切 10 / 20 / 50 / 100。
+   选择记在 localStorage 里：换页签、切换 5 张表都沿用，不用每次都重选。 */
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_KEY = 'ahub.pageSize';
+function readPageSize() {
+  try {
+    const n = Number(localStorage.getItem(PAGE_SIZE_KEY));
+    return PAGE_SIZES.includes(n) ? n : DEFAULT_PAGE_SIZE;
+  } catch { return DEFAULT_PAGE_SIZE; }
+}
+function savePageSize(n) {
+  try { localStorage.setItem(PAGE_SIZE_KEY, String(n)); } catch { /* 隐私模式忽略 */ }
+}
 /* 年级列表从 /grades 动态读取（见 loadGrades），这里不再写死。 */
 
 const optionHTML = (list, cur) => list.map((v) =>
@@ -92,7 +103,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   const S = {
     key, def,
     filters: { dept: '', grade: '', subject: '', from: '', to: '', q: '' },
-    page: 1, pageSize: DEFAULT_PAGE_SIZE, list: [], total: 0, busy: false,
+    page: 1, pageSize: readPageSize(), list: [], total: 0, busy: false,
     grades: gradeOptions(null),
     deptView: null, deptId: '', tab: 'all',
     day: todayCn(), period: '',
@@ -179,7 +190,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
             <button class="ahub-btn ghost" id="ahub-next">下一页 →</button>
             <label class="ahub-pagesize">每页
               <select id="ahub-pagesize">${PAGE_SIZES.map((n) =>
-                `<option value="${n}"${n === DEFAULT_PAGE_SIZE ? ' selected' : ''}>${n}</option>`).join('')}</select>
+                `<option value="${n}"${n === S.pageSize ? ' selected' : ''}>${n}</option>`).join('')}</select>
               条</label>
           </div>
         </div>
@@ -539,6 +550,7 @@ export async function renderAttendanceHub(root, { sheet = 'roster' } = {}) {
   if (sizeSel) sizeSel.onchange = () => {
     const n = Number(sizeSel.value);
     S.pageSize = PAGE_SIZES.includes(n) ? n : DEFAULT_PAGE_SIZE;
+    savePageSize(S.pageSize);
     S.page = 1;
     paint();
   };
