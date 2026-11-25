@@ -25,6 +25,18 @@
 .home-redesign .home-topbar .searchbar input { min-width: 0; max-width: 100%; }
 .home-redesign .home-topbar .searchbar input { text-overflow: ellipsis; }
 
+/* ---------- 0.1 搜索条铺满内容区，搜索按钮固定在最右端 ----------
+   历史叠加大屏把搜索条限成 520px，右侧空一大片、按钮停在中间，很突兀。
+   这里只调宽度与对齐：搜索功能、占位文案、按钮、卡片一律不动。 */
+.home-redesign .home-topbar .searchbar { width: 100%; max-width: none; }
+.home-redesign .home-topbar .searchbar .sb-go { margin-left: auto; flex: 0 0 auto; }
+
+/* ---------- 0.2 第二行卡片底边齐平 ----------
+   旧规则给日历卡加了 translateY(8px)，三张卡虽在栅格里等高，
+   视觉上日历仍比左两张低 8px，左下留出参差的空白带。 */
+.home-redesign #home-grid > .hg-item[data-hcard="calendar"] { transform: none; }
+.home-redesign #home-grid > .hg-item { align-self: stretch; }
+
 /* ---------- 1. 大屏 ≥1600：限宽居中，卡片不被拉散 ---------- */
 @media (min-width: 1600px) {
   body:not(.is-wide) .home-redesign #home-grid {
@@ -32,7 +44,6 @@
     margin-inline: auto;
     gap: clamp(12px, 1.1vw, 20px);
   }
-  .home-redesign .home-topbar .searchbar { max-width: 520px; }
 }
 
 /* ---------- 2. 小屏 1101–1599：侧栏收窄后主区宽度交给 flex 自算 ---------- */
