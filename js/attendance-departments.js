@@ -34,33 +34,59 @@ function overlay(title, body, { wide = false, sub = '', size = '' } = {}) {
   return { wrap, close };
 }
 
+const ICONS = {
+  dept: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20.5h18"/><path d="M5.5 20.5V5.9a1.3 1.3 0 0 1 1.3-1.3h5.2a1.3 1.3 0 0 1 1.3 1.3v14.6"/><path d="M13.3 10.4h4.1a1.3 1.3 0 0 1 1.3 1.3v8.8"/><path d="M8.4 8.7h1.6M8.4 12.2h1.6M8.4 15.7h1.6"/></svg>`,
+  grade: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 8.7 12 4.6l9.4 4.1L12 12.8 2.6 8.7Z"/><path d="M6.7 10.7v4.1c0 1.6 2.4 2.9 5.3 2.9s5.3-1.3 5.3-2.9v-4.1"/></svg>`,
+  teacher: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.1"/><path d="M5.2 20c0-3.3 3-5.6 6.8-5.6s6.8 2.3 6.8 5.6"/></svg>`,
+  caret: `<svg class="ahub-caret" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M1.6 3.3 5 6.7l3.4-3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  refresh: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.3 6.4A5.4 5.4 0 1 0 13.4 9.6"/><path d="M13.5 3.1v3.5H10"/></svg>`,
+  info: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.1v4" stroke-linecap="round"/><path d="M8 4.9v.9" stroke-linecap="round"/></svg>`,
+  trash: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.7 4.3h10.6"/><path d="M6.2 4.3V3h3.6v1.3"/><path d="M4.3 4.3l.6 8.2a1 1 0 0 0 1 .9h4.2a1 1 0 0 0 1-.9l.6-8.2"/><path d="M6.8 6.9v3.6M9.2 6.9v3.6"/></svg>`,
+};
+
 export async function renderAttendanceDepartments(root) {
   const S = { view: null, busy: false };
 
   root.innerHTML = `
     <div class="ahub ahub-dept">
       <header class="ahub-head">
-        <div>
+        <div class="ahub-dept-headmain">
           <div class="ahub-crumb">考勤 <span>/</span> 部门管理</div>
           <div class="ahub-dept-titlerow">
             <h1>部门管理</h1>
-            <span class="ahub-count" id="ad-count">—</span>
+            <span class="ahub-dept-badge" id="ad-badge-dept">共 — 个部门</span>
+            <span class="ahub-dept-badge" id="ad-badge-grade">共 — 个年级</span>
+            <div class="ahub-head-right">
+              <button class="ahub-btn primary" id="ad-dept-add">＋ 新建部门</button>
+              <button class="ahub-btn" id="ad-grade-add">＋ 新建年级</button>
+            </div>
           </div>
-          <p>先新建部门，再在该部门下新建年级；建好的年级会自动成为花名册的分表页签与四张考勤表的筛选条件</p>
-        </div>
-        <div class="ahub-head-right">
-          <button class="ahub-btn" id="ad-grade-add">＋ 新建年级</button>
-          <button class="ahub-btn primary" id="ad-dept-add">＋ 新建部门</button>
+          <p>先新建部门，再在该部门下新建年级；建好的年级会自动成为花名册的分页签与考勤表的筛选条件</p>
         </div>
       </header>
 
-      <section class="ahub-card ahub-dept-steps">
-        <span class="ahub-dept-steps-t">新建顺序</span>
-        <span class="ahub-dept-step">① 新建部门，名称填 <b>「高中部」</b></span>
-        <span class="ahub-dept-arrow">→</span>
-        <span class="ahub-dept-step">② 新建年级时所属部门选 <b>「高中部」</b></span>
-        <span class="ahub-dept-arrow">→</span>
-        <span class="ahub-dept-step">③ 花名册自动多一个分表页签</span>
+      <section class="ahub-dept-stats">
+        <div class="ahub-stat">
+          <span class="ahub-stat-ico">${ICONS.dept}</span>
+          <div class="ahub-stat-body">
+            <span class="ahub-stat-lb">部门总数</span>
+            <b class="ahub-stat-num" id="ad-stat-dept">—</b>
+          </div>
+        </div>
+        <div class="ahub-stat">
+          <span class="ahub-stat-ico">${ICONS.grade}</span>
+          <div class="ahub-stat-body">
+            <span class="ahub-stat-lb">年级总数</span>
+            <b class="ahub-stat-num" id="ad-stat-grade">—</b>
+          </div>
+        </div>
+        <div class="ahub-stat">
+          <span class="ahub-stat-ico">${ICONS.teacher}</span>
+          <div class="ahub-stat-body">
+            <span class="ahub-stat-lb">在编教师</span>
+            <b class="ahub-stat-num" id="ad-stat-teacher">—</b>
+          </div>
+        </div>
       </section>
 
       <section class="ahub-card">
@@ -69,7 +95,7 @@ export async function renderAttendanceDepartments(root) {
             <b style="font-size:14px">部门与年级</b>
             <span class="ahub-tip">部门一行，其下年级缩进；每行都能编辑、删除</span>
           </div>
-          <button class="ahub-btn" id="ad-refresh">刷新</button>
+          <button class="ahub-btn ahub-btn-ico" id="ad-refresh">${ICONS.refresh}刷新</button>
         </div>
         <div class="ahub-table-wrap">
           <table class="ahub-table ahub-dept-table">
@@ -84,9 +110,15 @@ export async function renderAttendanceDepartments(root) {
         </div>
       </section>
 
-      <div class="ahub-note-bar">
-        <div><b>编辑：</b>可改部门名 / 年级名；改名后花名册与四张考勤表里已有记录的名称同步更新，不会出现对不上的旧名字。</div>
-        <div><b>删除：</b>先二次确认并提示影响范围；只解除关联，教师与考勤记录全部保留。</div>
+      <div class="ahub-dept-notes">
+        <div class="ahub-note-card">
+          <span class="ahub-note-ico">${ICONS.info}</span>
+          <p><b>编辑：</b>可改部门名 / 年级名；改名后花名册与考勤表里已有记录的名称同步更新，不会出现对不上的旧名字。</p>
+        </div>
+        <div class="ahub-note-card">
+          <span class="ahub-note-ico">${ICONS.trash}</span>
+          <p><b>删除：</b>先二次确认并提示影响范围；只解除关联，教师与考勤记录全部保留。</p>
+        </div>
       </div>
     </div>`;
 
@@ -110,7 +142,7 @@ export async function renderAttendanceDepartments(root) {
     const rows = [];
     for (const d of v.list) {
       rows.push(`<tr class="ahub-dept-row" data-dept="${esc(d.id)}">
-        <td><span class="ahub-dept-name"><b>▾ ${esc(d.name)}</b><span class="ahub-pill blue">部门</span></span></td>
+        <td><span class="ahub-dept-name">${ICONS.caret}<b>${esc(d.name)}</b><span class="ahub-pill blue">部门</span></span></td>
         <td><b>${d.teacherCount || 0}</b></td>
         <td>总花名册</td>
         <td class="ahub-ops">
@@ -119,7 +151,7 @@ export async function renderAttendanceDepartments(root) {
         </td></tr>`);
       for (const g of d.grades) {
         rows.push(`<tr class="ahub-dept-sub" data-grade="${esc(g.name)}" data-dept="${esc(d.id)}">
-          <td><span class="ahub-dept-name" style="padding-left:26px">└ ${esc(g.name)}<span class="ahub-pill gray">年级</span></span></td>
+          <td><span class="ahub-dept-name"><span class="ahub-tree">└</span>${esc(g.name)}<span class="ahub-pill gray">年级</span></span></td>
           <td>${g.teacherCount || 0}</td>
           <td>${esc(rosterTabLabel(g.name))}</td>
           <td class="ahub-ops">
@@ -130,7 +162,7 @@ export async function renderAttendanceDepartments(root) {
     }
     for (const g of v.unassigned || []) {
       rows.push(`<tr class="ahub-dept-sub" data-grade="${esc(g.name)}">
-        <td><span class="ahub-dept-name" style="padding-left:26px">└ ${esc(g.name)}<span class="ahub-pill gray">年级</span><span class="ahub-pill orange">未分配</span></span></td>
+        <td><span class="ahub-dept-name"><span class="ahub-tree">└</span>${esc(g.name)}<span class="ahub-pill gray">年级</span><span class="ahub-pill orange">未分配</span></span></td>
         <td>${g.teacherCount || 0}</td>
         <td>—</td>
         <td class="ahub-ops">
@@ -144,7 +176,15 @@ export async function renderAttendanceDepartments(root) {
       rows.push(`<tr><td colspan="4" class="ahub-dept-foot">＋ 新增部门后，这里自动多一组；该部门下每建一个年级，花名册自动多一个分表页签</td></tr>`);
     }
     body.innerHTML = rows.join('');
-    $('#ad-count').textContent = `共 ${v.list.length} 个部门 · ${(v.grades || []).length} 个年级`;
+
+    const gradeTotal = (v.grades || []).length;
+    const teacherTotal = v.list.reduce((s, d) => s + (d.teacherCount || 0), 0)
+      + (v.unassigned || []).reduce((s, g) => s + (g.teacherCount || 0), 0);
+    $('#ad-badge-dept').textContent = `共 ${v.list.length} 个部门`;
+    $('#ad-badge-grade').textContent = `共 ${gradeTotal} 个年级`;
+    $('#ad-stat-dept').textContent = v.list.length;
+    $('#ad-stat-grade').textContent = gradeTotal;
+    $('#ad-stat-teacher').textContent = teacherTotal;
 
     body.querySelectorAll('[data-act]').forEach((btn) => {
       btn.onclick = async () => {

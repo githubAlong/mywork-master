@@ -212,7 +212,9 @@ test('接线：侧栏 6 个二级导航 / 路由分派 / CSS / SW 资源清单',
   assert.match(dept, /data-act="dept-del"/);
   assert.match(dept, /data-act="grade-edit"/);
   assert.match(dept, /data-act="grade-del"/);
-  assert.match(dept, /新建顺序/);
+  /* 顺序引导：由「① ② ③」步骤条改为标题下的说明 + 三张统计卡（2026-11-26 设计稿） */
+  assert.match(dept, /先新建部门，再在该部门下新建年级/);
+  assert.match(dept, /ahub-dept-stats/, '部门管理缺统计卡');
   assert.doesNotMatch(hub, /id="ahub-grade-manage"/, '花名册顶部不应再有年级管理');
   assert.doesNotMatch(hub, /id="ahub-grade-add"/, '花名册顶部不应再有新建年级');
 
@@ -243,7 +245,8 @@ test('接线：侧栏 6 个二级导航 / 路由分派 / CSS / SW 资源清单',
   assert.doesNotMatch(domain, /label: '教师ID'|label: '任教班级'/);
   assert.match(domain, /label: '教师序号'/);
   assert.match(domain, /DEFAULT_DEPARTMENT = '高中部'/);
-  assert.match(css, /ahub-dept-steps/);
+  assert.match(css, /ahub-dept-stats/);
+  assert.match(css, /ahub-dept-table/);
   assert.match(css, /ahub-tablist/);
   assert.match(css, /ahub-daynav/);
   assert.match(css, /ahub-periods/);
