@@ -195,15 +195,19 @@ test('接线：侧栏单入口 / 旧工作台路由 / 自动补齐 / SW 资源',
   const [ui, work, sw, localapi] = await Promise.all([
     read('js/ui.js'), read('js/work.js'), read('sw.js'), read('js/localapi.js'),
   ]);
-  const navLine = /\{ id: 'attendance'[^}]*\}/.exec(ui)?.[0] || '';
-  assert.doesNotMatch(navLine, /sub:/, '考勤不应再有三级导航');
+  /* v425：六页签工作台不变，侧栏加回六张表的入口（每个入口落到对应页签）。 */
+  const navBlock = /\{ id: 'attendance'[\s\S]*?\]\s*\}\s*,/.exec(ui)?.[0] || '';
+  for (const key of ['roster', 'seat', 'class', 'research', 'leave', 'summary']) {
+    assert.match(navBlock, new RegExp(`id: '${key}'`), `侧栏缺入口 ${key}`);
+  }
   assert.match(work, /renderAttendancePRD/);
   assert.doesNotMatch(work, /renderAttendanceHub/);
   assert.match(work, /\/attendance\/restore-hub/);
   assert.match(localapi, /ensureLegacyRestore/);
   assert.match(localapi, /on\('POST', '\/attendance\/restore-hub'/);
   assert.match(localapi, /LEGACY_RESTORE_VERSION/);
-  assert.match(sw, /const CACHE = 'wb-v424-attendance-restore'/);
+  /* 缓存版本每次发布都会递增，只校验命名规范，不写死某一个版本号。 */
+  assert.match(sw, /const CACHE = 'wb-v\d+-[a-z0-9-]+'/);
   assert.match(sw, /'\.\/js\/attendance-legacy-restore\.mjs'/);
   /* 可见按钮按用户上一轮要求：不能加回来 */
   const hub = await read('js/attendance-hub.js');

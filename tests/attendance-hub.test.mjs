@@ -185,20 +185,35 @@ test('年级管理动态化：新建年级能落库，改名同步 5 张考勤�
   assert.equal(D.calcStats({ roster: [{ name: '甲', grade: '高一' }] }, '', '高一年级').length, 1);
 });
 
-test('接线：考勤单入口恢复旧工作台 / 独立表源码保留 / CSS / SW 资源清单', async () => {
-  const [ui, work, sw, appHtml, localdb, hub, attgrade, dept, domain, css] = await Promise.all([
+test('接线：六页签工作台 + 侧栏六张表入口 / 独立表源码保留 / CSS / SW 资源清单', async () => {
+  const [ui, work, sw, appHtml, localdb, hub, attgrade, dept, domain, css, prd] = await Promise.all([
     read('js/ui.js'), read('js/work.js'), read('sw.js'), read('app.html'), read('js/localdb.js'),
     read('js/attendance-hub.js'), read('js/attgrade.js'), read('js/attendance-departments.js'),
-    read('js/attendance-hub-domain.mjs'), read('css/attendance-hub.css'),
+    read('js/attendance-hub-domain.mjs'), read('css/attendance-hub.css'), read('js/attendance-prd.js'),
   ]);
-  /* 2026-11-26 设计确认：考勤恢复旧版单页工作台，6 个独立表页与部门管理下线。
+  /* 2026-11-26 v425 设计确认（方案 C）：六页签工作台保持不变，
+     但「考勤」下面六张表的入口必须都在，点进去落到对应页签。
      独立表源码全部保留（下面的文件级断言仍要过），只是不再挂到路由上。 */
-  const navLine = /\{ id: 'attendance'[^}]*\}/.exec(ui)?.[0] || '';
-  assert.match(navLine, /label: '考勤'/);
-  assert.doesNotMatch(navLine, /sub:/, '考勤不应再有三级导航');
+  const navBlock = /\{ id: 'attendance'[\s\S]*?\]\s*\}\s*,/.exec(ui)?.[0] || '';
+  assert.match(navBlock, /label: '考勤'/);
+  assert.match(navBlock, /sub: \[/, '考勤下面要挂六张表的入口');
+  for (const [id, label] of [
+    ['roster', '花名册'], ['seat', '坐班表'], ['class', '上课表'],
+    ['research', '教研表'], ['leave', '请假表'], ['summary', '汇总统计表'],
+  ]) {
+    assert.match(navBlock, new RegExp(`id: '${id}', label: '${label}'`), `侧栏缺入口 ${label}`);
+  }
   assert.match(ui, /attendance: 'work\/attendance'/, '点「考勤」应直达单页工作台');
   assert.match(work, /renderAttendancePRD/, '考勤路由应渲染旧版 PRD 工作台');
   assert.match(work, /attendance-prd\.js/);
+  assert.match(work, /attendanceTabOf/, '侧栏入口要能映射成工作台页签');
+  assert.match(work, /grade: initialGrade, tab: initialTab/, '页签参数要传给工作台');
+  const tabRoute = await read('js/attendance-tab-route.mjs');
+  assert.match(tabRoute, /departments: 'roster'/, 'v417~v423 老链接要落到页签而不是白屏');
+  assert.match(tabRoute, /duty: 'seat'/);
+  assert.match(tabRoute, /stats: 'summary'/);
+  assert.match(prd, /tab: initialTab/, '工作台要接收初始页签');
+  assert.match(prd, /TABS\.some\(\(\[id\]\) => id === initialTab\)/, '未知页签要回落坐班表');
   assert.doesNotMatch(work, /renderAttendanceHub/, '独立表路由已下线');
   assert.doesNotMatch(work, /renderAttendanceDepartments/, '部门管理路由已下线');
   assert.doesNotMatch(work, /renderAttendance\(body\)/, '旧考勤首页（年级卡片）不恢复');

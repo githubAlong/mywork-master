@@ -14,6 +14,7 @@ import { renderTripManagement } from './trips.js';
 import { syncMaterialSharing } from './material-sharing.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { PUNISH_SEEDS } from './punish-seeds.mjs';
+import { attendanceTabOf } from './attendance-tab-route.mjs';
 
 const M = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 /* 备注字段统一生成器。
@@ -144,20 +145,20 @@ registerView(async function work(main, { tab, third }) {
   }
   if (t === 'timetable') { headEl.remove(); return renderMyTimetable(body); }
   if (t === 'attendance') {
-    /* 2026-11-26 设计确认：恢复旧版 PRD 考勤工作台（单页六页签）。
-       v417~v423 的 6 个独立表页面与部门管理已下线；源码全部保留，随时可切回。
-       旧收藏链接 work/attendance/<英文 key> 一律落到工作台，不白屏；
-       中文年级名仍作为初始年级传入，已有的年级工作台链接继续可用。 */
+    /* 2026-11-26 v425 设计确认（方案 C）：仍是旧版 PRD 单页六页签工作台，
+       但侧栏「考勤」下六张表的入口回来了，点某一项直接落到对应页签。
+       v417~v423 的独立表页面与部门管理仍不挂路由（源码全部保留）。
+       老链接里的英文 key 也映射到页签，中文年级名仍作为初始年级，都不白屏。 */
     const raw = third ? decodeURIComponent(third) : '';
-    const HUB_KEYS = new Set(['departments', 'roster', 'duty', 'class', 'leave', 'stats']);
-    const initialGrade = HUB_KEYS.has(raw) ? '' : raw;
+    const initialTab = attendanceTabOf(raw);
+    const initialGrade = initialTab ? '' : raw;
     /* 历史数据自动补齐：v417~v423 期间录进 5 张独立表的数据回填到旧版数据源。
        带版本标记 + 行级幂等，进页面时后台跑一次，不新增可见按钮。 */
     await api.post('/attendance/restore-hub', {}).catch(() => null);
     /* 工作台自己渲染标题、说明与实时状态，外层页头必须移除，否则同一标题会出现两次 */
     headEl.remove();
     const { renderAttendancePRD } = await import('./attendance-prd.js');
-    return renderAttendancePRD(body, { grade: initialGrade });
+    return renderAttendancePRD(body, { grade: initialGrade, tab: initialTab });
   }
   if (t === 'invigilation') return renderInvigilation(body);
   if (t === 'trips') { headEl.remove(); return renderTripManagement(body); }

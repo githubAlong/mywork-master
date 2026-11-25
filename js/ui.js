@@ -108,10 +108,18 @@ export const NAV = [
       /* 备课紧接课表：课前看图、课后备课，动线是连着的。 */
       { id: 'prep', label: '备课', icon: 'book' },
       { id: 'repairs', label: '维修', icon: 'wrench' },
-      /* 2026-11-26 设计确认：考勤恢复旧版单页工作台（花名册/坐班/上课/教研/请假/汇总六页签）。
-         撤掉 v417 的 6 个三级导航与部门管理入口；年级 / 日期 / 节次都在工作台内切换。
-         v412 已下线的年级卡片首页不恢复。独立表源码保留，随时可切回。 */
-      { id: 'attendance', label: '考勤', icon: 'users' },
+      /* 2026-11-26 v425 设计确认（方案 C）：保持旧版单页工作台的六页签，
+         但把「考勤」下面六张表的入口加回来 —— 点某一项直接落到工作台对应页签，
+         不再各自开独立页面。部门管理仍下线；v412 已下线的年级卡片首页不恢复。
+         独立表源码全部保留，随时可切回。 */
+      { id: 'attendance', label: '考勤', icon: 'users', sub: [
+        { id: 'roster', label: '花名册', icon: 'users' },
+        { id: 'seat', label: '坐班表', icon: 'clock' },
+        { id: 'class', label: '上课表', icon: 'book' },
+        { id: 'research', label: '教研表', icon: 'edit' },
+        { id: 'leave', label: '请假表', icon: 'cal' },
+        { id: 'summary', label: '汇总统计表', icon: 'zap' },
+      ] },
       { id: 'invigilation', label: '监考', icon: 'shield' },
       { id: 'trips', label: '出差', icon: 'car' },
       { id: 'notes', label: '笔记', icon: 'edit' },

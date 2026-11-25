@@ -81,11 +81,13 @@ async function chooseResearchAttendees(members, selected = members){
 }
 
 
-export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {}) {
+export async function renderAttendancePRD(root, { grade: initialGrade = '', tab: initialTab = '' } = {}) {
   let grades = (await api.get('/grades').catch(() => ({grades:[]}))).grades || [];
   let grade = grades.includes(initialGrade) ? initialGrade : (grades[0] || initialGrade || '');
-  /* 用户 11-15 需求：进入考勤默认当天、全天（00:00-23:59），并优先打开坐班表 */
-  let date = TODAY(), period = 0, tab = 'seat', search = '', subject = '';
+  /* 用户 11-15 需求：进入考勤默认当天、全天（00:00-23:59），并优先打开坐班表。
+     v425：侧栏「考勤」下六张表的入口会带 tab 参数，直接落到对应页签；
+     没带或带了不认识的 key 仍默认坐班表，不影响任何旧链接。 */
+  let date = TODAY(), period = 0, tab = TABS.some(([id]) => id === initialTab) ? initialTab : 'seat', search = '', subject = '';
   let isComposingSearch = false;
   let teachers = [], allTeachers = [], tables = [], details = {}, leaveRecords = [], prefs = {};
   let timetableSettings = {}, timetableCourses = [], timetablePeriods = [], periodTimeEdits = {};
