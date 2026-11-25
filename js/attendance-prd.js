@@ -702,19 +702,27 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const teacherAddCardHtml = () => {
     if(!showAddTeacher)return '';
-    const subjects=teacherSubjects();
+    const subjects=[...new Set([...teacherSubjects(),...ROSTER_SUBJECTS])];
+    const departments=[...new Set([
+      ...(Array.isArray(prefs.departments?.[grade]) ? prefs.departments[grade] : []),
+      ...teachers.map(item=>String(deptOf(item)||'').trim()),
+      '高中部',
+    ].filter(Boolean))];
+    /* 三个输入框全部改成 combo（下拉候选 + 手动输入）：
+       学科/年级/部门手输新值就地入清单，其他表候选同步；姓名输已有教师=编辑其资料（用户 11-25 要求）。 */
     return '<section class="aprd-roster-add-card" aria-label="新增教师">'
-      +'<div class="aprd-roster-add-head"><div><h3>新增教师</h3><p>在当前年级新增人员，花名册及已生成的工作表将同步显示</p></div>'
+      +'<div class="aprd-roster-add-head"><div><h3>新增教师</h3><p>新增教师 / 学科 / 年级 / 部门，全部非必填；输入已有教师姓名则改为编辑其资料，其他表同步更新</p></div>'
       +'<span>当前年级：'+esc(grade)+'</span></div>'
       +'<form class="aprd-roster-add-form" id="aprd-roster-add-form">'
-      +'<label>姓名 <em>*</em><input name="name" type="text" placeholder="请输入教师姓名" autocomplete="off" required></label>'
-      /* 学科和「全部学科」筛选同一份列表，统一用下拉，不再用浏览器自带候选浮层。 */
-      +'<label>学科 <em>*</em><select name="subject" required><option value="">请选择学科</option>'
-      +(subjects.length?subjects:ROSTER_SUBJECTS).map(item=>'<option value="'+esc(item)+'">'+esc(item)+'</option>').join('')
-      +'</select></label>'
-      +'<label>归属年级 <em>*</em><input name="grade" type="text" value="'+esc(grade)+'" readonly title="新增教师归入当前所选年级，如需更换请先切换顶部年级"></label>'
-      +'<label>归属部门<input name="department" type="text" value="高中部" placeholder="请输入归属部门"></label>'
-      +'<div class="aprd-roster-add-actions"><button type="button" data-roster-add-cancel>取消</button><button type="submit" class="primary">保存教师</button></div>'
+      +'<label>姓名<input name="name" type="text" list="aprd-name-list" placeholder="输入教师姓名（可选）" autocomplete="off">'
+      +'<datalist id="aprd-name-list">'+teachers.map(item=>'<option value="'+escAttr(item.name)+'">'+esc(item.subject||'')+'</option>').join('')+'</datalist></label>'
+      +'<label>学科<input name="subject" type="text" list="aprd-subject-list" placeholder="下拉选已有或直接输入新学科" autocomplete="off">'
+      +'<datalist id="aprd-subject-list">'+subjects.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
+      +'<label>归属年级<input name="grade" type="text" list="aprd-grade-list" value="'+esc(grade)+'" placeholder="可输入新年级" autocomplete="off">'
+      +'<datalist id="aprd-grade-list">'+grades.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
+      +'<label>归属部门<input name="department" type="text" list="aprd-dept-list" value="高中部" placeholder="可输入新部门" autocomplete="off">'
+      +'<datalist id="aprd-dept-list">'+departments.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
+      +'<div class="aprd-roster-add-actions"><button type="button" data-roster-add-cancel>取消</button><button type="submit" class="primary">保存</button></div>'
       +'</form></section>';
   };
   const saveDraftButton = (type,label) => '<button '+(details[type]?'':'disabled')+' data-save-'+type+'>'+(details[type]?label:'生成后可保存修改')+'</button>';
@@ -1161,6 +1169,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
         const required=f.required?' required':'';
         const input=f.type==='select'?'<select name="'+escAttr(f.key)+'"'+required+'>'+f.options.map(o=>'<option '+(String(value)===String(o.value)?'selected':'')+' value="'+escAttr(o.value)+'">'+esc(o.label)+'</option>').join('')+'</select>'
           :f.type==='textarea'?'<textarea name="'+escAttr(f.key)+'">'+esc(value)+'</textarea>'
+          /* combo：输入框 + datalist 候选。既能下拉选已有值，也能手动输入新值（用户 11-25 要求）。 */
+          :f.type==='combo'?'<input name="'+escAttr(f.key)+'" type="text" list="'+escAttr(f.key)+'-list" value="'+escAttr(value)+'"'+required+' autocomplete="off">'
+            +'<datalist id="'+escAttr(f.key)+'-list">'+(f.options||[]).map(o=>'<option value="'+escAttr(o.value??o)+'">'+esc(o.label??'')+'</option>').join('')+'</datalist>'
           :'<input name="'+escAttr(f.key)+'" type="'+(f.type||'text')+'" value="'+escAttr(value)+'"'+required+(f.min!==undefined?' min="'+f.min+'"':'')+(f.step?' step="'+f.step+'"':'')+'>';
         return '<label>'+esc(f.label)+input+'</label>';
       }).join('')+
@@ -1497,7 +1508,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     roster:['data-add','新增教师'],seat:['data-add-record','新增坐班'],class:['data-add-record','新增上课'],
     research:['data-add-record','新增教研'],leave:['data-add-leave','新增请假'],summary:['data-add-summary','新增统计'],
   };
-  const addButtonLocked = type => type==='roster' ? !isEditing('roster') : (!!confirmedResult(type) && !isEditing(type));
+  /* 花名册新增不再要求先进编辑态：新增卡片本身就承担新增+编辑（用户 11-25 要求） */
+  const addButtonLocked = type => type!=='roster' && (!!confirmedResult(type) && !isEditing(type));
   const addButtonHtml = (type,locked) => {
     const [action,label]=ADD_ACTIONS[type]||['data-add','新增'];
     const text=type==='roster'&&showAddTeacher?'收起新增教师':'＋ '+label;
@@ -1505,7 +1517,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
   };
   const editButtonHtml = (type,locked) => '<button type="button" class="aprd-op" data-edit-sheet'
     +(locked||isEditing(type)?' disabled':'')+'>编辑</button>';
-  const subjectManagerButtonHtml = () => '<button type="button" class="aprd-op" data-subject-manager>学科管理</button>';
   const generateButtonHtml = locked => '<button type="button" class="primary" data-generate'
     +(locked||generating?' disabled':'')+'>确认生成</button>';
   const sheetStatusHtml = (type,locked,statusNote) => {
@@ -1517,10 +1528,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     return status?'<span class="aprd-filter-count" role="status">'+status+'</span>':'';
   };
   const countOf = value => String(Number(value) || 0);
-  /* 六张表下方按钮统一：学科筛选 / 搜索框 / 语音速记 / 新增 / 编辑 / 学科管理 / 确认生成。
-     月/年查看态下写操作的按钮一起锁住，只留筛选和学科管理可用。 */
+  /* 六张表下方按钮统一：学科筛选 / 搜索框 / 语音速记 / 新增 / 编辑 / 确认生成。
+     学科管理按钮已去掉：学科改在花名册新增卡片里就地创建（用户 11-25 要求）。
+     花名册不再有「编辑」按钮：编辑并进新增卡片 + 行内操作。
+     月/年查看态下写操作的按钮一起锁住，只留筛选可用。 */
   const toolbarMainHtml = (type, extra = '', locked = false, statusNote = '') => teacherFiltersHtml()+voiceButtonHtml(locked)
-    +addButtonHtml(type,locked)+editButtonHtml(type,locked)+subjectManagerButtonHtml()
+    +addButtonHtml(type,locked)+(type==='roster'?'':editButtonHtml(type,locked))
     +generateButtonHtml(locked)+sheetStatusHtml(type,locked,statusNote)+extra;
   /* 草稿与已确认快照逐行比对，只在「编辑中」算差异：
      未确认变更 = 这次编辑里改了但还没重新确认生成的行数。 */
@@ -1606,9 +1619,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
     const columns = type === 'roster'
       ? ['序号','归属部门','归属年级','姓名','学科','备注','操作']
       : ['序号','归属部门','归属年级','姓名','学科',...stateHeaders,'备注','操作'];
-    /* 花名册改成「查看态 + 编辑态」：没进编辑态时姓名/学科/备注只读、新增与删除锁住，
-       改完点「确认生成」交回查看态，和另外几张表的操作节奏对齐。 */
-    const canWrite = type === 'roster' ? isEditing('roster') : editable;
+    /* 花名册行内操作不再依赖「编辑」按钮（已去掉）：新增/编辑/删除随时可用。 */
+    const canWrite = type === 'roster' ? true : editable;
     const actionsOf = teacher => isWorksheet
       ? '<div class="aprd-actions"><button type="button" class="aprd-op" data-edit-work-record="'+esc(teacher.id)+'">编辑</button>'
         +'<button type="button" class="aprd-op danger" data-delete-work-record="'+esc(teacher.id)+'">删除</button></div>'
@@ -1832,89 +1844,25 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       finally{submit.disabled=false;}
     };
   };
-  /* 学科管理：清单存在 prefs.subjectLists[年级]，改名走 /subjects/rename 连带迁名册与历史考勤行，
-     删除只允许删没挂老师的学科（有人挂时接口直接 400 拦回来）。 */
-  const openSubjectManager = () => {
-    const dialog = document.createElement('div');
-    dialog.className = 'aprd-dialog';
-    const allSubjects = () => [...new Set([...subjectList(),
-      ...teachers.map(item => String(item.subject || '').trim())].filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-    const teacherCountOf = name => teachers.filter(item => String(item.subject || '').trim() === name).length;
-    const renderList = () => {
-      const list = allSubjects();
-      dialog.innerHTML = '<div class="aprd-editor aprd-subject-editor"><h3>学科管理 · ' + esc(grade) + '</h3>'
-        + '<p>改名会把名册和历史考勤行里的学科一起改掉；删除只允许删没有老师挂着的学科。</p>'
-        + '<div class="aprd-subject-list"><div class="aprd-subject-head"><span>学科</span><span>在册教师</span><span>操作</span></div>'
-        + (list.map(name => '<div class="aprd-subject-row"><b>' + esc(name) + '</b><span>' + teacherCountOf(name) + ' 位</span>'
-          + '<span class="aprd-actions"><button type="button" class="aprd-op" data-subject-rename="' + escAttr(name) + '">改名</button>'
-          + '<button type="button" class="aprd-op danger" data-subject-delete="' + escAttr(name) + '"' + (teacherCountOf(name) ? ' disabled' : '') + '>删除</button></span></div>').join('')
-          || '<div class="aprd-empty">还没有学科，点「新增学科」加一个</div>')
-        + '</div><div class="aprd-foot"><button type="button" data-subject-add>新增学科</button>'
-        + '<button type="button" class="primary" data-subject-close>完成</button></div></div>';
-    };
-    renderList();
-    (root.querySelector('.attendance-prd') || root).append(dialog);
-    /* 弹窗挂在 .attendance-prd 里，页面每次重绘（paint/load）都会被 innerHTML 抹掉。
-       学科是一条一条管理的，改完得让弹窗留在原地，不然加一个学科就要重开一次。 */
-    const keepDialog = () => {
-      if (!dialog.isConnected) (root.querySelector('.attendance-prd') || root).append(dialog);
-      renderList();
-    };
-    const reloadBehind = async () => { await load(); keepDialog(); };
-    dialog.addEventListener('click', event => {
-      const button = event.target.closest('button');
-      if (!button || busy || generating) return;
-      if (button.hasAttribute('data-subject-close')) { dialog.remove(); return; }
-      if (button.hasAttribute('data-subject-add')) {
-        openEditor('新增学科', [{ key: 'name', label: '学科名称', required: true }], { name: '' }, async data => {
-          const name = String(data.name || '').trim();
-          if (!name) throw new Error('请填写学科名称');
-          if (allSubjects().includes(name)) throw new Error('「' + name + '」已经在清单里');
-          await saveSubjectList([...subjectList(), name]);
-          paint();
-          keepDialog();
-          toast('「' + name + '」已加入学科清单', 'ok');
-        });
-        return;
-      }
-      const from = button.dataset.subjectRename || button.dataset.subjectDelete;
-      if (!from) return;
-      if (button.hasAttribute('data-subject-rename')) {
-        openEditor('学科改名 · ' + from, [{ key: 'to', label: '改成', required: true }], { to: from }, async data => {
-          const to = String(data.to || '').trim();
-          if (!to || to === from) throw new Error('请填写新的学科名');
-          await api.post('/subjects/rename', { grade, from, to });
-          await saveSubjectList([...new Set([...subjectList().map(item => item === from ? to : item), to])]);
-          await reloadBehind();
-        });
-        return;
-      }
-      void (async () => {
-        try {
-          if (!await confirmDialog('删除学科「' + from + '」？已产生的考勤记录不受影响。')) return;
-          await api.post('/subjects/delete', { grade, name: from });
-          await saveSubjectList(subjectList().filter(item => item !== from));
-          await reloadBehind();
-          toast('「' + from + '」已从学科清单删除', 'ok');
-        } catch (error) { toast(attendanceErrorText(error), 'err'); }
-      })();
-    });
-  };
-  /* 「新增」按页签各点各的：坐班/上课/教研 = 给某人登记本表的一条记录，
+  /* 「新增」按页签各点各的：坐班/上课/教研 = 手动录入一条本表记录（用户 11-25 要求：
+     不再从花名册下拉选，教师姓名/科目全部手输；登记的是临时人员，只落本节课，不进花名册），
      登记即进入编辑态，改完还是要点「确认生成」才落到已确认结果。 */
   const openAddRecord = () => {
     const type = tab;
     const key = type === 'seat' ? 'sit' : type === 'class' ? 'class' : 'research';
+    const subjectOptions = [...new Set([...teacherSubjects(), ...ROSTER_SUBJECTS])].map(value => ({ value }));
     openEditor(ADD_ACTIONS[type][1] + ' · ' + grade, [
-      { key: 'teacher', label: '教师', type: 'select', required: true,
-        options: teachers.map(item => ({ value: String(item.id), label: item.name + '（' + (item.subject || '未填学科') + '）' })) },
+      { key: 'name', label: '教师姓名', required: true },
+      { key: 'subject', label: '科目', type: 'combo', options: subjectOptions },
       { key: 'remark', label: '备注' },
-    ], { teacher: String(teachers[0]?.id || ''), remark: '' }, async data => {
-      const teacher = teachers.find(item => String(item.id) === String(data.teacher));
-      if (!teacher) throw new Error('要选一位教师');
+    ], { name: '', subject: '', remark: '' }, async data => {
+      const name = String(data.name || '').trim();
+      if (!name) throw new Error('要填写教师姓名');
+      const subject = String(data.subject || '').trim();
+      /* 临时教师不进花名册：id 留空，行按「姓名+科目」匹配，只写本节课的工作表行 */
+      const teacher = { id: null, name, subject };
       const leaveText = rowLeaveOf(teacher);
-      if (leaveText) throw new Error(teacher.name + ' 本时段已请假（' + leaveText + '），请先在请假表取消请假');
+      if (leaveText) throw new Error(name + ' 本时段已请假（' + leaveText + '），请先在请假表取消请假');
       const remark = String(data.remark || '').trim();
       editingSheet = editKey(type);
       updateWorksheet(teacher, type, key, 'y');
@@ -1922,7 +1870,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       scheduleAutoSave(type);
       await applyGridExclusiveStates(teacher, type, key, 'y');
       paint();
-      toast('已登记 ' + teacher.name + ' 的' + ADD_ACTIONS[type][1] + '，确认后才会生成', 'ok');
+      toast('已登记 ' + name + (subject ? '（' + subject + '）' : '') + ' 的' + ADD_ACTIONS[type][1] + '（不入花名册），确认后才会生成', 'ok');
     });
   };
   const openAddSummary = () => {
@@ -2174,7 +2122,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       if(tab==='leave')leaveOnlyDate=date;
       paint();
     });
-    root.querySelector('[data-subject-manager]')?.addEventListener('click',()=>{if(!busy&&!generating)openSubjectManager();});
     root.querySelector('[data-add-record]')?.addEventListener('click',()=>{if(!busy&&!generating)openAddRecord();});
     root.querySelector('[data-add-summary]')?.addEventListener('click',()=>{if(!busy&&!generating)openAddSummary();});
     root.querySelector('[data-summary-import]')?.addEventListener('click',()=>{if(!generating)openSummaryImport();});
@@ -2372,27 +2319,61 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '' } = {
       const values=Object.fromEntries(new FormData(form));
       const name=String(values.name||'').trim();
       const subjectName=String(values.subject||'').trim();
-      const department=String(values.department||'').trim()||'高中部';
+      const department=String(values.department||'').trim();
       const teacherGrade=String(values.grade||'').trim();
-      if(!teacherGrade||teacherGrade.length>12){toast('请填写1至12字的归属年级','warn');return;}
-      if(!name){toast('请填写教师姓名','warn');form.querySelector('[name="name"]')?.focus();return;}
-      if(!subjectName){toast('请填写教师学科','warn');form.querySelector('[name="subject"]')?.focus();return;}
+      if(teacherGrade&&teacherGrade.length>12){toast('归属年级需为1至12字','warn');return;}
+      if(!name&&!subjectName&&!teacherGrade&&!department){toast('请至少填写一项','warn');return;}
       submit.disabled=true;
       submit.textContent='保存中…';
       try{
-        if(!grades.includes(teacherGrade))await api.post('/grades',{name:teacherGrade});
-        await api.post('/teachers',{grade:teacherGrade,name,subject:subjectName});
-        grade=teacherGrade;
+        /* 新学科/新年级/新部门就地入清单：其他几张表的候选下拉、筛选同步生效（用户 11-25 要求） */
+        const createdNotes=[];
+        if(subjectName&&!teacherSubjects().includes(subjectName)){
+          await saveSubjectList([...subjectList(),subjectName]);
+          createdNotes.push('学科「'+subjectName+'」已加入清单');
+        }
+        if(teacherGrade&&!grades.includes(teacherGrade)){
+          await api.post('/grades',{name:teacherGrade});
+          createdNotes.push('年级「'+teacherGrade+'」已创建');
+        }
+        if(department){
+          const knownDepartments=[...new Set([...(prefs.departments?.[grade]||[]),...teachers.map(item=>String(deptOf(item)||'').trim()),'高中部'].filter(Boolean))];
+          if(!knownDepartments.includes(department)){
+            const departments={...(prefs.departments||{}),[grade]:[...new Set([...(prefs.departments?.[grade]||[]),department])]};
+            await savePrefs({departments});
+            createdNotes.push('部门「'+department+'」已保存');
+          }
+        }
+        if(!name){
+          /* 只填了学科/年级/部门：清单已入库，不需要动花名册 */
+          if(createdNotes.length){editConfirmedSheet();await load();toast(createdNotes.join('；'),'ok',5000);}
+          else toast('没有需要保存的新内容','warn');
+          return;
+        }
+        /* 姓名两用：与当前年级花名册同名 → 编辑其学科/年级/部门；新姓名 → 新建教师 */
+        const existing=teachers.find(item=>String(item.name||'').trim()===name);
+        if(existing){
+          const targetGrade=teacherGrade||existing.grade||grade;
+          await api.patch('/teachers/'+existing.id,{name,subject:subjectName||existing.subject||'',grade:targetGrade});
+          if(department)await setTeacherMeta(existing,{department});
+          editConfirmedSheet();
+          await load();
+          toast('教师「'+name+'」资料已更新'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
+          return;
+        }
+        const targetGrade=teacherGrade||grade;
+        await api.post('/teachers',{grade:targetGrade,name,subject:subjectName||''});
+        grade=targetGrade;
         const updated=await api.get('/teachers',{grade,active:'all'});
-        const created=(updated.list||[]).find(item=>item.name===name&&item.subject===subjectName);
-        if(created)await setTeacherMeta(created,{department});
+        const created=(updated.list||[]).find(item=>String(item.name||'').trim()===name);
+        if(created)await setTeacherMeta(created,{department:department||'高中部'});
         editConfirmedSheet();
-        toast('教师已新增','ok');
         await load();
+        toast('教师「'+name+'」已新增'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
       }catch(error){
         submit.disabled=false;
-        submit.textContent='保存教师';
-        toast(error.message||'新增教师失败','err');
+        submit.textContent='保存';
+        toast(error.message||'保存失败','err');
       }
     });
     const rosterImportButton=root.querySelector('[data-roster-import]');

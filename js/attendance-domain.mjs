@@ -142,8 +142,14 @@ export function prepareRosterEntries(items, { existing = [] } = {}) {
   (Array.isArray(items) ? items : []).forEach((entry, index) => {
     const name = normalizeTeacherName(entry?.name ?? entry?.teacher);
     const subject = normalizeSubject(entry?.subject);
-    if (!name || !subject) {
-      invalid.push({ index, entry, reason: !name ? '姓名无效或缺失' : '学科无效或缺失' });
+    /* 学科改为可空（用户 11-25 要求：新增教师全字段非必填）。
+       填了但被判定无效（超长/纯数字）才算错误；留空直接放行，存成空学科。 */
+    if (!name) {
+      invalid.push({ index, entry, reason: '姓名无效或缺失' });
+      return;
+    }
+    if (!subject && String(entry?.subject ?? '').trim()) {
+      invalid.push({ index, entry, reason: '学科无效或缺失' });
       return;
     }
     const key = `${name}\u0000${subject}`;

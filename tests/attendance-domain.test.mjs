@@ -43,15 +43,17 @@ test('46 unique teachers remain exactly 46 records in source order', () => {
   assert.equal(result.duplicates.length, 0);
 });
 
-test('name and subject are required and exact duplicate records are rejected', () => {
+test('name is required, subject is optional, and exact duplicate records are rejected', () => {
+  /* 用户 11-25 要求：新增教师全字段非必填，学科留空允许；填了但无效（纯数字/超长）仍拒绝 */
   const result = prepareRosterEntries([
     { name: '张老师', subject: '语文' },
     { name: '张老师', subject: '语文' },
     { name: '李老师', subject: '' },
     { name: '', subject: '数学' },
     { name: '王老师', subject: '英语' },
+    { name: '赵老师', subject: '12345678' },
   ]);
-  assert.deepEqual(result.accepted.map((row) => row.name), ['张老师', '王老师']);
+  assert.deepEqual(result.accepted.map((row) => row.name), ['张老师', '李老师', '王老师']);
   assert.equal(result.duplicates.length, 1);
   assert.equal(result.invalid.length, 2);
 });

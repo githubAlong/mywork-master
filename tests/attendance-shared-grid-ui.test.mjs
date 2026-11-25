@@ -182,20 +182,24 @@ test('切页签不再重拉接口：按日视图只重绘，月/年累计才现�
   assert.ok(gets.length>before,'按月/按年是累计快照，仍要现拉');
 });
 
-test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/编辑/学科管理/确认生成',async()=>{
+test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/编辑/确认生成（花名册无编辑，学科管理已去掉）',async()=>{
   const {root}=await setup();
-  /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。 */
+  /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。
+     用户 11-25 裁决：学科管理按钮去掉，学科改在花名册新增卡片就地创建；
+     花名册不再有「编辑」按钮，编辑并进新增卡片与行内操作。 */
   const addSelector={roster:'data-add',seat:'data-add-record',class:'data-add-record',
     research:'data-add-record',leave:'data-add-leave',summary:'data-add-summary'};
   for(const type of ['roster','seat','class','research','leave','summary']) {
     await root.querySelector('[data-tab="'+type+'"]').click();
     const html=root.innerHTML;
-    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice',addSelector[type],
-      'data-edit-sheet','data-subject-manager','data-generate'];
+    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice',addSelector[type]];
+    if(type!=='roster')markers.push('data-edit-sheet');
+    markers.push('data-generate');
     const positions=markers.map(marker=>html.indexOf(marker));
     const missing=markers.filter((marker,index)=>positions[index]<0);
     assert.deepEqual(missing,[],type+' 表缺少统一按钮：'+missing.join(','));
-    assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),type+' 表按钮顺序不是 学科筛选/搜索框/语音/新增/编辑/学科管理/确认生成');
+    assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),type+' 表按钮顺序不是 学科筛选/搜索框/语音/新增/编辑/确认生成');
+    assert.doesNotMatch(html,/data-subject-manager/,'学科管理按钮已去掉');
     assert.doesNotMatch(html.slice(html.indexOf('data-workspace-voice'),html.indexOf('</button>',html.indexOf('data-workspace-voice'))),/语音登记/,'按钮统一叫「语音速记」');
   }
 });
@@ -207,10 +211,8 @@ test('学科清单独立存储：没挂老师的学科也能筛选，改名连�
   /* 名册里根本没有物理老师，但清单存了就要能筛，这是「独立清单」和旧行为的分水岭 */
   assert.match(options,/<option value="物理"/);
   assert.match(options,/<option value="语文"/,'名册在用的学科不能被清单顶掉');
-  assert.match(root.innerHTML,/data-subject-manager/,'每张表都要能进学科管理');
-  /* 改名走 /subjects/rename（服务端连带迁名册与考勤行），删除走 /subjects/delete，清单本身存 prefs */
-  assert.match(source,/api\.post\('\/subjects\/rename'/);
-  assert.match(source,/api\.post\('\/subjects\/delete'/);
+  /* 用户 11-25 裁决：学科管理按钮去掉，学科在花名册新增卡片就地创建并同步清单 */
+  assert.doesNotMatch(root.innerHTML,/data-subject-manager/);
   assert.match(source,/prefs\.subjectLists\?\.\[grade\]/);
   assert.match(source,/savePrefs\(\{ subjectLists \}\)/);
 });
@@ -316,7 +318,7 @@ test('确认坐班表后语音速记紧邻新增按钮，保留行操作并隐�
   const checkActions=()=>{
     assert.doesNotMatch(root.innerHTML,/已确认/);
     assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音速记<\/button><button[^>]* data-add-record[ >]/);
-    for(const selector of ['[data-add-record]','[data-edit-sheet]','[data-subject-manager]','[data-generate]',
+    for(const selector of ['[data-add-record]','[data-edit-sheet]','[data-generate]',
       '[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
       assert.ok(root.querySelector(selector),selector);
     }
