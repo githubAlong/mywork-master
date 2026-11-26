@@ -3,6 +3,10 @@
 
    取色沿用教师工作台：底 #F4F7FE、主蓝 #2563EB、卡片白、12~14px 圆角。
    这一页是「一行一张小卡片」的列表样式（不是表格），所以不复用 ahub-table。
+
+   v431：整页字号放大。正文（页签 / 部门名 / 教师名 / 按钮 / 操作 / 数值）统一 18px，
+         辅助说明（面包屑、单位标签、徽标、分页、脚注）15~16px；
+         行高、内边距、图标、按钮高度同步放大，避免字变大后挤压。
    ========================================================================== */
 :root {
   --org-bg: #F4F7FE;
@@ -15,20 +19,27 @@
   --org-sub: #6B7C93;
   --org-mute: #93A2B8;
   --org-red: #E0524A;
+
+  /* 字号基准：正文 18px，辅助文字按比例递减 */
+  --org-fs: 18px;
+  --org-fs-sm: 16px;
+  --org-fs-xs: 15px;
 }
 
 .org {
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 16px;
   padding: 2px 0 36px;
   /* v428：这一页要铺满内容区。原来限死 1120px 且没有 margin:auto，
      宽屏下内容全挤在左边、右侧空一大片；宽度交给外层 .main 决定。 */
   max-width: none;
   color: var(--org-ink);
+  font-size: var(--org-fs);
+  line-height: 1.6;
   font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 
 /* ---------------- 面包屑 ---------------- */
-.org-crumb { font-size: 12px; color: var(--org-mute); }
+.org-crumb { font-size: var(--org-fs-xs); color: var(--org-mute); }
 .org-crumb span { margin: 0 6px; color: #C3CFE2; }
 
 /* ---------------- 页签条 ---------------- */
@@ -37,15 +48,15 @@
   background: var(--org-card);
   border: 1px solid var(--org-line);
   border-radius: 14px;
-  padding: 7px 8px;
+  padding: 8px 9px;
   box-shadow: 0 2px 10px rgba(23, 43, 77, .035);
 }
 .org-tab {
   flex: 1 1 0;
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border: 0; background: transparent; cursor: pointer;
-  font-family: inherit; font-size: 13.5px; color: var(--org-sub);
-  padding: 9px 18px; border-radius: 9px;
+  font-family: inherit; font-size: var(--org-fs); color: var(--org-sub);
+  padding: 12px 18px; border-radius: 10px;
   transition: background .15s, color .15s;
 }
 .org-tab:hover { background: #F3F7FF; color: var(--org-ink); }
@@ -57,27 +68,35 @@
 }
 .org-tab-ico { display: inline-flex; color: currentColor; opacity: .9; }
 
+/* 图标跟着字号一起放大（SVG 自带 width/height 属性，这里用 CSS 覆盖） */
+.org-tab-ico svg { width: 20px; height: 20px; }
+.org-ico svg { width: 21px; height: 21px; }
+.org-stat-ico svg { width: 24px; height: 24px; }
+.org-caret svg { width: 13px; height: 13px; }
+.org-refresh svg { width: 15px; height: 15px; }
+.org-foot .org-foot-ico svg { width: 16px; height: 16px; }
+
 /* ---------------- 标题行 ---------------- */
 .org-head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .org-title {
-  display: flex; align-items: center; gap: 10px;
-  margin: 2px 0 0; font-size: 20px; font-weight: 700; letter-spacing: .2px;
+  display: flex; align-items: center; gap: 12px;
+  margin: 2px 0 0; font-size: 24px; font-weight: 700; letter-spacing: .2px;
 }
 .org-badge {
-  font-size: 12px; font-weight: 600; color: #3C6BC4;
+  font-size: var(--org-fs-xs); font-weight: 600; color: #3C6BC4;
   background: var(--org-blue-soft);
-  border-radius: 20px; padding: 4px 11px;
+  border-radius: 20px; padding: 5px 13px;
 }
 .org-head .org-btn { margin-left: auto; }
 
 .org-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  height: 36px; padding: 0 16px;
-  font-family: inherit; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 42px; padding: 0 18px;
+  font-family: inherit; font-size: 17px; font-weight: 600;
   color: var(--org-ink); background: #FFF;
-  border: 1px solid var(--org-line); border-radius: 9px;
+  border: 1px solid var(--org-line); border-radius: 10px;
   cursor: pointer; white-space: nowrap;
 }
 .org-btn:hover { border-color: #CFDDF4; background: #FAFCFF; }
@@ -90,77 +109,80 @@
 
 /* ---------------- 统计卡 ---------------- */
 /* 卡片定宽 + 左对齐：页面铺满后不再各自拉伸到半屏，多余空间留在右侧 */
-.org-stats { display: grid; grid-template-columns: repeat(auto-fill, 300px); gap: 14px; justify-content: start; }
+.org-stats { display: grid; grid-template-columns: repeat(auto-fill, 340px); gap: 14px; justify-content: start; }
 .org-stat {
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: center; gap: 16px;
   background: var(--org-card);
   border: 1px solid var(--org-line); border-radius: 13px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   box-shadow: 0 2px 10px rgba(23, 43, 77, .035);
 }
 .org-stat-ico {
-  flex: none; width: 40px; height: 40px; border-radius: 11px;
+  flex: none; width: 46px; height: 46px; border-radius: 12px;
   background: #E9F0FF; color: var(--org-blue);
   display: inline-flex; align-items: center; justify-content: center;
 }
-.org-stat-lb { display: block; font-size: 12px; color: var(--org-sub); line-height: 1.6; }
-.org-stat-num { font-size: 21px; font-weight: 700; letter-spacing: .3px; }
+.org-stat-lb { display: block; font-size: var(--org-fs-sm); color: var(--org-sub); line-height: 1.5; }
+.org-stat-num { font-size: 32px; font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
 
 /* ---------------- 列表卡 ---------------- */
 .org-card {
   background: var(--org-card);
   border: 1px solid var(--org-line); border-radius: 14px;
-  padding: 14px 16px 16px;
+  padding: 16px 18px 18px;
   box-shadow: 0 2px 12px rgba(23, 43, 77, .04);
 }
 .org-card-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 2px 4px 12px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 2px 4px 14px;
 }
-.org-card-title { font-size: 14.5px; font-weight: 700; }
-.org-card-hint { font-size: 12px; color: var(--org-mute); }
-.org-refresh { margin-left: auto; height: 30px; padding: 0 12px; font-size: 12px; }
+.org-card-title { font-size: 19px; font-weight: 700; }
+.org-card-hint { font-size: var(--org-fs-xs); color: var(--org-mute); }
+.org-refresh { margin-left: auto; height: 34px; padding: 0 14px; font-size: var(--org-fs-xs); }
 
-.org-list { display: flex; flex-direction: column; gap: 8px; }
+.org-list { display: flex; flex-direction: column; gap: 9px; }
 
 .org-row {
   display: flex; align-items: center; gap: 12px;
   background: #FFF;
   border: 1px solid #E9EFF9; border-radius: 11px;
-  padding: 9px 16px;
+  padding: 12px 16px;
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
 .org-row:hover { border-color: #D7E3F6; background: #FCFDFF; box-shadow: 0 2px 10px rgba(37, 99, 235, .06); }
 
 .org-caret { display: inline-flex; color: #9AABC4; flex: none; }
 .org-ico {
-  flex: none; width: 20px; height: 20px;
+  flex: none; width: 22px; height: 22px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--org-blue);
 }
-.org-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; }
+.org-name { font-size: var(--org-fs); font-weight: 700; white-space: nowrap; }
 .org-pill {
   flex: none;
-  font-size: 11px; font-weight: 600; color: #3C6BC4;
-  background: var(--org-blue-soft); border-radius: 5px; padding: 2px 7px;
+  font-size: 14px; font-weight: 600; color: #3C6BC4;
+  background: var(--org-blue-soft); border-radius: 6px; padding: 3px 9px;
 }
 .org-pill.gray { color: #7086A3; background: #EEF3FA; }
 
 .org-cell {
-  min-width: 96px;
+  min-width: 118px;
   display: flex; flex-direction: column; gap: 2px;
 }
 /* 科目行的「人数 2」是横排（设计稿），不是上下两行 */
-.org-cell.row { flex-direction: row; align-items: baseline; gap: 6px; }
-.org-cell-lb { font-size: 11px; color: var(--org-mute); line-height: 1.4; }
-.org-cell b { font-size: 13px; font-weight: 600; color: var(--org-ink); }
+.org-cell.row { flex-direction: row; align-items: baseline; gap: 7px; }
+.org-cell-lb { font-size: var(--org-fs-xs); color: var(--org-mute); line-height: 1.4; }
+.org-cell b { font-size: var(--org-fs); font-weight: 600; color: var(--org-ink); }
+/* 两处 auto 会把剩余空间一分为二，导致「教师数」飘在页面中间、离「编辑」很远。
+   只让首个 cell 吃掉剩余空间，整组列贴着右侧操作走。 */
 .org-row > .org-cell:first-of-type { margin-left: auto; }
+.org-row > .org-cell + .org-cell { margin-left: 18px; }
 .org-row .org-grow { flex: 1 1 auto; }
 
-.org-ops { display: flex; align-items: center; gap: 16px; margin-left: auto; flex: none; }
+.org-ops { display: flex; align-items: center; gap: 18px; margin-left: 28px; flex: none; }
 .org-ops .org-link {
   border: 0; background: transparent; padding: 2px 0;
-  font-family: inherit; font-size: 13px; font-weight: 600;
+  font-family: inherit; font-size: 17px; font-weight: 600;
   color: var(--org-blue); cursor: pointer;
 }
 .org-ops .org-link:hover { text-decoration: underline; }
@@ -168,15 +190,15 @@
 
 /* 教师序号 */
 .org-no {
-  flex: none; width: 24px; text-align: left;
-  font-size: 13px; color: var(--org-sub); font-variant-numeric: tabular-nums;
+  flex: none; width: 28px; text-align: left;
+  font-size: var(--org-fs-sm); color: var(--org-sub); font-variant-numeric: tabular-nums;
 }
 
 /* 学科徽标（教师行） */
 .org-subj {
   flex: none;
-  font-size: 11.5px; font-weight: 600;
-  border-radius: 6px; padding: 3px 9px;
+  font-size: var(--org-fs-xs); font-weight: 600;
+  border-radius: 6px; padding: 4px 10px;
   background: #EEF3FA; color: #5C718C;
 }
 .org-subj[data-c="语文"] { background: #E8F0FF; color: #2B62D9; }
@@ -195,7 +217,7 @@
 
 /* 科目行的彩色方块图标 */
 .org-subj-ico {
-  flex: none; width: 34px; height: 34px; border-radius: 9px;
+  flex: none; width: 38px; height: 38px; border-radius: 10px;
   display: inline-flex; align-items: center; justify-content: center;
   background: #EAF1FF; color: #2B62D9;
 }
@@ -217,19 +239,19 @@
 .org-pager {
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 10px 14px;
-  padding: 12px 4px 0; font-size: 12px; color: var(--org-sub);
+  padding: 14px 4px 0; font-size: var(--org-fs-xs); color: var(--org-sub);
 }
 .org-pager-total { white-space: nowrap; }
 .org-pager-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .org-pagesize { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .org-pagesize select {
-  font-family: inherit; font-size: 12px; color: var(--org-ink);
-  padding: 4px 6px; border: 1px solid var(--org-line); border-radius: 8px;
+  font-family: inherit; font-size: var(--org-fs-xs); color: var(--org-ink);
+  padding: 5px 8px; border: 1px solid var(--org-line); border-radius: 8px;
   background: #FFF; cursor: pointer;
 }
 .org-pagesize select:focus { outline: none; border-color: var(--org-blue); }
 .org-btn.ghost {
-  height: 30px; padding: 0 12px; font-size: 12px;
+  height: 34px; padding: 0 14px; font-size: var(--org-fs-xs);
   color: var(--org-blue); background: #FFF;
 }
 .org-btn.ghost:hover:not(:disabled) { border-color: #CFDDF4; background: #F7FAFF; }
@@ -237,30 +259,32 @@
 
 /* ---------------- 底部虚线提示 ---------------- */
 .org-foot {
-  margin-top: 12px;
+  margin-top: 14px;
   border: 1px dashed #D6E1F5; border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 12.5px; color: var(--org-sub); text-align: center;
+  padding: 12px 16px;
+  font-size: var(--org-fs-sm); color: var(--org-sub); text-align: center;
 }
 .org-foot .org-foot-ico {
   display: inline-flex; vertical-align: -2px; margin-right: 6px; color: #7FA3E8;
 }
 
 .org-empty {
-  padding: 26px 10px; text-align: center;
-  font-size: 13px; color: var(--org-mute);
+  padding: 30px 10px; text-align: center;
+  font-size: 17px; color: var(--org-mute);
 }
 
 /* ---------------- 窄屏 ---------------- */
 @media (max-width: 620px) {
+  .org { --org-fs: 16px; --org-fs-sm: 15px; --org-fs-xs: 14px; }
   .org-stats { grid-template-columns: minmax(0, 1fr); }
   .org-row { flex-wrap: wrap; gap: 8px 12px; }
   .org-row > .org-cell:first-of-type { margin-left: 0; }
-  .org-cell { min-width: 78px; }
+  .org-cell { min-width: 92px; }
   .org-ops { margin-left: 0; width: 100%; justify-content: flex-end; }
   .org-tabs { gap: 2px; padding: 6px; }
-  .org-tab { padding: 8px 6px; font-size: 12.5px; gap: 4px; }
+  .org-tab { padding: 10px 6px; gap: 4px; }
   .org-tab-ico { display: none; }
+  .org-title { font-size: 20px; }
   .org-pager { justify-content: center; }
   .org-pager-right { margin-left: 0; flex-wrap: wrap; justify-content: center; }
 }
