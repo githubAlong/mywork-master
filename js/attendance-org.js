@@ -9,7 +9,7 @@
    版式严格照设计稿：页签条 + 标题徽标 + 两张统计卡 + 一行一卡列表 + 底部虚线提示。
    ========================================================================== */
 import { api, esc, toast, confirmDialog } from './core.js';
-import { rosterTabLabel, subjectCategory } from './attendance-hub-domain.mjs';
+import { rosterTabLabel, subjectCategory, gradeKey } from './attendance-hub-domain.mjs';
 
 /* ---------------- 图标 ---------------- */
 const ICONS = {
@@ -140,6 +140,22 @@ export async function renderAttendanceOrg(root) {
       if (Number.isFinite(d) && d !== 0) return d;
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
+  }
+
+  /* 年级名历史上三种写法并存：高一年级 / 高一 / 1（旧数据迁移留下的）。
+     列表统一显示「高一年级」，同一列才不会一会儿「高一」一会儿「高一年级」；
+     存回去时用 /grades 里的规范写法（表单下拉的 value 就是它）。 */
+  const CN_GRADE = ['一', '二', '三', '四', '五', '六'];
+  function gradeLabel(v) {
+    const s = String(v ?? '').trim();
+    if (!s) return '—';
+    const hit = /^(高|初)([一二三四五六])$/.exec(s);
+    if (hit) return `${hit[1]}${hit[2]}年级`;
+    const num = /^([1-6])$/.exec(s);
+    if (num) return `高${CN_GRADE[Number(num[1]) - 1]}年级`;
+    const cn = /^([一二三四五六])$/.exec(s);
+    if (cn) return `高${cn[1]}年级`;
+    return s;
   }
 
   function deptOptions(selected) {
@@ -281,18 +297,34 @@ export async function renderAttendanceOrg(root) {
     const start = (S.page - 1) * size;
     const pageList = list.slice(start, start + size);
 
-    /* 序号沿用整份名单的顺序，翻页后接着数，不从头开始 */
-    const rows = pageList.map((t, i) => `<div class="org-row">
-      <span class="org-no">${start + i + 1}</span>
-      <b class="org-name">${esc(t.name || '')}</b>
-      ${t.subject ? `<span class="org-subj" data-c="${esc(t.subject)}">${esc(t.subject)}</span>` : ''}
-      <div class="org-cell"><span class="org-cell-lb">所属部门</span><b>${esc(t.department || '—')}</b></div>
-      <div class="org-cell"><span class="org-cell-lb">所属年级</span><b>${esc(t.grade || '—')}</b></div>
-      <div class="org-ops">
-        <button class="org-link" data-act="teacher-edit" data-id="${esc(t.id)}">编辑</button>
-        <button class="org-link danger" data-act="teacher-del" data-id="${esc(t.id)}">删除</button>
-      </div>
-    </div>`).join('');
+    /* 序号沿用整份名单的顺序，翻页后接着数，不从头开始。
+       v432：教师名单从「一行一张卡」改成真表格（序号 / 姓名 / 所属部门 / 所属年级 /
+       科目 / 在职状态 / 备注 / 操作）——字段一多，卡片式排版会挤成两行、标签和值对不齐。 */
+    const rows = pageList.map((t, i) => {
+      const status = String(t.status || '在职');
+      const st = status === '在职' ? 'on' : status === '离职' ? 'off' : 'leave';
+      return `<tr>
+        <td class="c-no"><span class="org-no">${start + i + 1}</span></td>
+        <td class="org-name">${esc(t.name || '')}</td>
+        <td>${esc(t.department || '—')}</td>
+        <td>${esc(gradeLabel(t.grade))}</td>
+        <td>${t.subject ? `<span class="org-subj" data-c="${esc(t.subject)}">${esc(t.subject)}</span>` : '<span class="org-dash">—</span>'}</td>
+        <td><span class="org-status ${st}">${esc(status)}</span></td>
+        <td class="org-remark">${esc(t.remark || '—')}</td>
+        <td class="c-ops">
+          <button class="org-link" data-act="teacher-edit" data-id="${esc(t.id)}">编辑</button>
+          <button class="org-link danger" data-act="teacher-del" data-id="${esc(t.id)}">删除</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const table = `<div class="org-table-wrap"><table class="org-table">
+      <thead><tr>
+        <th class="c-no">序号</th><th>姓名</th><th>所属部门</th><th>所属年级</th>
+        <th>科目</th><th>在职状态</th><th>备注</th><th class="c-ops">操作</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
 
     const pager = list.length ? `<div class="org-pager">
       <span class="org-pager-total" id="org-page-total">显示 ${start + 1}–${start + pageList.length} 条 / 共 ${list.length} 名教师</span>
@@ -316,7 +348,7 @@ export async function renderAttendanceOrg(root) {
         { icon: ICONS.subject, label: '覆盖科目', value: subjects.size },
       ],
       listTitle: '教师名单', listHint: '每行均可编辑、删除',
-      body: rows || `<div class="org-empty">还没有教师，点右上角「＋ 新增教师」开始录入。</div>`,
+      body: pageList.length ? table : `<div class="org-empty">还没有教师，点右上角「＋ 新增教师」开始录入。</div>`,
       pager,
       foot: '＋ 新增教师后，这里自动多一条',
     });
@@ -559,12 +591,14 @@ export async function renderAttendanceOrg(root) {
       <label class="ahub-field"><span>所属年级</span>
         <select name="grade" id="org-grade">
           <option value="">—</option>
-          ${grades.map((g) => `<option value="${esc(g)}"${g === t?.grade ? ' selected' : ''}>${esc(g)}</option>`).join('')}
+          ${grades.map((g) => `<option value="${esc(g)}"${gradeKey(g) === gradeKey(t?.grade) ? ' selected' : ''}>${esc(g)}</option>`).join('')}
         </select></label>
       <label class="ahub-field"><span>在职状态</span>
         <select name="status" id="org-status">
           ${['在职', '休假', '离职'].map((s) => `<option value="${s}"${(t?.status || '在职') === s ? ' selected' : ''}>${s}</option>`).join('')}
         </select></label>
+      <label class="ahub-field"><span>备注</span>
+        <input name="remark" id="org-remark" value="${esc(t?.remark || '')}" placeholder="选填，如：兼信息技术教研组长" maxlength="200" autocomplete="off"></label>
       <div class="ahub-form-err" id="org-err"></div>
       <div class="ahub-form-actions">
         <button type="button" class="ahub-btn" data-close>取消</button>

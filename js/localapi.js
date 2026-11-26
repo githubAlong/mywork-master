@@ -2048,6 +2048,7 @@ on('POST', '/org/teachers', ({ body }) => {
     id: hubNextId(HUB_SHEETS.roster.table), teacher_id: String(seq), name,
     subject: String(body?.subject || '').trim(), grade, department,
     status: String(body?.status || '在职'),
+    remark: String(body?.remark || '').trim().slice(0, 200),
     created_at: nowISO(), updated_at: nowISO(), deleted_at: null,
   };
   table.push(item);
@@ -2068,6 +2069,7 @@ on('PATCH', '/org/teachers/:id', ({ params, body }) => {
     row.department = String(body.department || '').trim() || deptNameOfGrade(row.grade);
   }
   if (Object.prototype.hasOwnProperty.call(body || {}, 'status')) row.status = String(body.status || '在职');
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'remark')) row.remark = String(body.remark || '').trim().slice(0, 200);
   row.updated_at = nowISO();
   save();
   return { item: row, ...orgTeacherView() };
