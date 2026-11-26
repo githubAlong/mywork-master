@@ -98,7 +98,6 @@ function ssStudentCard(task) {
     </div>
     <div class="st-meta">
       <span>教师：${esc(task.creator || state.user?.nickname || '老师')}</span>
-      <span>任务类型：课堂自习</span>
       <span>截止时间：${esc(ssDeadlineText(task))}</span>
     </div>
     <div class="st-actions">

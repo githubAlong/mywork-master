@@ -584,7 +584,7 @@ const periodItemsOf=html=>[...(html.match(/<select id="aprd-period">([\s\S]*?)<\
   .matchAll(/<option value="(\d+)"([^>]*)>([^<]*)<\/option>/g)]
   .map(match=>({value:match[1],off:/aprd-period-off/.test(match[2]),text:match[3]}));
 
-test('节次按自然顺序列出，不展示当天是否有课；全天时段仍取当天最早到最晚',async()=>{
+test('节次按自然顺序列出，不展示当天是否有课；全天取作息表全节次窗口',async()=>{
   const weekday=dayPeriods.weekdayOf(todayYmd());
   const {root}=await setup({courses:[
     {id:'c3',weekday,period_no:3,grade:'高一',start_time:'10:00',end_time:'10:40'},
@@ -598,10 +598,12 @@ test('节次按自然顺序列出，不展示当天是否有课；全天时段�
   assert.deepEqual(items.map(item=>item.value),['0','1','2','3','4','5','6','7','8','9']);
   assert.equal(items.some(item=>item.off),false);
   assert.doesNotMatch(root.innerHTML,/当日无课|有课节次/);
+  /* 用户 11-26 要求：全天是「一整天」，取作息表全部节次的窗口（第1节开始 → 最后一节结束），
+     不再按当天排了几节课收缩——只排了第8节时全天会缩成 16:15—16:55，不对。 */
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
-  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="10:40"/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
   assert.match(root.innerHTML,/当前批次/);
-  assert.match(root.innerHTML,/全天 08:00—10:40/);
+  assert.match(root.innerHTML,/全天 08:00—18:35/);
 });
 
 test('当天完全没排课时时段退到作息表节次而不是 00:00—23:59',async()=>{
@@ -621,8 +623,8 @@ test('课表年级写「高一」、考勤年级名「高一年级」时仍算�
     {id:'c2',weekday,period_no:7,grade:'高一年级',start_time:'16:00',end_time:'16:45'},
     {id:'c3',weekday,period_no:4,grade:'高二年级',start_time:'10:50',end_time:'11:30'},
   ]});
-  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:50"/);
-  assert.match(root.innerHTML,/全天 08:50—16:45/);
+  assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
+  assert.match(root.innerHTML,/全天 08:00—18:35/);
 });
 
 test('时段：课表给默认值，手改后以手改为准，非法区间被拦下不写脏',async()=>{
@@ -637,7 +639,7 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
   await root.querySelector('#aprd-start').change('07:30');
   await repaint();
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/);
-  assert.match(root.innerHTML,/全天 07:30—08:40/);
+  assert.match(root.innerHTML,/全天 07:30—18:35/);
   /* 手改只落在「全天」这一档，切回第1节仍是课表给的时间 */
   await root.querySelector('#aprd-period').change('1');
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
@@ -645,7 +647,7 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
   await root.querySelector('#aprd-period').change('0');
   await root.querySelector('#aprd-end').change('06:00');
   assert.ok(toasts.some(item=>/结束时间必须晚于开始时间/.test(item.message)));
-  assert.match(root.innerHTML,/全天 07:30—08:40/);
+  assert.match(root.innerHTML,/全天 07:30—18:35/);
 });
 
 test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 也认，写「下午」拦下',async()=>{

@@ -4,7 +4,7 @@ import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
 import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
-import { daySchooledPeriods, dayTimeRange, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
+import { dayTimeRange, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
@@ -130,14 +130,6 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       return saved.type === WINTER_SCHEDULE ? WINTER_SCHEDULE : SUMMER_SCHEDULE;
     } catch { return SUMMER_SCHEDULE; }
   };
-  const daySchooledPeriodsOf = () => daySchooledPeriods(timetableCourses, {
-    date,
-    grade,
-    scheduleType: currentScheduleType(),
-    courseTypes: objectValue(timetableSettings.courseTypes),
-    periodTimes: objectValue(timetableSettings.periodTimes),
-    defaultCourseType: SUMMER_SCHEDULE,
-  });
   const periodTimeOf = (number) => {
     const periodNo = Number(number);
     const scheduleType = currentScheduleType();
@@ -179,11 +171,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
   const resolvePeriodRange = (number) => {
     const periodNo = Number(number);
     if (periodNo !== 0) return periodTimeOf(periodNo);
-    /* 全天不再写死 00:00—23:59：当天有课取有课节次的最早开始—最晚结束；
-       当天没排课（周末、节假日、这个年级今天没课）退到作息表全部节次的区间，
-       手改过全天的话以手改为准（以前写死时手改根本不生效）。 */
-    const schooled = daySchooledPeriodsOf();
-    const times = (schooled.length ? schooled : DEFAULT_PERIODS).map(item => {
+    /* 全天 = 作息表里全部节次的窗口（冬令时 08:00—17:45），固定按课表算。
+       以前取「当天真正排了课的节次的最早—最晚」，只排了一节课时全天就缩成那一节
+       （用户 11-26 反馈全天显示 16:15—16:55）；全天是一整天，不该随当天课多课少变。
+       手改过全天的话仍以手改为准。 */
+    const times = DEFAULT_PERIODS.map(item => {
       const [start,end] = periodTimeOf(item.no);
       return { no:item.no, start, end };
     });

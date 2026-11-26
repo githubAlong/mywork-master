@@ -572,7 +572,6 @@ function studentCardHtml(t) {
     <div class="st-card-body">${body}${img ? `<img class="st-img" src="${esc(img)}" alt="任务图">` : ''}</div>
     <div class="row wrap tiny muted stu-task-meta" style="gap:8px 22px;padding:14px 0;border-top:1px solid var(--line)">
       <span>教师：${esc(t.creator || '老师')}</span>
-      <span>任务类型：课堂自习</span>
       <span>截止时间：${esc(deadline)}</span>
     </div>
   </div>`;
