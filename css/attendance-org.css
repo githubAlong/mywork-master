@@ -160,48 +160,38 @@
 .org-status.leave { background: #FFF5E3; color: #B4761B; }
 .org-status.off { background: #F1F4F9; color: #7A889C; }
 
-.org-row {
-  display: flex; align-items: center; gap: 12px;
-  background: #FFF;
-  border: 1px solid #E9EFF9; border-radius: 11px;
-  padding: 9px 16px;
-  transition: border-color .15s, box-shadow .15s, background .15s;
+/* ---------------- 部门 / 年级 / 科目 表格（v433） ----------------
+   这三个页签原先是「一行一张小卡片」，字段和教师名单一样是
+   「名称 + 几个统计量 + 操作」，但版式不统一、数字也对不齐；
+   现在统一走 .org-table，这里只补它们额外用到的几个小零件。 */
+.org-table .c-count { width: 96px; white-space: nowrap; }
+.org-table .c-sub { color: #5C718C; white-space: nowrap; }
+.org-table .c-teachers {
+  max-width: 360px; color: #4C6280;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.org-row:hover { border-color: #D7E3F6; background: #FCFDFF; box-shadow: 0 2px 10px rgba(37, 99, 235, .06); }
+.org-num { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.org-unit { margin-left: 3px; font-size: 12px; font-weight: 500; color: var(--org-mute); }
+.org-more { font-size: 12px; color: var(--org-mute); }
 
-.org-caret { display: inline-flex; color: #9AABC4; flex: none; }
-.org-ico {
-  flex: none; width: 20px; height: 20px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: var(--org-blue);
+/* 名称列带彩色方块图标（科目行） */
+.org-cellname { display: inline-flex; align-items: center; gap: 9px; }
+.org-table .org-subj-ico { width: 26px; height: 26px; border-radius: 8px; }
+.org-table .org-subj-ico svg { width: 15px; height: 15px; }
+
+/* 标签列：年级 / 部门 / 科目分类共用 */
+.org-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.org-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  background: var(--org-blue-soft); color: #3C6BC4;
+  white-space: nowrap;
 }
+.org-tag.warn { background: #FFF5E3; color: #B4761B; }
+.org-tag.more { background: #EEF3FA; color: #7086A3; }
+
+/* 名称列：表格里所有「名称」格共用（部门 / 年级 / 科目 / 教师姓名） */
 .org-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; }
-.org-pill {
-  flex: none;
-  font-size: 11px; font-weight: 600; color: #3C6BC4;
-  background: var(--org-blue-soft); border-radius: 5px; padding: 2px 7px;
-}
-.org-pill.gray { color: #7086A3; background: #EEF3FA; }
-
-.org-cell {
-  min-width: 96px;
-  display: flex; flex-direction: column; gap: 2px;
-}
-/* 科目行的「人数 2」是横排（设计稿），不是上下两行 */
-.org-cell.row { flex-direction: row; align-items: baseline; gap: 6px; }
-.org-cell-lb { font-size: 11px; color: var(--org-mute); line-height: 1.4; }
-.org-cell b { font-size: 13px; font-weight: 600; color: var(--org-ink); }
-.org-row > .org-cell:first-of-type { margin-left: auto; }
-.org-row .org-grow { flex: 1 1 auto; }
-
-.org-ops { display: flex; align-items: center; gap: 16px; margin-left: auto; flex: none; }
-.org-ops .org-link {
-  border: 0; background: transparent; padding: 2px 0;
-  font-family: inherit; font-size: 13px; font-weight: 600;
-  color: var(--org-blue); cursor: pointer;
-}
-.org-ops .org-link:hover { text-decoration: underline; }
-.org-ops .org-link.danger { color: var(--org-red); }
 
 /* 教师序号 */
 .org-no {
@@ -291,10 +281,6 @@
 /* ---------------- 窄屏 ---------------- */
 @media (max-width: 620px) {
   .org-stats { grid-template-columns: minmax(0, 1fr); }
-  .org-row { flex-wrap: wrap; gap: 8px 12px; }
-  .org-row > .org-cell:first-of-type { margin-left: 0; }
-  .org-cell { min-width: 78px; }
-  .org-ops { margin-left: 0; width: 100%; justify-content: flex-end; }
   .org-tabs { gap: 2px; padding: 6px; }
   .org-tab { padding: 8px 6px; font-size: 12.5px; gap: 4px; }
   .org-tab-ico { display: none; }

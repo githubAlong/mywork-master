@@ -130,7 +130,9 @@ test('组织管理页：四个页签、统计卡、底部提示、导航与路�
   assert.match(work, /attendance-org\.js/);
 
   const css = await read('css/attendance-org.css');
-  for (const cls of ['.org-tabs', '.org-tab.on', '.org-stats', '.org-row', '.org-foot']) {
+  /* v435：部门 / 年级 / 科目也改成表格，和教师名单共用 .org-table，
+     原来的「一行一张卡」.org-row 已随旧版式一起删掉。 */
+  for (const cls of ['.org-tabs', '.org-tab.on', '.org-stats', '.org-table', '.org-tag', '.org-foot']) {
     assert.ok(css.includes(cls), `缺样式 ${cls}`);
   }
 

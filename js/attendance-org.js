@@ -23,9 +23,6 @@ const ICONS = {
   grade: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8.7 12 4.6l9.4 4.1L12 12.8 2.6 8.7Z"/><path d="M6.7 10.7v4.1c0 1.6 2.4 2.9 5.3 2.9s5.3-1.3 5.3-2.9v-4.1"/></svg>`,
   subject: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2A1.6 1.6 0 0 1 5.6 3.6H19a1 1 0 0 1 1 1v14.8a1 1 0 0 1-1 1H5.6A1.6 1.6 0 0 1 4 18.8V5.2Z"/><path d="M8 3.6v16.8M11.2 8.4h5"/></svg>`,
 
-  folder: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 6.6A1.6 1.6 0 0 1 5 5h4l2 2.2h8a1.6 1.6 0 0 1 1.6 1.6v8.6A1.6 1.6 0 0 1 19 19H5a1.6 1.6 0 0 1-1.6-1.6V6.6Z"/></svg>`,
-  book: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2A1.6 1.6 0 0 1 5.6 3.6H19a1 1 0 0 1 1 1v14.8a1 1 0 0 1-1 1H5.6A1.6 1.6 0 0 1 4 18.8V5.2Z"/><path d="M8 3.6v16.8M11.2 8.4h5"/></svg>`,
-  caret: `<svg viewBox="0 0 10 10" width="10" height="10" fill="none"><path d="M1.6 3.3 5 6.7l3.4-3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   refresh: `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.3 6.4A5.4 5.4 0 1 0 13.4 9.6"/><path d="M13.5 3.1v3.5H10"/></svg>`,
   bulb: `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.6a4.2 4.2 0 0 1 2.6 7.5c-.4.3-.6.7-.6 1.2v.5H6v-.5c0-.5-.2-.9-.6-1.2A4.2 4.2 0 0 1 8 1.6Z"/><path d="M6.3 13.1h3.4"/></svg>`,
 };
@@ -209,23 +206,54 @@ export async function renderAttendanceOrg(root) {
   const teacherTotal = () => S.teachers.length;
   const gradeTotal = () => (S.depts?.grades || []).length;
 
+  /* 【四个页签共用一套表格版式】（v435）
+     v432 把教师名单改成表格后，部门 / 年级 / 科目还停在「一行一张卡」，
+     来回切页签版式不一致、字段也不对不齐。这几个页签的字段同样是
+     「名称 + 几个统计量 + 操作」，正好和教师名单同一套 .org-table：
+     表头固定、数字右对齐成一列，扫一眼就能横向比。 */
+  function orgTable(head, rows) {
+    return `<div class="org-table-wrap"><table class="org-table">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  /* 数字列：数字加粗、单位弱化，一列排下来能直接比大小 */
+  function numCell(n, unit = '') {
+    return `<span class="org-num">${Number(n) || 0}</span>${unit ? `<span class="org-unit">${esc(unit)}</span>` : ''}`;
+  }
+
+  /* 部门行里的年级标签：最多平铺 4 个，多的折成「+N」，别让一个部门把行撑到两屏 */
+  function gradeTags(grades) {
+    const list = (grades || []).map((g) => gradeLabel(g.name));
+    if (!list.length) return '<span class="org-dash">—</span>';
+    const shown = list.slice(0, 4).map((g) => `<span class="org-tag">${esc(g)}</span>`).join('');
+    const rest = list.length - 4;
+    return `<span class="org-tags">${shown}${rest > 0 ? `<span class="org-tag more">+${rest}</span>` : ''}</span>`;
+  }
+
   /* ---------------- 部门管理 ---------------- */
   function paintDept(panel) {
     const v = S.depts || { list: [], unassigned: [], grades: [] };
-    const rows = v.list.map((d) => `
-      <div class="org-row">
-        <span class="org-caret">${ICONS.caret}</span>
-        <span class="org-ico">${ICONS.folder}</span>
-        <b class="org-name">${esc(d.name)}</b>
-        <span class="org-pill">部门</span>
-        <div class="org-cell"><span class="org-cell-lb">教师数</span><b>${d.teacherCount || 0}</b></div>
-        <div class="org-cell"><span class="org-cell-lb">花名册页签</span><b>总花名册</b></div>
-        <div class="org-ops">
-          <button class="org-link" data-act="dept-edit" data-id="${esc(d.id)}">编辑</button>
-          <button class="org-link danger" data-act="dept-del" data-id="${esc(d.id)}">删除</button>
-        </div>
-      </div>`).join('');
+    const rows = v.list.map((d, i) => `<tr>
+      <td class="c-no"><span class="org-no">${i + 1}</span></td>
+      <td class="org-name">${esc(d.name)}</td>
+      <td>${gradeTags(d.grades)}</td>
+      <td class="c-count">${numCell((d.grades || []).length, '个')}</td>
+      <td class="c-count">${numCell(d.teacherCount, '人')}</td>
+      <td class="c-ops">
+        <button class="org-link" data-act="dept-edit" data-id="${esc(d.id)}">编辑</button>
+        <button class="org-link danger" data-act="dept-del" data-id="${esc(d.id)}">删除</button>
+      </td>
+    </tr>`).join('');
 
+    const table = orgTable(
+      `<th class="c-no">序号</th><th>部门名称</th><th>下属年级</th>
+       <th class="c-count">年级数</th><th class="c-count">教师数</th><th class="c-ops">操作</th>`,
+      rows,
+    );
+
+    const miss = (v.unassigned || []).length;
     panel.innerHTML = shell({
       title: '部门管理',
       badge: `共 ${v.list.length} 个部门`,
@@ -234,9 +262,12 @@ export async function renderAttendanceOrg(root) {
         { icon: ICONS.dept, label: '部门总数', value: v.list.length },
         { icon: ICONS.teacher, label: '在编教师', value: teacherTotal() },
       ],
-      listTitle: '部门列表', listHint: '每行均可编辑、删除',
-      body: rows || `<div class="org-empty">还没有部门，点右上角「＋ 新建部门」先建一个。</div>`,
-      foot: '＋ 新建部门后，这里自动多一行；部门下新建年级，花名册自动多一个分表页签',
+      listTitle: '部门列表',
+      listHint: `共 ${v.list.length} 条 · 每行均可编辑、删除`,
+      body: rows ? table : `<div class="org-empty">还没有部门，点右上角「＋ 新建部门」先建一个。</div>`,
+      foot: miss
+        ? `＋ 还有 ${miss} 个年级没归到部门（${v.unassigned.map((g) => gradeLabel(g.name)).join('、')}），去「年级管理」编辑即可分配`
+        : '＋ 新建部门后，这里自动多一行；部门下新建年级，花名册自动多一个分表页签',
     });
 
     $('#org-dept-add').onclick = openDeptAdd;
@@ -248,12 +279,17 @@ export async function renderAttendanceOrg(root) {
     const v = S.depts || { list: [], unassigned: [] };
     const rows = [];
     for (const d of v.list) {
-      for (const g of d.grades) {
-        rows.push(gradeRow(g.name, d.name, g.teacherCount));
-      }
+      for (const g of d.grades) rows.push(gradeRow(g.name, d.name, g.teacherCount, rows.length + 1, false));
     }
-    for (const g of v.unassigned || []) rows.push(gradeRow(g.name, '未分配', g.teacherCount));
+    for (const g of v.unassigned || []) rows.push(gradeRow(g.name, '未分配', g.teacherCount, rows.length + 1, true));
 
+    const table = orgTable(
+      `<th class="c-no">序号</th><th>年级名称</th><th>所属部门</th>
+       <th class="c-count">教师数</th><th>花名册</th><th class="c-ops">操作</th>`,
+      rows.join(''),
+    );
+
+    const miss = (v.unassigned || []).length;
     panel.innerHTML = shell({
       title: '年级管理',
       badge: `共 ${gradeTotal()} 个年级`,
@@ -262,28 +298,32 @@ export async function renderAttendanceOrg(root) {
         { icon: ICONS.grade, label: '年级总数', value: gradeTotal() },
         { icon: ICONS.teacher, label: '在编教师', value: teacherTotal() },
       ],
-      listTitle: '年级列表', listHint: '每行均可编辑、删除',
-      body: rows.join('') || `<div class="org-empty">还没有年级，点右上角「＋ 新建年级」先建一个。</div>`,
-      foot: '＋ 新建年级后，这里自动多一条',
+      listTitle: '年级列表',
+      listHint: `共 ${gradeTotal()} 条 · 每行均可编辑、删除`,
+      body: rows.length ? table : `<div class="org-empty">还没有年级，点右上角「＋ 新建年级」先建一个。</div>`,
+      foot: miss
+        ? `＋ 有 ${miss} 个年级显示「未分配」：编辑该行选一个部门，花名册才会按部门归组`
+        : '＋ 新建年级后，这里自动多一条',
     });
 
     $('#org-grade-add').onclick = openGradeAdd;
     bindRowActs(panel);
   }
 
-  function gradeRow(name, deptName, count) {
-    return `<div class="org-row">
-      <span class="org-ico">${ICONS.book}</span>
-      <b class="org-name">${esc(name)}</b>
-      <span class="org-pill gray">年级</span>
-      <div class="org-cell"><span class="org-cell-lb">所属部门</span><b>${esc(deptName)}</b></div>
-      <div class="org-cell"><span class="org-cell-lb">教师数</span><b>${count || 0}</b></div>
-      <div class="org-cell"><span class="org-cell-lb">花名册</span><b>${esc(rosterTabLabel(name))}</b></div>
-      <div class="org-ops">
+  function gradeRow(name, deptName, count, idx, unassigned) {
+    return `<tr>
+      <td class="c-no"><span class="org-no">${idx}</span></td>
+      <td class="org-name">${esc(gradeLabel(name))}</td>
+      <td>${unassigned
+        ? '<span class="org-tag warn">未分配</span>'
+        : `<span class="org-tag">${esc(deptName)}</span>`}</td>
+      <td class="c-count">${numCell(count, '人')}</td>
+      <td class="c-sub">${esc(rosterTabLabel(name))}</td>
+      <td class="c-ops">
         <button class="org-link" data-act="grade-edit" data-name="${esc(name)}" data-dept="${esc(deptName)}">编辑</button>
         <button class="org-link danger" data-act="grade-del" data-name="${esc(name)}">删除</button>
-      </div>
-    </div>`;
+      </td>
+    </tr>`;
   }
 
   /* ---------------- 教师管理 ---------------- */
@@ -376,17 +416,45 @@ export async function renderAttendanceOrg(root) {
 
   /* ---------------- 科目管理 ---------------- */
   function paintSubject(panel) {
-    const list = S.subjects;
+    /* 科目按人数从多到少排：一眼看出哪几个是主科、哪几个还没人挂。
+       授课教师从花名册现算（和「人数」同一个来源，不会两处对不上）。 */
+    const bySubject = new Map();
+    for (const t of teacherRows()) {
+      const key = String(t.subject || '').trim();
+      if (!key) continue;
+      if (!bySubject.has(key)) bySubject.set(key, []);
+      bySubject.get(key).push(String(t.name || '').trim());
+    }
+    const list = S.subjects.slice().sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0)
+      || String(a.name).localeCompare(String(b.name), 'zh'));
     const cats = new Set(list.map((s) => s.category || subjectCategory(s.name)));
-    const rows = list.map((s) => `<div class="org-row">
-      <span class="org-subj-ico" data-c="${esc(s.name)}">${subjectIcon(s.name)}</span>
-      <b class="org-name">${esc(s.name)}</b>
-      <div class="org-cell row"><span class="org-cell-lb">人数</span><b>${s.count || 0}</b></div>
-      <div class="org-ops">
-        <button class="org-link" data-act="subject-edit" data-id="${esc(s.id)}">编辑</button>
-        <button class="org-link danger" data-act="subject-del" data-id="${esc(s.id)}">删除</button>
-      </div>
-    </div>`).join('');
+
+    const rows = list.map((s, i) => {
+      const name = String(s.name || '');
+      const names = bySubject.get(name.trim()) || [];
+      const shown = names.slice(0, 4).join('、');
+      const rest = names.length - 4;
+      return `<tr>
+        <td class="c-no"><span class="org-no">${i + 1}</span></td>
+        <td class="org-name"><span class="org-cellname">
+          <span class="org-subj-ico" data-c="${esc(name)}">${subjectIcon(name)}</span>${esc(name)}</span></td>
+        <td><span class="org-tag">${esc(s.category || subjectCategory(s.name))}</span></td>
+        <td class="c-count">${numCell(s.count, '人')}</td>
+        <td class="c-teachers">${shown
+          ? esc(shown) + (rest > 0 ? ` <span class="org-more">等 ${names.length} 人</span>` : '')
+          : '<span class="org-dash">—</span>'}</td>
+        <td class="c-ops">
+          <button class="org-link" data-act="subject-edit" data-id="${esc(s.id)}">编辑</button>
+          <button class="org-link danger" data-act="subject-del" data-id="${esc(s.id)}">删除</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const table = orgTable(
+      `<th class="c-no">序号</th><th>科目名称</th><th>科目分类</th>
+       <th class="c-count">教师数</th><th>授课教师</th><th class="c-ops">操作</th>`,
+      rows,
+    );
 
     panel.innerHTML = shell({
       title: '科目管理',
@@ -396,9 +464,10 @@ export async function renderAttendanceOrg(root) {
         { icon: ICONS.subject, label: '科目总数', value: list.length },
         { icon: ICONS.teacher, label: '科目分类', value: cats.size },
       ],
-      listTitle: '科目列表', listHint: '每行均可编辑、删除',
-      body: rows || `<div class="org-empty">还没有科目，点右上角「＋ 新增科目」开始录入。</div>`,
-      foot: '＋ 新增科目后，这里自动多一条',
+      listTitle: '科目列表',
+      listHint: `共 ${list.length} 条 · 按教师数排序`,
+      body: rows ? table : `<div class="org-empty">还没有科目，点右上角「＋ 新增科目」开始录入。</div>`,
+      foot: '＋ 新增科目后，这里自动多一条；「授课教师」按花名册的学科实时统计',
     });
 
     $('#org-subject-add').onclick = openSubjectAdd;
