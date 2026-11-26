@@ -31,7 +31,7 @@
 
 /* 版本号改动 = 全量换缓存。
    每次发布只要改这里一个地方，activate 会把旧缓存整个删掉。 */
-const CACHE = 'wb-v432-teacher-table';
+const CACHE = 'wb-v433-offline-warm';
 
 /* 【只列真实存在的文件】
    这份清单必须和 index.html 及 js/ 目录的实际内容对得上。
@@ -165,6 +165,37 @@ const ASSETS = [
   './js/roster-structure.mjs',
 ];
 
+/* 【发布后不再留「空缓存窗口」】
+   新版本的缓存在 install 阶段是空的（原因见下面的 install 说明：冷启动预取会和
+   当前页面抢连接，所以刻意不预取），而 activate 又会把旧缓存整份删掉。
+   于是发布后的一小段时间里，浏览器手里一份能用的页面都没有：
+   这时网络只要抖一下 —— 导航请求失败、缓存也没有 —— 用户看到的就是兜底页。
+   2026-11-26 实测事故：v432 发布 24 分钟后，学生点链接正好撞上这个组合。
+   修法：activate 先把「打开页面必需的壳」拉进新缓存，再去删旧缓存。
+   四个文件并行拉、单个失败即跳过，不阻塞激活流程。 */
+const SHELL = ['./', './index.html', './app.html', './student.html'];
+
+async function warmShell() {
+  let warmed = 0;
+  try {
+    const cache = await caches.open(CACHE);
+    await Promise.all(SHELL.map(async (rel) => {
+      try {
+        const url = new URL(rel, self.registration.scope).href;
+        const response = await fetch(url, { cache: 'reload' });
+        if (!response || !response.ok) return;
+        await cache.put(new Request(url), response.clone());
+        warmed += 1;
+      } catch (error) {
+        /* 单个壳文件拉不到不影响其它几个，下一次实际访问会照常写入 */
+      }
+    }));
+  } catch (error) {
+    /* 缓存打不开（隐私模式等）：当作热身失败，不往外抛 */
+  }
+  return warmed;
+}
+
 /* 安装阶段不预取文件。冷启动时即使只预取首页核心，也会和当前页面争用
    慢网络连接；所有资源首次实际使用时由 fetch 处理程序写入同一个 CACHE。
    ASSETS 仍保留完整清单，供版本换缓存、资源核对和已访问页面离线使用。 */
@@ -175,9 +206,20 @@ self.addEventListener('install', () => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    // 清掉所有旧版本缓存
+    // 先把新版本的壳装进缓存，再动旧缓存（顺序不能反）
+    const warmed = await warmShell();
     const ks = await caches.keys();
-    await Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    const stale = ks.filter((k) => k !== CACHE);
+    /* 热身一个都没成功，说明这会儿网络或缓存就是坏的：
+       把旧缓存留着当最后的兜底，等下一次激活再清。
+       只要有一个成功就照常清 —— 静态资源是按「所有缓存」查的，
+       新旧两份并存会拿旧 JS 配新 HTML，那种错配比兜底页更难查。 */
+    if (warmed === 0 && stale.length) {
+      console.warn('[sw] 新缓存热身失败，暂留旧缓存兜底：', stale.join(', '));
+    } else {
+      await Promise.all(stale.map((k) => caches.delete(k)));
+      console.log('[sw] 壳文件并入新缓存：', warmed + '/' + SHELL.length, CACHE);
+    }
     // 立刻接管已经打开的页面，不用等用户关标签页
     await self.clients.claim();
     // 告诉每个页面「有新版本了，可以刷新」
@@ -244,11 +286,28 @@ const OFFLINE_HTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf
   function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
   /* 强制更新：清掉本站旧缓存并注销 Service Worker，再带新参数重进。
-     只动静态资源缓存，不碰 localStorage / IndexedDB。 */
+     只动静态资源缓存，不碰 localStorage / IndexedDB。
+     注意必须保住原有查询串：学生端链接是 student.html?code=xxx，
+     以前这里硬拼 '?v=时间戳' 会把 code 冲掉 —— 学生点一次「强制更新」，
+     链接就变成「接口不存在」，只能回老师那边重新生成。 */
+  function keepSearch() {
+    var qs = '';
+    try {
+      var sp = new URLSearchParams(location.search);
+      sp.delete('v');
+      qs = sp.toString();
+    } catch (e) {
+      qs = String(location.search || '').replace(/^\\?/, '');
+      qs = qs.split('&').filter(function (kv) {
+        return kv && kv.split('=')[0] !== 'v';
+      }).join('&');
+    }
+    return '?' + (qs ? qs + '&' : '') + 'v=' + Date.now();
+  }
   function hardReset() {
     msg.textContent = '正在清理旧缓存…';
     btn.disabled = true;
-    var go = function () { location.replace(location.pathname + '?v=' + Date.now() + (location.hash || '')); };
+    var go = function () { location.replace(location.pathname + keepSearch() + (location.hash || '')); };
     var jobs = [];
     try { if (window.caches && caches.keys) jobs.push(caches.keys().then(function (ks) {
       return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).catch(function () {})); } catch (e) {}
