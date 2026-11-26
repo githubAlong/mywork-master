@@ -91,7 +91,9 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
   let isComposingSearch = false;
   let teachers = [], allTeachers = [], tables = [], details = {}, leaveRecords = [], prefs = {};
   let timetableSettings = {}, timetableCourses = [], timetablePeriods = [], periodTimeEdits = {};
-  let showAddTeacher = false;
+  /* 新增教师表单常驻在名单上方（用户 11-26 要求：入口就在列表上面，不收起），
+     addDraft / addDraftGrade 只存「正在填但还没保存」的值，见 teacherAddCardHtml。 */
+  let addDraft = {}, addDraftGrade = '';
   let generating = false, editingSheet = '';
   /* 查看周期：日 = 当天逐节录入；月 / 年 = 每人一行累计、只读回看，六张表共用同一个开关。
      汇总表例外：它的「按月」一直是可编辑可生成的月快照，只有「按年」退成只读累计。 */
@@ -238,6 +240,23 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
     } catch(e) {
       root.innerHTML = '<div class="att-work-error">'+esc(e.message || '考勤数据加载失败')+'</div>';
     } finally { busy = false; }
+  };
+  /* 保存后要把结果同步到下面的名单：load 一次要拉六个接口，
+     上一次还没回来时再调会被 busy 挡回去，名单就停在旧数据上。这里等它空下来再拉。 */
+  const reloadRoster = async () => {
+    for (let i = 0; i < 40 && busy; i += 1) await new Promise(resolve => setTimeout(resolve, 80));
+    await load();
+  };
+  /* 保存完把那一行滚进视野并闪一下，用户一眼能看到刚存进去的人落在哪一行。 */
+  const flashRosterRow = name => {
+    const label = String(name || '').trim();
+    if (!label) return;
+    const row = [...root.querySelectorAll('.aprd-table-wrap tbody tr')]
+      .find(tr => String(tr.querySelector('.aprd-name')?.textContent || '').trim() === label);
+    if (!row) return;
+    row.classList.add('aprd-row-flash');
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => row.classList.remove('aprd-row-flash'), 1600);
   };
   const savePrefs = async (patch) => {
     const next = {...prefs,...patch};
@@ -710,29 +729,43 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       +'<input type="search" id="aprd-search" placeholder="搜索教师姓名" value="'+esc(search)+'"></label>'
       +'<i class="aprd-divider" aria-hidden="true"></i>';
   };
+  /* 表单里手填的值存在 addDraft：表格每改一次都要重绘 innerHTML，
+     不存就会在筛选、切页签时把正在填的内容冲掉。
+     年级一换（切年级页签 / 保存时新建了年级）就丢掉草稿，免得把上个年级的部门带过去。 */
+  const addDraftValue = (key, fallback) => {
+    const draft = addDraftGrade === grade ? addDraft : {};
+    return draft[key] === undefined ? fallback : draft[key];
+  };
   const teacherAddCardHtml = () => {
-    if(!showAddTeacher)return '';
     const subjects=[...new Set([...teacherSubjects(),...ROSTER_SUBJECTS])];
     const departments=[...new Set([
       ...(Array.isArray(prefs.departments?.[grade]) ? prefs.departments[grade] : []),
       ...teachers.map(item=>String(deptOf(item)||'').trim()),
       '高中部',
     ].filter(Boolean))];
-    /* 三个输入框全部改成 combo（下拉候选 + 手动输入）：
-       学科/年级/部门手输新值就地入清单，其他表候选同步；姓名输已有教师=编辑其资料（用户 11-25 要求）。 */
+    /* 字段顺序按名单列走（用户 11-26 要求）：归属部门 → 归属年级 → 姓名 → 学科 → 在职状态 → 备注，
+       和下方表格的列一一对应，填的时候从上往下就是从左往右。
+       姓名、学科、年级、部门都是 combo（下拉候选 + 手动输入）：手输新值就地入清单，其他表候选同步；
+       姓名输已有教师=编辑其资料（用户 11-25 要求）。 */
+    const duty = String(addDraftValue('duty','1')) === '0' ? '0' : '1';
     return '<section class="aprd-roster-add-card" aria-label="新增教师">'
-      +'<div class="aprd-roster-add-head"><div><h3>新增教师</h3><p>新增教师 / 学科 / 年级 / 部门，全部非必填；输入已有教师姓名则改为编辑其资料，其他表同步更新</p></div>'
+      +'<div class="aprd-roster-add-head"><div><h3>新增教师</h3><p>按名单列序填：归属部门 / 归属年级 / 姓名 / 学科 / 在职状态 / 备注，全部非必填；输入已有教师姓名则改为编辑其资料，保存后直接同步到下方名单</p></div>'
       +'<span>当前年级：'+esc(grade)+'</span></div>'
       +'<form class="aprd-roster-add-form" id="aprd-roster-add-form">'
-      +'<label>姓名<input name="name" type="text" list="aprd-name-list" placeholder="输入教师姓名（可选）" autocomplete="off">'
-      +'<datalist id="aprd-name-list">'+teachers.map(item=>'<option value="'+escAttr(item.name)+'">'+esc(item.subject||'')+'</option>').join('')+'</datalist></label>'
-      +'<label>学科<input name="subject" type="text" list="aprd-subject-list" placeholder="下拉选已有或直接输入新学科" autocomplete="off">'
-      +'<datalist id="aprd-subject-list">'+subjects.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
-      +'<label>归属年级<input name="grade" type="text" list="aprd-grade-list" value="'+esc(grade)+'" placeholder="可输入新年级" autocomplete="off">'
-      +'<datalist id="aprd-grade-list">'+grades.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
-      +'<label>归属部门<input name="department" type="text" list="aprd-dept-list" value="高中部" placeholder="可输入新部门" autocomplete="off">'
+      +'<label>归属部门<input name="department" type="text" list="aprd-dept-list" value="'+escAttr(addDraftValue('department','高中部'))+'" placeholder="可输入新部门" autocomplete="off">'
       +'<datalist id="aprd-dept-list">'+departments.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
-      +'<div class="aprd-roster-add-actions"><button type="button" data-roster-add-cancel>取消</button><button type="submit" class="primary">保存</button></div>'
+      +'<label>归属年级<input name="grade" type="text" list="aprd-grade-list" value="'+escAttr(addDraftValue('grade',grade))+'" placeholder="可输入新年级" autocomplete="off">'
+      +'<datalist id="aprd-grade-list">'+grades.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
+      +'<label>姓名<input name="name" type="text" list="aprd-name-list" value="'+escAttr(addDraftValue('name',''))+'" placeholder="输入教师姓名（可选）" autocomplete="off">'
+      +'<datalist id="aprd-name-list">'+allTeachers.map(item=>'<option value="'+escAttr(item.name)+'">'+esc(item.subject||'')+'</option>').join('')+'</datalist></label>'
+      +'<label>学科<input name="subject" type="text" list="aprd-subject-list" value="'+escAttr(addDraftValue('subject',''))+'" placeholder="下拉选已有或直接输入新学科" autocomplete="off">'
+      +'<datalist id="aprd-subject-list">'+subjects.map(item=>'<option value="'+escAttr(item)+'"></option>').join('')+'</datalist></label>'
+      +'<label>在职状态<select name="duty">'
+      +'<option value="1"'+(duty==='1'?' selected':'')+'>在职</option>'
+      +'<option value="0"'+(duty==='0'?' selected':'')+'>停用</option>'
+      +'</select></label>'
+      +'<label>备注<input name="remark" type="text" maxlength="200" value="'+escAttr(addDraftValue('remark',''))+'" placeholder="选填" autocomplete="off"></label>'
+      +'<div class="aprd-roster-add-actions"><button type="button" data-roster-add-cancel>清空</button><button type="submit" class="primary">保存</button></div>'
       +'</form></section>';
   };
   const saveDraftButton = (type,label) => '<button '+(details[type]?'':'disabled')+' data-save-'+type+'>'+(details[type]?label:'生成后可保存修改')+'</button>';
@@ -1511,8 +1544,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
     && (!subject || (row.subject||'未填学科')===subject);
   const voiceButtonHtml = locked => '<button type="button" class="aprd-voice" data-workspace-voice'
     +(locked?' disabled':'')+'>'+icon('speak',15)+'语音速记</button>';
-  /* 「新增」按页签各点各的：花名册开新增教师表单，坐班/上课/教研登记一条本表记录，
-     请假开请假表单，汇总表手工补一行。按钮位置六张表一致。 */
+  /* 「新增」按页签各点各的：坐班/上课/教研登记一条本表记录，请假开请假表单，汇总表手工补一行。
+     花名册不在这张表里——它的新增表单常驻在名单上方，工具栏不再放按钮（用户 11-26）。 */
   const ADD_ACTIONS = {
     roster:['data-add','新增教师'],seat:['data-add-record','新增坐班'],class:['data-add-record','新增上课'],
     research:['data-add-record','新增教研'],leave:['data-add-leave','新增请假'],summary:['data-add-summary','新增统计'],
@@ -1521,9 +1554,11 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
      点新增本身就进入编辑态（openAddRecord 里会设置）。请假/汇总保留原有节奏。 */
   const addButtonLocked = type => (type==='leave'||type==='summary') && (!!confirmedResult(type) && !isEditing(type));
   const addButtonHtml = (type,locked) => {
-    const [action,label]=ADD_ACTIONS[type]||['data-add','新增'];
-    const text=type==='roster'&&showAddTeacher?'收起新增教师':'＋ '+label;
-    return '<button type="button" class="primary aprd-add-btn" '+action+(locked||addButtonLocked(type)?' disabled':'')+'>'+esc(text)+'</button>';
+    /* 花名册不再放「新增教师」按钮（用户 11-26）：表单常驻在名单上方，
+       按钮要么只能收起来、要么点了没反应，两种都是多余的入口。 */
+    if(type==='roster')return '';
+    const [action,label]=ADD_ACTIONS[type]||['data-add-record','新增'];
+    return '<button type="button" class="primary aprd-add-btn" '+action+(locked||addButtonLocked(type)?' disabled':'')+'>＋ '+esc(label)+'</button>';
   };
   const generateButtonHtml = locked => '<button type="button" class="primary" data-generate'
     +(locked||generating?' disabled':'')+'>确认生成</button>';
@@ -1758,7 +1793,10 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       +(type === 'roster' ? rosterItems : summaryItems).map(([label,value])=>
         '<div class="aprd-kpi'+(label==='请假教师'?' leave':'')+'"><b>'+value+'</b><span>'+label+'</span></div>').join('')+'</div>';
     return '<div class="aprd-toolbar"><div class="aprd-toolbar-main">'+tools+'</div>'
-      +'<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+listedTeachers.length+' 位教师</span></div>'+teacherAddCardHtml()+summaryStrip
+      +'<span class="aprd-filter-count">当前筛：'+esc(subject||'全部学科')+' · '+listedTeachers.length+' 位教师</span></div>'
+      /* 新增教师表单只在花名册出现：坐班/上课/教研共用这份渲染，但它们管的是当节课的记录，
+         不该在表上方摆一张填人事资料的表。 */
+      +(type==='roster'?teacherAddCardHtml():'')+summaryStrip
       +'<div class="aprd-table-wrap"><table><thead><tr>'+columns.map(column=>'<th>'+column+'</th>').join('')
       +'</tr></thead><tbody>'+(rows||'<tr><td colspan="'+columns.length+'" class="aprd-empty">当前筛选下暂无在岗教师</td></tr>')+'</tbody></table></div>';
   };
@@ -2340,9 +2378,19 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       const existing=activeLeavesFor(leaveRecords,date,grade).find(x=>String(x.name||x.teacher||'').trim()===teacher.name);
       editLeaveRecord(existing,teacher);
     });
-    root.querySelector('[data-add]')?.addEventListener('click',()=>{showAddTeacher=!showAddTeacher;paint();});
-    root.querySelector('[data-roster-add-cancel]')?.addEventListener('click',()=>{showAddTeacher=false;paint();});
-    root.querySelector('#aprd-roster-add-form')?.addEventListener('submit',async event=>{
+    /* 表单常驻（用户 11-26），没有展开/收起，也没有工具栏按钮；
+       「清空」只把正在填的内容清掉，表单继续留在原位。 */
+    const addForm = root.querySelector('#aprd-roster-add-form');
+    const keepAddDraft = event => {
+      const field = event.target;
+      if (!field?.name) return;
+      if (addDraftGrade !== grade) { addDraft = {}; addDraftGrade = grade; }
+      addDraft[field.name] = field.value;
+    };
+    addForm?.addEventListener('input', keepAddDraft);
+    addForm?.addEventListener('change', keepAddDraft);
+    root.querySelector('[data-roster-add-cancel]')?.addEventListener('click',()=>{addDraft={};addDraftGrade=grade;paint();});
+    addForm?.addEventListener('submit',async event=>{
       event.preventDefault();
       const form=event.currentTarget;
       const submit=form.querySelector('[type="submit"]');
@@ -2351,6 +2399,8 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       const subjectName=String(values.subject||'').trim();
       const department=String(values.department||'').trim();
       const teacherGrade=String(values.grade||'').trim();
+      const remark=String(values.remark||'').trim();
+      const onDuty=String(values.duty||'1')!=='0';
       if(teacherGrade&&teacherGrade.length>12){toast('归属年级需为1至12字','warn');return;}
       if(!name&&!subjectName&&!teacherGrade&&!department){toast('请至少填写一项','warn');return;}
       submit.disabled=true;
@@ -2376,30 +2426,45 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
         }
         if(!name){
           /* 只填了学科/年级/部门：清单已入库，不需要动花名册 */
-          if(createdNotes.length){editConfirmedSheet();await load();toast(createdNotes.join('；'),'ok',5000);}
+          if(createdNotes.length){editConfirmedSheet();await reloadRoster();toast(createdNotes.join('；'),'ok',5000);}
           else toast('没有需要保存的新内容','warn');
           return;
         }
-        /* 姓名两用：与当前年级花名册同名 → 编辑其学科/年级/部门；新姓名 → 新建教师 */
-        const existing=teachers.find(item=>String(item.name||'').trim()===name);
+        /* 姓名两用：与当前年级花名册同名 → 编辑其学科/年级/部门等资料；新姓名 → 新建教师 */
+        const existing=allTeachers.find(item=>String(item.name||'').trim()===name);
         if(existing){
           const targetGrade=teacherGrade||existing.grade||grade;
-          await api.patch('/teachers/'+existing.id,{name,subject:subjectName||existing.subject||'',grade:targetGrade});
-          if(department)await setTeacherMeta(existing,{department});
+          /* 在职状态只有用户真的在表单里动过才写：默认值是「在职」，
+             照抄下去会把一个停用的人悄悄改回在职。 */
+          const patchBody={name,subject:subjectName||existing.subject||'',grade:targetGrade};
+          if('duty' in (addDraftGrade===grade?addDraft:{}))patchBody.active=onDuty;
+          await api.patch('/teachers/'+existing.id,patchBody);
+          await setTeacherMeta(existing,{...(department?{department}:{}),...(remark?{remark}:{})});
+          grade=targetGrade;
+          addDraft={};addDraftGrade=grade;
           editConfirmedSheet();
-          await load();
-          toast('教师「'+name+'」资料已更新'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
+          await reloadRoster();
+          flashRosterRow(name);
+          toast('教师「'+name+'」资料已更新，名单已同步'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
           return;
         }
         const targetGrade=teacherGrade||grade;
         await api.post('/teachers',{grade:targetGrade,name,subject:subjectName||''});
         grade=targetGrade;
         const updated=await api.get('/teachers',{grade,active:'all'});
-        const created=(updated.list||[]).find(item=>String(item.name||'').trim()===name);
-        if(created)await setTeacherMeta(created,{department:department||'高中部'});
+        /* 同名不同科是两个人：先按姓名+学科找，找不到再退回姓名，别把资料写错人。 */
+        const sameName=(updated.list||[]).filter(item=>String(item.name||'').trim()===name);
+        const created=sameName.find(item=>String(item.subject||'').trim()===subjectName)||sameName[sameName.length-1];
+        if(created){
+          await setTeacherMeta(created,{department:department||'高中部',...(remark?{remark}:{})});
+          /* POST 新建默认在职，表单选了「停用」再补一次；备注/部门只在新填了才写，不覆盖原有。 */
+          if(!onDuty)await api.patch('/teachers/'+created.id,{active:false});
+        }
+        addDraft={};addDraftGrade=grade;
         editConfirmedSheet();
-        await load();
-        toast('教师「'+name+'」已新增'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
+        await reloadRoster();
+        flashRosterRow(name);
+        toast('教师「'+name+'」已新增，名单已同步'+(createdNotes.length?'；'+createdNotes.join('；'):''),'ok',5000);
       }catch(error){
         submit.disabled=false;
         submit.textContent='保存';

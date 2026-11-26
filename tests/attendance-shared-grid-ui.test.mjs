@@ -5,6 +5,9 @@ import * as domain from '../js/attendance-prd-domain.mjs';
 import * as timetablePeriods from '../js/timetable-periods.mjs';
 import * as dayPeriods from '../js/attendance-day-periods.mjs';
 import * as attendanceDomain from '../js/attendance-domain.mjs';
+/* 花名册新增表单常驻后，每次渲染都要用到 ROSTER_SUBJECTS（学科候选），
+   原来只有展开表单时才取到它，测试夹具里没有就会直接报未定义。 */
+import * as rosterStructure from '../js/roster-structure.mjs';
 
 // Exercise the actual renderer and its event handlers with a small DOM/API fixture.
 // No database, account, browser storage or network is used.
@@ -124,7 +127,7 @@ async function setup(options={}) {
       return structuredClone(table);
     },
   };
-  const dependencies={...domain,...timetablePeriods,...dayPeriods,...attendanceDomain,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
+  const dependencies={...domain,...timetablePeriods,...dayPeriods,...attendanceDomain,...rosterStructure,api,esc,toast:(message,type)=>toasts.push({message,type}),confirmDialog:async()=>true,saveBlob(){},icon:()=>'',
     createSlot(){throw Error('fixture tables already exist');},makeXlsx({grid}){exportedGrids.push(grid);},parseRosterFile(){},parseRosterText(){}};
   const render=new Function(...Object.keys(dependencies),source+'\nreturn renderAttendancePRD;')(...Object.values(dependencies));
   await render(root,{grade});
@@ -188,13 +191,15 @@ test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/�
   /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。
      用户 11-25 裁决：学科管理按钮去掉，学科改在花名册新增卡片就地创建；
      花名册与坐班/上课/教研不再有「编辑」按钮，表格随时可直接编辑；
-     请假表和汇总表保留「编辑」按钮（用户 11-25 只点名前三张）。 */
-  const addSelector={roster:'data-add',seat:'data-add-record',class:'data-add-record',
+     请假表和汇总表保留「编辑」按钮（用户 11-25 只点名前三张）。
+     用户 11-26 裁决：花名册的新增表单常驻在名单上方，工具栏不再有「新增教师」按钮。 */
+  const addSelector={seat:'data-add-record',class:'data-add-record',
     research:'data-add-record',leave:'data-add-leave',summary:'data-add-summary'};
   for(const type of ['roster','seat','class','research','leave','summary']) {
     await root.querySelector('[data-tab="'+type+'"]').click();
     const html=root.innerHTML;
-    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice',addSelector[type]];
+    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice'];
+    if(addSelector[type])markers.push(addSelector[type]);
     if(type==='leave'||type==='summary')markers.push('data-edit-sheet');
     markers.push('data-generate');
     const positions=markers.map(marker=>html.indexOf(marker));
@@ -207,6 +212,22 @@ test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/�
     assert.doesNotMatch(html,/data-subject-manager/,'学科管理按钮已去掉');
     assert.doesNotMatch(html.slice(html.indexOf('data-workspace-voice'),html.indexOf('</button>',html.indexOf('data-workspace-voice'))),/语音登记/,'按钮统一叫「语音速记」');
   }
+});
+
+test('花名册新增表单常驻在名单上方，字段按名单列序排（归属部门-归属年级-姓名-学科-在职状态-备注）',async()=>{
+  const {root}=await setup();
+  await root.querySelector('[data-tab="roster"]').click();
+  const html=root.innerHTML;
+  assert.ok(root.querySelector('#aprd-roster-add-form'),'新增表单常驻，不需要先点按钮展开');
+  const start=html.indexOf('id="aprd-roster-add-form"');
+  const formHtml=html.slice(start,html.indexOf('</form>',start));
+  /* 用户 11-26：字段顺序要和下面名单的列一一对应，填的时候从上往下就是从左往右 */
+  assert.deepEqual([...formHtml.matchAll(/<(?:input|select) name="([\w-]+)"/g)].map(match=>match[1]),
+    ['department','grade','name','subject','duty','remark']);
+  assert.ok(start<html.indexOf('aprd-table-wrap'),'新增表单在名单上面');
+  assert.doesNotMatch(html,/data-add[ >]/,'工具栏不再有「新增教师」按钮（表单常驻，不需要收起）');
+  /* 在职状态默认「在职」，与名单里默认全部在职一致 */
+  assert.match(formHtml,/<select name="duty">[\s\S]*?<option value="1" selected>在职<\/option>/);
 });
 
 test('学科清单独立存储：没挂老师的学科也能筛选，改名连带历史考勤行',async()=>{
@@ -557,7 +578,10 @@ test('工作表导出和生成操作针对当前页签，导出的列及勾选�
 
 /* 2026-11-22：时段自动取当天课表 + 当前批次条 + 未确认变更定位 */
 const todayYmd=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
-const periodItemsOf=html=>[...html.matchAll(/<option value="(\d+)"([^>]*)>([^<]*)<\/option>/g)]
+/* 只看节次下拉里的 option：页面上还有别的数字选项（如新增表单的在职状态 1/0），
+   全文抓 <option value="1"> 会把它们也数进来。 */
+const periodItemsOf=html=>[...(html.match(/<select id="aprd-period">([\s\S]*?)<\/select>/)?.[1]||'')
+  .matchAll(/<option value="(\d+)"([^>]*)>([^<]*)<\/option>/g)]
   .map(match=>({value:match[1],off:/aprd-period-off/.test(match[2]),text:match[3]}));
 
 test('节次按自然顺序列出，不展示当天是否有课；全天时段仍取当天最早到最晚',async()=>{
