@@ -140,8 +140,9 @@ test('坐班表、上课表、教研表名单与列一模一样，花名册只�
   assert.deepEqual(headers(),['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注','操作']);
   await root.querySelector('[data-tab="roster"]').click();
   const rosterHeaders=headers(),expectedNames=names();
-  /* 用户 11-15 裁决：花名册只维护教师名单，考勤状态列全部隐藏；操作前保留一列可填写的备注 */
-  assert.deepEqual(rosterHeaders,['序号','归属部门','归属年级','姓名','学科','备注','操作']);
+  /* 用户 11-15 裁决：花名册只维护教师名单，考勤状态列全部隐藏；操作前保留一列可填写的备注。
+     用户 11-26 补充：花名册多一列「在职状态」，默认全部在职，可点成停用。 */
+  assert.deepEqual(rosterHeaders,['序号','归属部门','归属年级','姓名','学科','在职状态','备注','操作']);
   assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
   assert.equal(root.querySelectorAll('[data-person]').length,0);
   let workHeaders=null;

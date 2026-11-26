@@ -586,3 +586,14 @@
 .attendance-prd .aprd-lt-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .attendance-prd .aprd-lt-num{-moz-appearance:textfield;appearance:textfield}
 .attendance-prd .aprd-lt-cell{white-space:nowrap}
+
+/* 花名册「在职状态」（v433）：整列只有在职/停用两个值，做成点一下就切换的小徽标。
+   停用的人整行压淡，扫一眼就能看出名册里哪几位已经不在岗了。 */
+.attendance-prd .aprd-duty{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:24px;padding:0 9px;
+  border:1px solid transparent;border-radius:6px;font-size:12.5px;line-height:1;cursor:pointer;transition:box-shadow .15s}
+.attendance-prd .aprd-duty.on{background:#e9f8ef;border-color:#c7ecd5;color:#15803d}
+.attendance-prd .aprd-duty.off{background:#f1f4f9;border-color:#e2e8f2;color:#7a889c}
+.attendance-prd .aprd-duty:hover{box-shadow:0 0 0 2px rgba(22,93,255,.14)}
+.attendance-prd .aprd-duty:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(22,93,255,.35)}
+.attendance-prd tr.aprd-row-off td{color:#93a0b4}
+.attendance-prd tr.aprd-row-off td.aprd-name{color:#7a889c}

@@ -397,7 +397,12 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
     await saveRows(type,t,rows);
     toast(message,'ok'); await load();
   });
-  const visibleTeachers = () => teachers.filter(t =>
+  /* 在职状态（用户 11-26 要求）：花名册是「整份名单」，在职和已停用都要列出来，
+     否则把一个人改成停用后整行消失，用户会以为被删了，也没地方改回来。
+     老数据没有 active 字段（v411 之前导入的名册），按「在职」算，所以默认全部在职。
+     考勤四张表仍然只算在职的人，免得给已经走了的人排班。 */
+  const isOnDuty = t => Number(t?.active ?? 1) !== 0;
+  const visibleRoster = () => allTeachers.filter(t =>
     (!search || (t.name+' '+t.subject).toLowerCase().includes(search.toLowerCase()))
     && (!subject || (t.subject || '未填学科') === subject)
   );
@@ -1591,7 +1596,7 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
     const editable = type !== 'roster';
     const isWorksheet=type==='class'||type==='research';
     const dirtyKeys = sheetDirtyKeys(type);
-    const entries = type==='roster' ? visibleTeachers().map(teacher=>({teacher}))
+    const entries = type==='roster' ? visibleRoster().map(teacher=>({teacher}))
       /* 上课表/教研表的名单和坐班表一样全：没登记的人就是几格空白，
          不能因为「这条表还没记录」把整张表收成空（用户 11-22 要求三张表一模一样）。
          只改这份显示名单，确认生成与导出仍走 worksheetEntries 的已登记口径。 */
@@ -1627,8 +1632,10 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
        三张考勤表在「请假」后面多一列「请假时间」（用户 11-24 要求）。 */
     const stateHeaders = activeStateKeys.flatMap(key => key === 'leave'
       ? [GRID_STATE_LABELS[key], '请假时间'] : [GRID_STATE_LABELS[key]]);
+    /* 花名册比四张考勤表多一列「在职状态」（用户 11-26 要求）：花名册管的是人，
+       在职/停用是人事属性，不属于当天考勤，所以只放这一张表、不进考勤格子。 */
     const columns = type === 'roster'
-      ? ['序号','归属部门','归属年级','姓名','学科','备注','操作']
+      ? ['序号','归属部门','归属年级','姓名','学科','在职状态','备注','操作']
       : ['序号','归属部门','归属年级','姓名','学科',...stateHeaders,'备注','操作'];
     /* 花名册行内操作不再依赖「编辑」按钮（已去掉）：新增/编辑/删除随时可用。 */
     const canWrite = type === 'roster' ? true : editable;
@@ -1639,8 +1646,15 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       +'<button type="button" class="aprd-op danger" data-disable="'+esc(teacher.id)+'"'+(canWrite?'':' disabled')+'>删除</button></div>';
     const rows = entries.map(({teacher,state,department,remark:savedRemark},index) => {
       if (type === 'roster') {
-        return '<tr><td class="aprd-serial">'+(index+1)+'</td><td>'+esc(deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
+        /* 在职状态点一下就能改（在职 → 停用 → 在职），不用为了停一个人去打开编辑弹窗；
+           做成按钮而不是下拉，是因为整列只有两个值，下拉框在 46 行里会很重。 */
+        const onDuty = isOnDuty(teacher);
+        const statusCell = '<button type="button" class="aprd-duty '+(onDuty?'on':'off')+'" data-toggle-duty="'+esc(teacher.id)+'"'
+          +' title="'+(onDuty?'点击改为停用':'点击改为在职')+'" aria-label="'+escAttr(teacher.name+' 在职状态：'+(onDuty?'在职':'停用'))+'">'
+          +(onDuty?'在职':'停用')+'</button>';
+        return '<tr'+(onDuty?'':' class="aprd-row-off"')+'><td class="aprd-serial">'+(index+1)+'</td><td>'+esc(deptOf(teacher))+'</td><td>'+esc(teacher.grade||grade)+'</td>'
           +'<td class="aprd-name">'+esc(teacher.name)+'</td><td>'+esc(teacher.subject||'')+'</td>'
+          +'<td>'+statusCell+'</td>'
           +'<td>'+(canWrite
             ?'<input type="text" class="aprd-note-input" data-roster-note="'+esc(teacher.id)+'" value="'+escAttr(noteOf(teacher))+'" placeholder="备注" aria-label="'+escAttr(teacher.name+' 备注')+'">'
             :'<span class="aprd-remark">'+esc(noteOf(teacher)||'—')+'</span>')+'</td>'
@@ -1730,13 +1744,15 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       }),
     ];
     /* 花名册也要统计条（用户 11-22 要求）：人数跟着当前筛选走，
-       学科和部门数的是筛完之后真实出现的去重值；停用是整份名单的口径，
-       跟着筛选走反而看不出是谁被停的。 */
+       学科和部门数的是筛完之后真实出现的去重值（只算在职的人）；
+       「已停用」早先是整份名单的口径，v433 起停用的人也列在表里了，
+       所以改成本次筛选内被停用的人数，和「在册教师」加起来正好是表里的行数。 */
+    const dutyTeachers = listedTeachers.filter(isOnDuty);
     const rosterItems = [
-      ['在册教师', listedTeachers.length],
-      ['学科', new Set(listedTeachers.map(t => String(t.subject || '').trim()).filter(Boolean)).size],
-      ['归属部门', new Set(listedTeachers.map(teacher => deptOf(teacher))).size],
-      ['已停用', allTeachers.length - teachers.length],
+      ['在册教师', dutyTeachers.length],
+      ['学科', new Set(dutyTeachers.map(t => String(t.subject || '').trim()).filter(Boolean)).size],
+      ['归属部门', new Set(dutyTeachers.map(teacher => deptOf(teacher))).size],
+      ['已停用', listedTeachers.length - dutyTeachers.length],
     ];
     const summaryStrip = '<div class="aprd-kpis aprd-grid-summary">'
       +(type === 'roster' ? rosterItems : summaryItems).map(([label,value])=>
@@ -2409,20 +2425,32 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       if(watermarkOn)watermarkInput.focus();
     });
     watermarkInput?.addEventListener('input',()=>{watermarkText=watermarkInput.value;});
+    /* 在整份名单里找人：花名册现在也列停用的人，只在在职名单里找会「点了没反应」。 */
     root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
-      const t=teachers.find(x=>String(x.id)===b.dataset.edit);if(!t)return;
+      const t=allTeachers.find(x=>String(x.id)===b.dataset.edit);if(!t)return;
       /* 候选统一用下拉：与新增教师一致，避免浏览器自带候选浮层各弹各的。 */
       const subjectOptions=[...new Set([...teacherSubjects(),String(t.subject||'').trim()].filter(Boolean))];
       const gradeOptions=[...new Set([...grades,String(t.grade||grade).trim()].filter(Boolean))];
-      openEditor('编辑教师',[{key:'name',label:'姓名',required:true},{key:'subject',label:'学科',type:'select',required:true,options:subjectOptions.map(value=>({value,label:value}))},{key:'grade',label:'归属年级',type:'select',required:true,options:gradeOptions.map(value=>({value,label:value}))},{key:'department',label:'归属部门'},{key:'remark',label:'备注'}],{name:t.name,subject:t.subject,grade:t.grade||grade,department:deptOf(t),remark:noteOf(t)},async d=>{
+      openEditor('编辑教师',[{key:'name',label:'姓名',required:true},{key:'subject',label:'学科',type:'select',required:true,options:subjectOptions.map(value=>({value,label:value}))},{key:'grade',label:'归属年级',type:'select',required:true,options:gradeOptions.map(value=>({value,label:value}))},{key:'department',label:'归属部门'},{key:'duty',label:'在职状态',type:'select',required:true,options:[{value:'1',label:'在职'},{value:'0',label:'停用'}]},{key:'remark',label:'备注'}],{name:t.name,subject:t.subject,grade:t.grade||grade,department:deptOf(t),duty:isOnDuty(t)?'1':'0',remark:noteOf(t)},async d=>{
         const target=String(d.grade||'').trim();if(!target||target.length>12)throw new Error('归属年级必须为1至12字');
-        await api.patch('/teachers/'+t.id,{name:d.name,subject:d.subject,grade:target});
+        await api.patch('/teachers/'+t.id,{name:d.name,subject:d.subject,grade:target,active:String(d.duty)==='1'});
         if(!grades.includes(target))await api.post('/grades',{name:target});
         await setTeacherMeta(t,{department:d.department,remark:d.remark});
         grade=target;
         editConfirmedSheet();
         await load();
       });
+    });
+    /* 在职状态一键切换：花名册里点一下就改，不用先进编辑弹窗。 */
+    root.querySelectorAll('[data-toggle-duty]').forEach(b=>b.onclick=async()=>{
+      const t=allTeachers.find(x=>String(x.id)===b.dataset.toggleDuty);if(!t)return;
+      const next=!isOnDuty(t);
+      try{
+        await api.patch('/teachers/'+t.id,{active:next});
+        toast(next?'已改为在职':'已改为停用，考勤表不再排这个人','ok');
+        editConfirmedSheet();
+        await load();
+      }catch(error){toast(error.message||'修改失败','err');}
     });
     root.querySelectorAll('[data-disable]').forEach(b=>b.onclick=async()=>{
       if(generating || !await confirmDialog('删除该教师？历史考勤记录将保留，教师可从回收站恢复。'))return;
