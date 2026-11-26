@@ -2036,8 +2036,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       +'<input class="aprd-hhmm" type="text" id="aprd-end" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="18:35" title="24 小时制，如 18:35" value="'+periodRange[1]+'">'
       +'</span></label>')
       +'</div></div>'
-      +'<section class="aprd-card"><div class="aprd-tabs-row"><nav class="aprd-tabs">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
+      /* v431：六张表各自已有左侧「考勤」下的二级导航（花名册 / 坐班表 / 上课表 / 教研表 / 请假表 / 汇总统计表），
+         页面里不再重复排一排页签，只留当前表名——坐班表 / 上课表 / 教研表三张版式一致，
+         没有表名就分不清正在看哪一张。
+         页签控件本身保留但隐藏（aprd-tabs-hidden）：工作台内部「生成请假表 / 语音速记后切表」
+         与自动化测试都靠它切表，用户换表统一走左侧导航，两条路径改的都是同一个 tab 变量。 */
+      +'<section class="aprd-card"><div class="aprd-tabs-row"><span class="aprd-sheet">'+esc((TABS.find(([id])=>id===tab)||[])[1]||'')+'</span>'
       +(tabCorner&&!rangeView?'<div class="aprd-tab-actions">'+tabCorner+'</div>':'')+'</div>'
+      +'<nav class="aprd-tabs aprd-tabs-hidden" hidden aria-hidden="true">'+TABS.map(([id,label])=>'<button data-tab="'+id+'" class="'+(tab===id?'on':'')+'">'+label+'</button>').join('')+'</nav>'
       +'<div class="aprd-panel">'+batch+content+'</div></section></div>';
     root.querySelector('[data-scroll-dirty]')?.addEventListener('click',()=>{
       const row=root.querySelector('.aprd-dirty')?.closest('tr');
@@ -2046,12 +2052,14 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
       row.classList.add('aprd-row-flash');
       setTimeout(()=>row.classList.remove('aprd-row-flash'),1400);
     });
+    /* v431：页签控件隐藏后仍然绑定点击——工作台内部要能「切到请假表」，
+       回归测试也用它驱动切表；用户在页面上换表走左侧二级导航，落到同一个 tab 变量。 */
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=async()=>{
       if(busy || generating || !await flushBeforeSwitch())return;
       tab=b.dataset.tab;
       search='';subject='';
-      /* 切页签只是换一张表看，名单和状态都已经在内存里；这里再去 await load()
-         等于每点一次页签把 6 个接口重跑一遍，「切换后要好久才生效」就是这个
+      /* 切表只是换一张表看，名单和状态都已经在内存里；这里再去 await load()
+         等于每切一次把 6 个接口重跑一遍，「切换后要好久才生效」就是这个
          （用户 11-22 反馈）。只有月/年累计和月度快照是现拉的，才需要等。 */
       if(viewPeriod==='day')paint();
       else if(isRangeView(tab))await loadRange();

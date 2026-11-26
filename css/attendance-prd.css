@@ -198,6 +198,8 @@
 .attendance-prd .aprd-tabs button:hover{color:#165dff}
 .attendance-prd .aprd-tabs button.on{background:transparent;color:#165dff;font-weight:650}
 .attendance-prd .aprd-tabs button.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:#165dff}
+/* v431：六张表统一走左侧「考勤」二级导航，页签控件留在 DOM 里但不再显示 */
+.attendance-prd .aprd-tabs.aprd-tabs-hidden{display:none}
 
 /* 面板与工具栏：搜索 → 学科 → 新增教师 → 批量操作 → 右对齐筛选统计 */
 .attendance-prd .aprd-panel{padding:14px 16px;box-shadow:0 1px 2px rgba(23,39,68,.03)}
@@ -535,6 +537,8 @@
    导出面板向下展开会被裁掉，所以外面套一行、只让页签自己滚。
    ============================================================ */
 .attendance-prd .aprd-tabs-row{display:flex;align-items:center;gap:14px;margin:0 0 14px;border-bottom:1px solid #e4ebf5}
+/* v431：六张表各走左侧二级导航，页面里的页签撤掉；这一行左边改放「当前表名」 */
+.attendance-prd .aprd-sheet{flex:0 0 auto;padding:10px 0;font-size:14px;font-weight:650;color:#172744;white-space:nowrap}
 .attendance-prd .aprd-tabs-row .aprd-tabs{flex:1 1 auto;min-width:0;margin:0;padding:0;border-bottom:0}
 .attendance-prd .aprd-card .aprd-tabs-row{margin:0 -16px 14px;padding:0 16px}
 .attendance-prd .aprd-card .aprd-tabs-row .aprd-tabs{margin:0;padding:0}
