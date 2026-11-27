@@ -1,13 +1,13 @@
 /* ================= 维修（第 23 条） =================
    报修这件事以前全靠群里喊一句，事后没人记得「修没修、谁修的、花了多少钱」。
    这一页只干三件事：记下坏了什么、看清楚哪些还没修、修完留个底。
-   状态只有四个，够用且不会让用户选半天：
-     pending 待处理 → doing 处理中 → done 已修好（canceled 取消） */
+   状态只有四种，够用且不会让用户选半天：
+     pending 待修复 → doing 修复中 → done 已修复（canceled 已取消） */
 import {
   api, esc, toast, sheet, confirmDialog, ymd,
 } from './core.js';
 import { registerView, icon, pageHead } from './ui.js';
-import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusInputValue } from './repairs-domain.mjs';
+import { summarizeRepairs, isRepairTracked, isRepairFixed, repairStatusView } from './repairs-domain.mjs';
 
 /* 维修状态使用自由文本输入，保留旧状态兼容。 */
 const URG = {
@@ -16,15 +16,11 @@ const URG = {
   high: { label: '急', chip: 'red' },
 };
 
-/* 存量记录的状态文案统一显示成下拉三项；用户自己填过的自由文本原样保留。 */
+/* 存量记录的状态文案统一走 repairStatusView（待修复 / 修复中 / 已修复，自由文本原样）；
+   列表徽标和编辑弹窗都用这一份，避免「里面写修复中、外面显示未修好」。 */
 function repairStatusDisplay(row) {
-  if (isRepairFixed(row)) return '已修复';
-  const raw = repairStatusInputValue(row?.status);
-  if (['处理中', '维修中', '正在维修', '修复中', 'doing'].includes(raw)) return '修复中';
-  if (['待处理', '待维修', '待修复', 'pending', ''].includes(raw)) return '待修复';
-  return raw;
+  return repairStatusView(row?.status).label;
 }
-
 
 /* 老链接 #/repairs 兜底（render() 里会先 translate 成 work/repairs） */
 registerView(async function repairs(main) {
@@ -58,8 +54,8 @@ export async function renderRepairsBody(box) {
   const paint = () => {
     const stats = summarizeRepairs(rows, activeMonth);
     const tableRows = stats.rows.length ? stats.rows.map((r, index) => {
-      const fixed = isRepairFixed(r);
       const tracked = isRepairTracked(r);
+      const status = repairStatusView(r.status);
       return `<tr>
         <td class="rp-ledger-no">${esc(r.seq || index + 1)}</td>
         <td>${esc(r.date || '—')}</td>
@@ -67,7 +63,7 @@ export async function renderRepairsBody(box) {
         <td>${esc(r.place || '—')}</td>
         <td class="rp-ledger-record">${esc(r.fault || '—')}</td>
         <td>${esc(r.reporter || '—')}</td>
-        <td><span class="rp-ledger-state ${fixed ? 'is-fixed' : 'is-open'}">${fixed ? '已修好' : '未修好'}</span></td>
+        <td><span class="rp-ledger-state is-${status.key}">${esc(status.label)}</span></td>
         <td><span class="rp-ledger-track ${tracked ? 'is-tracked' : ''}">${tracked ? '是' : '否'}</span></td>
         <td class="rp-ledger-remark">${esc(r.remark || '')}</td>
         <td><div class="rp-ledger-actions">
@@ -96,10 +92,10 @@ export async function renderRepairsBody(box) {
             <div class="rp-ledger-stat-label">本月总维修</div><div class="rp-ledger-stat-num">${stats.total}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
           <article class="rp-ledger-stat rp-ledger-stat-green">
-            <div class="rp-ledger-stat-label">已修好</div><div class="rp-ledger-stat-num">${stats.fixed}</div><div class="rp-ledger-stat-unit">条</div>
+            <div class="rp-ledger-stat-label">已修复</div><div class="rp-ledger-stat-num">${stats.fixed}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
           <article class="rp-ledger-stat rp-ledger-stat-orange">
-            <div class="rp-ledger-stat-label">未修好</div><div class="rp-ledger-stat-num">${stats.unfinished}</div><div class="rp-ledger-stat-unit">条</div>
+            <div class="rp-ledger-stat-label">未修复</div><div class="rp-ledger-stat-num">${stats.unfinished}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
           <article class="rp-ledger-stat rp-ledger-stat-red">
             <div class="rp-ledger-stat-label">需要跟踪</div><div class="rp-ledger-stat-num">${stats.tracked}</div><div class="rp-ledger-stat-unit">条</div>
@@ -113,7 +109,7 @@ export async function renderRepairsBody(box) {
           <table class="rp-ledger-table">
             <thead><tr>
               <th>序号</th><th>维修日期</th><th>设备名称</th><th>位置</th><th>维修记录</th>
-              <th>报修人</th><th>是否修好</th><th>是否跟踪</th><th>备注</th><th>操作</th>
+              <th>报修人</th><th>修复状态</th><th>是否跟踪</th><th>备注</th><th>操作</th>
             </tr></thead>
             <tbody>${tableRows}</tbody>
           </table>
@@ -189,7 +185,7 @@ export async function renderRepairsBody(box) {
       <div class="rp-form-section">
         <div class="rp-form-section-title">处理结果</div>
         <div class="form-grid">
-          <div class="field"><label class="field-label" for="fx">是否修好</label>
+          <div class="field"><label class="field-label" for="fx">修复状态</label>
             <div class="rp-combo" id="fx-combo">
               <input class="input" id="fx" value="${esc(repairStatusDisplay(row))}" placeholder="可手动输入，或点右侧选择" autocomplete="off">
               <button type="button" class="rp-combo-toggle" id="fx-toggle" aria-label="展开状态选项" aria-expanded="false">

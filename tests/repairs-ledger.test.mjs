@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isRepairTracked, summarizeRepairs, isRepairFixed, normalizeRepairStatus, repairStatusInputValue, repairStatusForSave } from '../js/repairs-domain.mjs';
+import { isRepairTracked, summarizeRepairs, isRepairFixed, normalizeRepairStatus, repairStatusInputValue, repairStatusForSave, repairStatusView } from '../js/repairs-domain.mjs';
 
 const repairSource = await readFile(new URL('../js/repairs.js', import.meta.url), 'utf8');
 const localdbSource = await readFile(new URL('../js/localdb.js', import.meta.url), 'utf8');
@@ -48,7 +48,7 @@ test('旧记录缺少 follow_up 时按否处理，并兼容常见勾选值', () 
 });
 
 test('维修台账表头严格遵循 PRD 的十列顺序', () => {
-  const headers = '<th>序号</th><th>维修日期</th><th>设备名称</th><th>位置</th><th>维修记录</th><th>报修人</th><th>是否修好</th><th>是否跟踪</th><th>备注</th><th>操作</th>';
+  const headers = '<th>序号</th><th>维修日期</th><th>设备名称</th><th>位置</th><th>维修记录</th><th>报修人</th><th>修复状态</th><th>是否跟踪</th><th>备注</th><th>操作</th>';
   assert.ok(repairSource.replace(/>\s+</g, '><').includes(headers));
 });
 
@@ -109,8 +109,7 @@ test('截图中的已修复记录在编辑、列表和月份统计中均为已�
   }
 });
 
-test('明确选择是否修好后保存并重新读取，列表与统计保持一致', () => {
-  const row = { date: '2026-11-09', status: '等待配件', fixed_at: '2026-11-01' };
+test('明确选择是否修好后保存并重新读取，列表与统计保持一致', () => {  const row = { date: '2026-11-09', status: '等待配件', fixed_at: '2026-11-01' };
   row.status = repairStatusForSave(row.status, true);
   let restored = JSON.parse(JSON.stringify(row));
   assert.equal(isRepairFixed(restored), true);
@@ -122,4 +121,37 @@ test('明确选择是否修好后保存并重新读取，列表与统计保持�
   assert.equal(restored.fixed_at, '2026-11-01');
   assert.equal(repairStatusForSave('等待配件', false), '等待配件');
   assert.equal(repairStatusForSave('已修复', false), 'pending');
+});
+
+/* 用户 11-27：同一条记录弹窗里写「修复中」、列表里却写「未修好」，看着像两个字段。
+   现在列表徽标、编辑器输入框、统计卡全部走 repairStatusView，同一个词、同一个色。 */
+test('修复状态里外同一口径：列表徽标与编辑器取同一份 view', () => {
+  const cases = [
+    ['pending', 'pending', '待修复'],
+    ['待处理', 'pending', '待修复'],
+    ['doing', 'doing', '修复中'],
+    ['维修中', 'doing', '修复中'],
+    ['修复中', 'doing', '修复中'],
+    ['done', 'fixed', '已修复'],
+    ['已修好', 'fixed', '已修复'],
+    ['已修复', 'fixed', '已修复'],
+    ['已取消', 'canceled', '已取消'],
+    ['等待配件', 'pending', '等待配件'],
+    ['', 'pending', '待修复'],
+  ];
+  for (const [status, key, label] of cases) {
+    assert.deepEqual(repairStatusView(status), { key, label }, `${status || '空值'} 的显示口径`);
+    /* 修好判定仍以 done 为准，统计卡不会因为改了文案而算错 */
+    assert.equal(isRepairFixed({ status }), key === 'fixed', `${status || '空值'} 的修好判定`);
+  }
+
+  /* 列表那一格直接吃 view 的 key / label（不再自己拼「已修好 / 未修好」） */
+  assert.match(repairSource, /class="rp-ledger-state is-\$\{status\.key\}">\$\{esc\(status\.label\)\}/);
+  /* 编辑器输入框默认值也走同一个函数 */
+  assert.match(repairSource, /function repairStatusDisplay\(row\)[\s\S]{0,120}repairStatusView\(row\?\.status\)\.label/);
+  assert.match(repairSource, /id="fx" value="\$\{esc\(repairStatusDisplay\(row\)\)\}"/);
+  /* 旧的二态文案不该再作为界面文字出现（注释里提到旧词不算） */
+  assert.doesNotMatch(repairSource, /'已修好'|'未修好'/);
+  assert.doesNotMatch(repairSource, /是否修好/);
+  assert.match(repairSource, />修复状态</);
 });

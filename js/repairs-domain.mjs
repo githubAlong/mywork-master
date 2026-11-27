@@ -1,6 +1,6 @@
 const REPAIR_STATUS_ALIASES = new Map([
-  ['pending','pending'],['待处理','pending'],['待维修','pending'],
-  ['doing','doing'],['处理中','doing'],['维修中','doing'],['正在维修','doing'],
+  ['pending','pending'],['待处理','pending'],['待维修','pending'],['待修复','pending'],
+  ['doing','doing'],['处理中','doing'],['维修中','doing'],['正在维修','doing'],['修复中','doing'],
   ['done','done'],['已修好','done'],['已修复','done'],['修好了','done'],['已完成','done'],['修复完成','done'],['完成','done'],
   ['canceled','canceled'],['cancelled','canceled'],['已取消','canceled'],['取消','canceled'],
 ]);
@@ -18,6 +18,25 @@ export function repairStatusInputValue(value) {
 }
 export function isRepairFixed(row) {
   return normalizeRepairStatus(row?.status)==='done';
+}
+
+/* 修复状态的三态口径（用户 11-27）：
+   以前列表只判「修没修好」两态（已修好 / 未修好），弹窗里却是三态（待修复 / 修复中 /
+   已修复）—— 同一条记录弹窗写着「修复中」、列表却显示「未修好」，看着像两个字段。
+   现在列表、弹窗、统计卡全部读 repairStatusView，里外同一个词、同一个色。
+   key 用来选配色（fixed 绿 / doing 蓝 / pending 橙 / canceled 灰）。 */
+const REPAIR_STATUS_VIEW = {
+  pending: { key: 'pending', label: '待修复' },
+  doing: { key: 'doing', label: '修复中' },
+  done: { key: 'fixed', label: '已修复' },
+  canceled: { key: 'canceled', label: '已取消' },
+};
+export function repairStatusView(value) {
+  const hit = REPAIR_STATUS_VIEW[normalizeRepairStatus(value)];
+  if (hit) return hit;
+  /* 用户自己敲的自由文本（等待配件 / 已联系厂家…）原样显示，按未修复配色 */
+  const raw = String(value ?? '').trim();
+  return { key: 'pending', label: raw || '待修复' };
 }
 export function repairStatusForSave(value, fixed) {
   if (fixed) return 'done';
