@@ -96,7 +96,6 @@ export async function renderAttendanceOrg(root) {
 
   root.innerHTML = `
     <div class="org">
-      <div class="org-crumb" id="org-crumb">考勤 <span>/</span> 组织管理 <span>/</span> 部门管理</div>
       <nav class="org-tabs" id="org-tabs">
         ${TABS.map((t, i) => `<button class="org-tab${i === 0 ? ' on' : ''}" data-tab="${t.id}">
           <span class="org-tab-ico">${t.icon}</span>${t.label}</button>`).join('')}
@@ -163,8 +162,6 @@ export async function renderAttendanceOrg(root) {
   function switchTab(id) {
     S.tab = id;
     $('#org-tabs').querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
-    const cur = TABS.find((t) => t.id === id);
-    $('#org-crumb').innerHTML = `考勤 <span>/</span> 组织管理 <span>/</span> ${esc(cur?.label || '')}`;
     paint();
   }
 

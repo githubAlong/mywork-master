@@ -114,7 +114,10 @@ export const NAV = [
          v426：「部门管理」正式更名为「组织管理」，作为第一个二级项，
          页面内部是部门 / 年级 / 教师 / 科目四个页签（attendance-org.js）。
          v412 已下线的年级卡片首页不恢复；独立表源码全部保留，随时可切回。 */
-      { id: 'attendance', label: '考勤', icon: 'users', sub: [
+      /* v438（用户 11-26）：点一级「考勤」默认进「组织管理」。
+         default 只影响手机底栏那条一级链接（bn-item），桌面侧栏走 bindShell 的
+         groupDefault 表，两处都指向 organization，才不会一个进工作台一个进组织管理。 */
+      { id: 'attendance', label: '考勤', icon: 'users', default: 'organization', sub: [
         { id: 'organization', label: '组织管理', icon: 'users' },
         { id: 'roster', label: '花名册', icon: 'users' },
         { id: 'seat', label: '坐班表', icon: 'clock' },
@@ -188,6 +191,9 @@ export function subCurrentOf(rootId, route) {
   /* 小助手：#/materials 这种老课件页链接没有第二段，二级项仍默认落在「任务」，
      保证一级高亮和展开状态不会因为收藏夹老链接而丢掉。 */
   if (rootId === 'materials') return tab || 'selfstudy';
+  /* 考勤的默认二级项也是组织管理：点一级标题进来地址只有 #/attendance，
+     没有第二段，不顶一个默认值的话侧栏和手机二级条会一项都不高亮。 */
+  if (rootId === 'attendance') return tab || 'organization';
   return tab || null;
 }
 
@@ -398,9 +404,9 @@ function bindShell() {
          容易误以为一级导航失效。 */
       if (!e.target.closest('.nav-caret')) {
         setNavGroupOpen(key, true);
-        /* 分组标题的默认页：工作 → 上课；考勤 → 单页工作台；小助手 → 任务。
+        /* 分组标题的默认页：工作 → 上课；考勤 → 组织管理；小助手 → 任务。
            不写这条的话点一级标题会落到老课件总览，二级项也不高亮。 */
-        const groupDefault = { work: 'work/lessons', attendance: 'work/attendance', materials: 'materials/selfstudy' };
+        const groupDefault = { work: 'work/lessons', attendance: 'attendance/organization', materials: 'materials/selfstudy' };
         go(groupDefault[key] || key);
         return;
       }

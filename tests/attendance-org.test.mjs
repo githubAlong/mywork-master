@@ -124,10 +124,18 @@ test('组织管理页：四个页签、统计卡、底部提示、导航与路�
   const nav = await read('js/ui.js');
   assert.match(nav, /\{ id: 'organization', label: '组织管理'/, '考勤二级导航要叫组织管理');
   assert.ok(!nav.includes("label: '部门管理', icon"), '旧的「部门管理」二级项不应再出现');
+  /* v438：点一级「考勤」默认进组织管理 —— 手机底栏（default）和桌面侧栏（groupDefault）都要指过来，
+     并且 #/attendance 这种没第二段的地址，二级高亮要顶「组织管理」，不能一项都不亮。 */
+  assert.match(nav, /\{ id: 'attendance', label: '考勤', icon: 'users', default: 'organization'/, '考勤一级项要带默认二级项');
+  assert.match(nav, /attendance: 'attendance\/organization'/);
+  assert.match(nav, /if \(rootId === 'attendance'\) return tab \|\| 'organization';/);
 
   const work = await read('js/work.js');
-  assert.match(work, /raw === 'organization'/);
+  assert.match(work, /if \(!raw \|\| raw === 'organization'\)/, '#/attendance 没第三段也要进组织管理');
   assert.match(work, /attendance-org\.js/);
+  /* 页头「组织管理」由 work.js 用工作台统一页头渲染，页面里不再有 12px 面包屑 */
+  assert.match(work, /pageHead\('组织管理'/);
+  assert.ok(!js.includes('org-crumb'), '组织管理页里那行小面包屑已由页头替代');
 
   const css = await read('css/attendance-org.css');
   /* v435：部门 / 年级 / 科目也改成表格，和教师名单共用 .org-table，

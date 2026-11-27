@@ -151,8 +151,15 @@ registerView(async function work(main, { tab, third }) {
        不落到工作台，也不映射成年级。
        老链接里的英文 key 映射到页签，中文年级名仍作为初始年级，都不白屏。 */
     const raw = third ? decodeURIComponent(third) : '';
-    if (raw === 'organization') {
-      headEl.remove();
+    /* v438（用户 11-26）：「考勤」的默认落地页就是「组织管理」。
+       以前点一级「考勤」进的是六张表工作台（第三段为空 → 默认花名册那一套），
+       用户第一眼想看的其实是组织架构，名单都没维护过就去记考勤是本末倒置。
+       所以第三段为空（点一级标题、手机底栏「考勤」、收藏夹里的 #/attendance）
+       一律当 organization 处理，不额外写 hash —— 免得渲染一遍再跳一遍。 */
+    if (!raw || raw === 'organization') {
+      /* 这一页自带「组织管理」页头（工作台统一页头样式）。
+         原来只有 attendance-org.js 里那行 12px 面包屑，左上角等于没有标题。 */
+      headEl.innerHTML = pageHead('组织管理', '部门 / 年级 / 教师 / 科目，一处维护，考勤六张表共用同一份名单');
       const { renderAttendanceOrg } = await import('./attendance-org.js');
       return renderAttendanceOrg(body);
     }

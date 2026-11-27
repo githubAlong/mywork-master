@@ -27,10 +27,6 @@
   font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 
-/* ---------------- 面包屑 ---------------- */
-.org-crumb { font-size: 12px; color: var(--org-mute); }
-.org-crumb span { margin: 0 6px; color: #C3CFE2; }
-
 /* ---------------- 页签条 ---------------- */
 .org-tabs {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;

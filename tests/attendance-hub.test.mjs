@@ -203,7 +203,9 @@ test('接线：六页签工作台 + 侧栏六张表入口 / 独立表源码保�
   ]) {
     assert.match(navBlock, new RegExp(`id: '${id}', label: '${label}'`), `侧栏缺入口 ${label}`);
   }
-  assert.match(ui, /attendance: 'work\/attendance'/, '点「考勤」应直达单页工作台');
+  /* v438（用户 11-26）：点一级「考勤」默认进「组织管理」，不再直达六张表工作台；
+     六张表仍由自己的二级项（roster/seat/...）进，工作台路由本身没变。 */
+  assert.match(ui, /attendance: 'attendance\/organization'/, '点「考勤」应默认进组织管理');
   assert.match(work, /renderAttendancePRD/, '考勤路由应渲染旧版 PRD 工作台');
   assert.match(work, /attendance-prd\.js/);
   assert.match(work, /attendanceTabOf/, '侧栏入口要能映射成工作台页签');
