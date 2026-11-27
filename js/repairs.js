@@ -37,15 +37,18 @@ export async function renderRepairsBody(box) {
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   let activeMonth = currentMonth;
 
-  const load = async () => {
-    box.innerHTML = '<div class="empty">正在加载维修记录…</div>';
+  /* quiet=true：编辑/删除后原地静默刷新，不再闪一下「正在加载」，
+     统计卡和列表行跟数据同一帧更新，避免出现「列表变了、上面的数字还是旧的」。 */
+  const load = async (quiet = false) => {
+    if (!quiet) box.innerHTML = '<div class="empty">正在加载维修记录…</div>';
     try {
       rows = await api.get('/repairs', { month: activeMonth });
       if (!Array.isArray(rows)) rows = [];
     } catch (e) {
+      if (quiet) { toast(e.message || '刷新失败，请稍后重试', 'err'); return; }
       box.innerHTML = `<div class="empty">${esc(e.message || '维修记录加载失败')}
         <div style="margin-top:10px"><button class="btn ghost sm" id="rp-retry">重新加载</button></div></div>`;
-      box.querySelector('#rp-retry')?.addEventListener('click', load);
+      box.querySelector('#rp-retry')?.addEventListener('click', () => load());
       return;
     }
     paint();
@@ -88,18 +91,24 @@ export async function renderRepairsBody(box) {
           <button type="button" class="btn primary sm rp-ledger-add" id="rp-ledger-add">${icon('plus', 15)} 新增维修记录</button>
         </div>
         <div class="rp-ledger-stats">
-          <article class="rp-ledger-stat rp-ledger-stat-blue">
+          <article class="rp-ledger-stat rp-ledger-stat-total">
             <div class="rp-ledger-stat-label">本月总维修</div><div class="rp-ledger-stat-num">${stats.total}</div><div class="rp-ledger-stat-unit">条</div>
+          </article>
+          <article class="rp-ledger-stat rp-ledger-stat-orange">
+            <div class="rp-ledger-stat-label">待修复</div><div class="rp-ledger-stat-num">${stats.pending}</div><div class="rp-ledger-stat-unit">条</div>
+          </article>
+          <article class="rp-ledger-stat rp-ledger-stat-sky">
+            <div class="rp-ledger-stat-label">修复中</div><div class="rp-ledger-stat-num">${stats.doing}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
           <article class="rp-ledger-stat rp-ledger-stat-green">
             <div class="rp-ledger-stat-label">已修复</div><div class="rp-ledger-stat-num">${stats.fixed}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
-          <article class="rp-ledger-stat rp-ledger-stat-orange">
-            <div class="rp-ledger-stat-label">未修复</div><div class="rp-ledger-stat-num">${stats.unfinished}</div><div class="rp-ledger-stat-unit">条</div>
-          </article>
           <article class="rp-ledger-stat rp-ledger-stat-red">
             <div class="rp-ledger-stat-label">需要跟踪</div><div class="rp-ledger-stat-num">${stats.tracked}</div><div class="rp-ledger-stat-unit">条</div>
           </article>
+          ${stats.canceled > 0 ? `<article class="rp-ledger-stat rp-ledger-stat-grey">
+            <div class="rp-ledger-stat-label">已取消</div><div class="rp-ledger-stat-num">${stats.canceled}</div><div class="rp-ledger-stat-unit">条</div>
+          </article>` : ''}
         </div>
         <div class="rp-ledger-reminders">
           <div class="rp-ledger-reminders-title">${icon('pin', 15)} 待跟踪提醒</div>
@@ -139,7 +148,7 @@ export async function renderRepairsBody(box) {
         try {
           await api.del('/repairs/' + row.id);
           toast('已删除，记录已移入回收站');
-          await load();
+          await load(true);
         } catch (e) {
           button.disabled = false;
           toast(e.message || '删除失败', 'err');
@@ -246,7 +255,7 @@ export async function renderRepairsBody(box) {
     $('cancel').onclick = s.close;
     $('del')?.addEventListener('click', async () => {
       if (await confirmDialog('删除这条报修记录？')) {
-        try { await api.del('/repairs/' + row.id); s.close(); toast('已删除'); load(); }
+        try { await api.del('/repairs/' + row.id); s.close(); toast('已删除'); await load(true); }
         catch (e) { toast(e.message, 'err'); }
       }
     });
@@ -275,7 +284,7 @@ export async function renderRepairsBody(box) {
       try {
         if (isNew) await api.post('/repairs', payload);
         else await api.patch('/repairs/' + row.id, payload);
-        s.close(); toast('已保存'); load();
+        s.close(); toast('已保存'); await load(true);
       } catch (e) {
         btn.disabled = false; btn.textContent = '保存';
         toast(e.message || '保存失败', 'err');

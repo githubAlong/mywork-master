@@ -155,3 +155,35 @@ test('修复状态里外同一口径：列表徽标与编辑器取同一份 view
   assert.doesNotMatch(repairSource, /是否修好/);
   assert.match(repairSource, />修复状态</);
 });
+
+/* 用户 11-27：列表那一列已经是 待修复 / 修复中 / 已修复，卡片上却还写「已修复 / 未修复」，
+   而且「已取消」被算进了未修复，上面 4 条、下面数一数对不上。现在卡片和列同词同数。 */
+test('统计卡与列表同一套状态词，四类相加等于总数', () => {
+  const rows = [
+    { id: 1, date: '2026-11-27', status: '待修复' },
+    { id: 2, date: '2026-11-27', status: '修复中' },
+    { id: 3, date: '2026-11-24', status: '已修复' },
+    { id: 4, date: '2026-11-24', status: 'done' },
+    { id: 5, date: '2026-11-19', status: '等待配件' },
+    { id: 6, date: '2026-11-14', status: '已取消' },
+    { id: 7, date: '2026-10-14', status: '待修复' },
+  ];
+  const s = summarizeRepairs(rows, '2026-11');
+  assert.deepEqual([s.total, s.pending, s.doing, s.fixed, s.canceled], [6, 2, 1, 2, 1]);
+  assert.equal(s.pending + s.doing + s.fixed + s.canceled, s.total, '四类状态相加必须等于当月总数');
+  /* 已取消不算「没修好」，未修复只剩 待修复 + 修复中 */
+  assert.equal(s.unfinished, s.pending + s.doing);
+  /* 自由文本归到待修复，和列表里的橙色徽标一致 */
+  assert.equal(s.pending, 2);
+
+  /* 页面上的四张固定卡 + 有已取消时才出现的灰卡 */
+  for (const label of ['本月总维修', '待修复', '修复中', '已修复', '需要跟踪']) {
+    assert.ok(repairSource.includes(`>${label}</div>`), `统计卡缺少「${label}」`);
+  }
+  assert.match(repairSource, /stats\.canceled > 0 \?/);
+  assert.doesNotMatch(repairSource, /未修复/);
+
+  /* 保存 / 删除后原地静默刷新，卡片和表格同一帧更新，不闪「正在加载」 */
+  assert.match(repairSource, /const load = async \(quiet = false\)/);
+  assert.match(repairSource, /toast\('已保存'\); await load\(true\)/);
+});

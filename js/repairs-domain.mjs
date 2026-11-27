@@ -51,10 +51,19 @@ export function summarizeRepairs(rows,month) {
   const target=String(month||'');
   const monthRows=(Array.isArray(rows)?rows:[]).filter(row=>String(row?.date||'').slice(0,7)===target);
   const trackedRows=monthRows.filter(isRepairTracked);
+  /* 统计卡要和列表那一列说同一套词（用户 11-27）：以前卡片只有「已修复 / 未修复」两态，
+     列表却写着 待修复 / 修复中 / 已修复，还会把「已取消」算进未修复里，数字和列表对不上。
+     现在按 repairStatusView 的 key 分区计数，四类相加恒等于总数（含自由文本 -> pending）。 */
+  const byStatus={pending:0,doing:0,fixed:0,canceled:0};
+  for(const row of monthRows) byStatus[repairStatusView(row.status).key]+=1;
   return {
     rows:monthRows,total:monthRows.length,
-    fixed:monthRows.filter(isRepairFixed).length,
-    unfinished:monthRows.filter(row=>!isRepairFixed(row)).length,
+    fixed:byStatus.fixed,
+    pending:byStatus.pending,
+    doing:byStatus.doing,
+    canceled:byStatus.canceled,
+    /* 未修复 = 待修复 + 修复中；已取消不算「没修好」，单独一张灰卡，不混进来 */
+    unfinished:byStatus.pending+byStatus.doing,
     tracked:trackedRows.length,
     reminders:trackedRows.map(row=>({id:row.id,item:String(row.item||'未填写设备名称'),remark:String(row.remark||'')})),
   };

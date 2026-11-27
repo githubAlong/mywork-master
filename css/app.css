@@ -4904,12 +4904,17 @@ textarea.ssm-input { height:auto; padding:10px 12px; line-height:1.6; resize:ver
 .rp-ledger-month label { color:var(--text-2); font-size:13px; font-weight:600; }
 .rp-ledger-month input[type="month"] { min-height:34px; padding:5px 9px; color:var(--text); background:var(--card); border:1px solid var(--line-2); border-radius:7px; font:inherit; font-size:13px; }
 .rp-ledger-add { margin-left:auto; }
-.rp-ledger-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+/* 统计卡和列表那一列共用一套状态词（用户 11-27）：总维修 / 待修复 / 修复中 / 已修复 / 需要跟踪，
+   有已取消记录时再补一张灰卡，四类状态相加恒等于总数。auto-fit 让 4~6 张都能排开。 */
+.rp-ledger-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; }
 .rp-ledger-stat { display:flex; min-width:0; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:126px; padding:15px 10px; color:#fff; text-align:center; border-radius:12px; box-shadow:0 4px 12px rgba(24,32,56,.08); }
+.rp-ledger-stat-total { background:#4a5a78; }
 .rp-ledger-stat-blue { background:#2b7cd3; }
+.rp-ledger-stat-sky { background:#2f9ee0; }
 .rp-ledger-stat-green { background:#28c9a7; }
 .rp-ledger-stat-orange { background:#ff8822; }
 .rp-ledger-stat-red { background:#f53f3f; }
+.rp-ledger-stat-grey { background:#8a94a0; }
 .rp-ledger-stat-label { font-size:15px; font-weight:650; line-height:1.35; }
 .rp-ledger-stat-num { margin:3px 0 0; font-size:clamp(28px,3vw,40px); font-weight:800; line-height:1.12; font-variant-numeric:tabular-nums; }
 .rp-ledger-stat-unit { font-size:13px; font-weight:600; opacity:.95; }
