@@ -173,6 +173,33 @@ export const isMobile = () => currentBp() === 'mobile';
    拿不到就退回本地这份，功能不受影响。 */
 const SETTING_KEY = 'homeLayout';
 const DRAFT_KEY = 'wb_home_layout_draft';
+const DRAFT_MAX_AGE = 7 * 864e5;
+
+function draftKey() {
+  const uid = cloud.session()?.uid;
+  const account = state.user?.account;
+  if (uid) return DRAFT_KEY + ':uid:' + uid;
+  return account ? DRAFT_KEY + ':account:' + account : '';
+}
+
+function readFailedDraft() {
+  try {
+    const key = draftKey();
+    if (!key) return null;
+    const saved = JSON.parse(localStorage.getItem(key));
+    const age = Date.now() - Number(saved?.at);
+    if (saved?.draft?.breakpoints && age >= 0 && age < DRAFT_MAX_AGE) {
+      return normalize(saved.draft);
+    }
+  } catch { }
+  return null;
+}
+
+function clearFailedDraft(key = draftKey()) {
+  if (key) {
+    try { localStorage.removeItem(key); } catch { }
+  }
+}
 
 const temporaryMinRows = new Map(); /* 展开日历时临时扩高，不写入用户保存的布局 */
 let ST = null;      /* 已保存的布局 */
@@ -361,15 +388,16 @@ const stepY = () => {
 
 function beginEdit() {
   if (editing) return;
-  ensure();
-  draft = clone(ST);
+  const recovered = readFailedDraft();
+  draft = recovered || clone(ensure());
   editing = true;
   paint();
-  toast('拖动卡片可换位置，拖右下角可调整大小', 'ok', 3500);
+  toast(recovered ? '已恢复上次布局草稿，请检查后保存' : '拖动卡片可换位置，拖右下角可调整大小', 'ok', 3500);
 }
 
 function cancelEdit() {
   if (!editing) return;
+  clearFailedDraft();
   editing = false;
   draft = null;
   paint();
@@ -381,6 +409,8 @@ function cancelEdit() {
    自动保存已经把中间态写进账号了。第一版按需求走显式保存。 */
 async function saveEdit() {
   if (!editing || !draft) return;
+  const key = draftKey();
+  const pendingDraft = draft;
   const btn = document.getElementById('hg-save');
   if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
   const payload = {
@@ -396,15 +426,21 @@ async function saveEdit() {
     ST = payload;
     editing = false;
     draft = null;
-    localStorage.removeItem(DRAFT_KEY);
+    clearFailedDraft(key);
     paint();
     toast('布局已保存', 'ok');
     /* 云端那一份是「锦上添花」：失败不影响本地，也不打扰用户 */
     pushCloud(payload).catch(() => {});
   } catch (e) {
-    /* 保存失败时把草稿留在本机，刷新之后还能捡回来 */
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), draft })); } catch { }
-    toast('保存失败：' + (e.message || e) + '。草稿已留在本机，可再点一次保存', 'err', 9000);
+    if (draft !== pendingDraft || key !== draftKey()) return;
+    let hint = '。可再点一次保存';
+    try {
+      if (key) {
+        localStorage.setItem(key, JSON.stringify({ at: Date.now(), draft }));
+        hint = '。草稿已留在本机，可再次编辑并保存';
+      }
+    } catch { }
+    toast('保存失败：' + (e.message || e) + hint, 'err', 9000);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '保存布局'; }
   }
@@ -421,7 +457,7 @@ async function resetAll() {
     if (r?.user) state.user = r.user;
     ST = st;
     if (editing) { editing = false; draft = null; }
-    localStorage.removeItem(DRAFT_KEY);
+    clearFailedDraft();
     paint();
     toast('已恢复默认布局', 'ok');
     pushCloud(st).catch(() => {});
@@ -649,19 +685,9 @@ export function mount(grid) {
      每次都 new 一个 resize 监听的话，拖窗口就会触发十几个重排。 */
   if (!offResize) offResize = watchBreakpoint();
 
-  /* 上次保存失败的草稿：不自动套用（可能是过期数据），
-     但要留个入口让用户能捡回来 */
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) {
-      const d = JSON.parse(raw);
-      if (d?.draft?.breakpoints && Date.now() - Number(d.at || 0) < 7 * 864e5) {
-        setTimeout(() => {
-          toast('上次有未保存的布局草稿，可在「编辑布局」里重新调整后保存', 'warn', 6000);
-        }, 1200);
-      }
-    }
-  } catch { }
+  if (!editing && readFailedDraft()) {
+    toast('有未保存的布局草稿，点击「编辑布局」可继续调整', 'warn', 6000);
+  }
 
   paint();
   bindGesture(grid);

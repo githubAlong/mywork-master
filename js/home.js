@@ -1669,7 +1669,7 @@ function paintCal() {
   let cells = [];
   for (let i = 0; i < startCell; i++) cells.push({ d: prevDays - startCell + 1 + i, out: true });
   for (let d = 1; d <= daysInMonth; d++) cells.push({ d, out: false });
-  while (cells.length % 7) cells.push({ d: cells.length % 7, out: true });
+  for (let d = 1; cells.length % 7; d++) cells.push({ d, out: true });
   // 周视图：只留包含"选中日"的那一周（选中日不在本月就退回今天所在周）
   if (calState.view === 'week') {
     const focus = calState.selected && calState.selected.startsWith(month) ? calState.selected : todayStr;
