@@ -4,7 +4,7 @@ import { createSlot } from './attday.js';
 import { makeXlsx } from './attendance.js';
 import { voiceSheet } from './attvoice.js';
 import { cleanPeriodTime, getCanonicalPeriodNumber, normalizeTimetablePeriods } from './timetable-periods.mjs';
-import { dayTimeRange, sameGrade, weekdayLabel } from './attendance-day-periods.mjs';
+import { dayTimeRange, sameGrade } from './attendance-day-periods.mjs';
 import { parseRosterFile, parseRosterText } from './roster-batch.mjs';
 import { readXlsx, readDelimited } from './xlsx-lite.js';
 import { ROSTER_SUBJECTS } from './roster-structure.mjs';
@@ -1598,17 +1598,15 @@ export async function renderAttendancePRD(root, { grade: initialGrade = '', tab:
     }
     return dirty;
   };
+  /* 用户 2026-11-27：三张表上方那条「当前批次 某天 第几节」整条去掉。
+     它只是把顶部筛选区已有的日期 / 年级 / 节次 / 时段复述一遍，没有独立信息；
+     真正有用的只剩「有 N 条未确认变更」的定位入口，那一个单独留着，
+     而且只在真的改了还没重新确认生成时出现，平时整条不存在。 */
   const batchBarHtml = (type) => {
-    const range = resolvePeriodRange(period);
-    const periodLabel = period === 0 ? '全天'
-      : (DEFAULT_PERIODS.find(item => Number(item.no) === period)?.label || ('第' + period + '节'));
     const dirtyCount = sheetDirtyKeys(type).size;
-    return '<div class="aprd-batch"><div class="aprd-batch-main"><span class="aprd-batch-label">当前批次</span>'
-      + '<b>' + esc(date + ' ' + weekdayLabel(date)) + '</b>'
-      + '<span>' + esc(grade) + '</span><span>' + esc(currentScheduleType()) + '</span>'
-      + '<span class="aprd-batch-period">' + esc(periodLabel) + ' ' + esc(range[0] + '—' + range[1]) + '</span></div>'
-      + '<div class="aprd-batch-side">'
-      + (dirtyCount ? '<button type="button" class="aprd-dirty-badge" data-scroll-dirty>有 ' + dirtyCount + ' 条未确认变更</button>' : '')
+    if (!dirtyCount) return '';
+    return '<div class="aprd-batch aprd-batch-bare"><div class="aprd-batch-side">'
+      + '<button type="button" class="aprd-dirty-badge" data-scroll-dirty>有 ' + dirtyCount + ' 条未确认变更</button>'
       + '</div></div>';
   };
   /* 批量导入/批量导出挂在卡片右上角的页签行上，可导出条数只有各张表自己算得出来，

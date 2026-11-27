@@ -602,8 +602,9 @@ test('节次按自然顺序列出，不展示当天是否有课；全天取作�
      不再按当天排了几节课收缩——只排了第8节时全天会缩成 16:15—16:55，不对。 */
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
   assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
-  assert.match(root.innerHTML,/当前批次/);
-  assert.match(root.innerHTML,/全天 08:00—18:35/);
+  /* 用户 11-27：卡片上方那条「当前批次 某天 第几节」整条撤掉，
+     日期/时段只由顶部筛选区表达，不再复述一遍。 */
+  assert.doesNotMatch(root.innerHTML,/当前批次/);
 });
 
 test('当天完全没排课时时段退到作息表节次而不是 00:00—23:59',async()=>{
@@ -624,7 +625,7 @@ test('课表年级写「高一」、考勤年级名「高一年级」时仍算�
     {id:'c3',weekday,period_no:4,grade:'高二年级',start_time:'10:50',end_time:'11:30'},
   ]});
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
-  assert.match(root.innerHTML,/全天 08:00—18:35/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
 });
 
 test('时段：课表给默认值，手改后以手改为准，非法区间被拦下不写脏',async()=>{
@@ -639,7 +640,8 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
   await root.querySelector('#aprd-start').change('07:30');
   await repaint();
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/);
-  assert.match(root.innerHTML,/全天 07:30—18:35/);
+  /* 批次条已撤（用户 11-27），时段只从两个输入框上验 */
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
   /* 手改只落在「全天」这一档，切回第1节仍是课表给的时间 */
   await root.querySelector('#aprd-period').change('1');
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="08:00"/);
@@ -647,7 +649,8 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
   await root.querySelector('#aprd-period').change('0');
   await root.querySelector('#aprd-end').change('06:00');
   assert.ok(toasts.some(item=>/结束时间必须晚于开始时间/.test(item.message)));
-  assert.match(root.innerHTML,/全天 07:30—18:35/);
+  /* 批次条已撤（用户 11-27），时段只从两个输入框上验 */
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="18:35"/);
 });
 
 test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 也认，写「下午」拦下',async()=>{
@@ -667,7 +670,7 @@ test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 �
   assert.match(root.innerHTML,/id="aprd-start"[^>]*value="07:30"/,'手机数字键盘打不出冒号也要认');
   await root.querySelector('#aprd-end').change('10:00');
   await repaint();
-  assert.match(root.innerHTML,/全天 07:30—10:00/);
+  assert.match(root.innerHTML,/id="aprd-end"[^>]*value="10:00"/);
   await root.querySelector('#aprd-start').change('下午6:30');
   assert.ok(toasts.some(item=>/时段按 24 小时写/.test(item.message)),'带「下午」的写法要拦下来');
   await repaint();

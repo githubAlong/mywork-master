@@ -520,6 +520,9 @@
 .attendance-prd .aprd-batch-main b{color:#172744;font-size:13px;font-weight:650}
 .attendance-prd .aprd-batch-period{color:#0b57d0;font-weight:650}
 .attendance-prd .aprd-batch-side{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* 2026-11-27：批次条撤掉后，这一行只剩「有 N 条未确认变更」徽标，
+   去掉外框和底色、靠左显示，免得空框里孤零零飘一个按钮。 */
+.attendance-prd .aprd-batch-bare{margin:0 0 10px;padding:0;border:0;background:none;justify-content:flex-start}
 .attendance-prd .aprd-batch-note{font-size:11px;color:#8794a8}
 .attendance-prd .aprd-dirty-badge{height:27px;padding:0 11px;border:1px solid #f3d3a6;border-radius:999px;background:#fff6e6;color:#96600d;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
 .attendance-prd .aprd-dirty-badge:hover{background:#ffefcf}
