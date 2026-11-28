@@ -206,22 +206,12 @@ test('六张表共用搜索、语音速记、新建和筛选区',async()=>{
   }
 });
 
-test('花名册点击新建后展开表单，字段按名单列序排',async()=>{
+test('花名册的新建入口打开默认选择部门的弹窗',async()=>{
   const {root}=await setup();
-  await selectTable(root,'roster');
-  assert.equal(root.querySelector('#aprd-roster-add-form'),null);
-  await root.querySelector('[data-add]').click();
-  const html=root.innerHTML;
-  assert.ok(root.querySelector('#aprd-roster-add-form'));
-  const start=html.indexOf('id="aprd-roster-add-form"');
-  const formHtml=html.slice(start,html.indexOf('</form>',start));
-  /* 用户 11-26：字段顺序要和下面名单的列一一对应，填的时候从上往下就是从左往右 */
-  assert.deepEqual([...formHtml.matchAll(/<(?:input|select) name="([\w-]+)"/g)].map(match=>match[1]),
-    ['department','grade','name','subject','duty','remark']);
-  assert.ok(start<html.indexOf('aprd-table-wrap'),'新增表单在名单上面');
   assert.ok(root.querySelector('[data-add]'));
-  /* 在职状态默认「在职」，与名单里默认全部在职一致 */
-  assert.match(formHtml,/<select name="duty">[\s\S]*?<option value="1" selected>在职<\/option>/);
+  assert.doesNotMatch(root.innerHTML,/aprd-roster-add-form/);
+  assert.match(source,/selectKind\('department'\)/);
+  assert.match(source,/dialog\.showModal\(\)/);
 });
 
 test('学科清单独立存储：没挂老师的学科也能筛选，改名连带历史考勤行',async()=>{
@@ -234,7 +224,7 @@ test('学科清单独立存储：没挂老师的学科也能筛选，改名连�
   /* 用户 11-25 裁决：学科管理按钮去掉，学科在花名册新增卡片就地创建并同步清单 */
   assert.doesNotMatch(root.innerHTML,/data-subject-manager/);
   assert.match(source,/prefs\.subjectLists\?\.\[grade\]/);
-  assert.match(source,/savePrefs\(\{ subjectLists \}\)/);
+  assert.ok(source.includes("api.post('/org/subjects'"));
 });
 
 test('按月按年查看：每人一行累计，写操作整排锁住只能回看',async()=>{

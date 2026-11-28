@@ -713,3 +713,81 @@
 
 .aprd-unified .aprd-duty[data-employment="休假"] {color:#245bce;background:#eaf0ff}
 .aprd-unified .aprd-duty[data-employment="离职"] {color:#5d6e85;background:#edf1f6}
+
+
+/* 花名册的新增弹窗 */
+.aprd-create-dialog {
+  position:fixed;
+  inset:0;
+  width:min(520px,calc(100% - 28px));
+  max-height:calc(100dvh - 28px);
+  margin:auto;
+  padding:22px 24px;
+  overflow:auto;
+  border:0;
+  border-radius:16px;
+  background:#fff;
+  color:#16253e;
+  box-shadow:0 20px 58px #17274435;
+  font:inherit;
+}
+.aprd-create-dialog::backdrop {background:#28344966}
+.aprd-create-dialog header {display:flex;align-items:center;justify-content:space-between;margin-bottom:17px}
+.aprd-create-dialog h3 {margin:0;font-size:16px;font-weight:700}
+.aprd-create-dialog header button {padding:0 2px;border:0;background:none;color:#657991;font-size:19px;line-height:1;cursor:pointer}
+.aprd-create-types {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px}
+.aprd-create-types button {
+  display:grid;
+  place-content:center;
+  gap:6px;
+  min-height:87px;
+  padding:8px 4px;
+  border:1px solid #dbe5f2;
+  border-radius:12px;
+  background:#fff;
+  color:#354965;
+  font-family:inherit;
+  line-height:1.2;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+}
+.aprd-create-types button span {font-size:20px}
+.aprd-create-types button[aria-pressed=true] {border-color:#2863ff;background:#eaf1ff;color:#1c58e6}
+.aprd-create-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px 18px}
+.aprd-create-wide {grid-column:1/-1}
+.aprd-create-fields label {display:grid;gap:7px;min-width:0;font-size:13px;color:#415570}
+.aprd-create-fields input,.aprd-create-fields select {
+  width:100%;
+  min-width:0;
+  min-height:37px;
+  padding:8px 12px;
+  border:1px solid #dbe5f2;
+  border-radius:8px;
+  background:#fff;
+  color:#182e4b;
+  font:inherit;
+}
+.aprd-create-dialog .aprd-create-fields input::placeholder {color:#77859a!important;opacity:1!important}
+.aprd-create-dialog :focus-visible {outline:2px solid #2863ff;outline-offset:2px}
+.aprd-create-dialog footer {display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.aprd-create-dialog footer button {
+  min-height:37px;
+  border:1px solid #dbe5f2;
+  border-radius:9px;
+  padding:0 13px;
+  background:#fff;
+  color:#415570;
+  font:inherit;
+  font-size:13px;
+  cursor:pointer;
+}
+.aprd-create-dialog footer .primary {border-color:#245ded;background:#245ded;color:#fff;font-weight:650}
+.aprd-create-dialog footer button:disabled {opacity:.6;cursor:wait}
+.aprd-create-error {margin:12px 0 0;color:#b42318;font-size:13px}
+@media(max-width:480px){
+  .aprd-create-dialog {padding:18px 16px}
+  .aprd-create-types {gap:7px}
+  .aprd-create-types button {min-height:68px}
+  .aprd-create-fields {gap:12px}
+}

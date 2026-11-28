@@ -1847,11 +1847,11 @@ function deptView() {
   ensureHubV3();
   const map = gradeDeptMap();
   const allGrades = gradeNameList();
-  const list = deptRows().map((d) => {
+  const list = deptRows().sort((a,b)=>num(a.sort)-num(b.sort) || num(a.id)-num(b.id)).map((d) => {
     const grades = gradesOfDepartment(allGrades, map, d.id)
       .map((g) => ({ name: g, teacherCount: gradeCountOf(g) }));
     return {
-      id: d.id, name: String(d.name || ''),
+      id: d.id, name: String(d.name || ''), sort: num(d.sort), remark: String(d.remark || ''),
       grades,
       gradeCount: grades.length,
       teacherCount: grades.reduce((s, g) => s + g.teacherCount, 0),
@@ -1880,7 +1880,10 @@ on('POST', '/departments', ({ body }) => {
   const name = deptName(body?.name);
   if (!name) fail(400, '部门名不能为空');
   if (deptRows().some((d) => String(d.name) === name)) fail(400, '已经有叫这个名字的部门了');
-  const item = { id: deptNextId(), name, created_at: nowISO(), updated_at: nowISO(), deleted_at: null };
+  const sort = Number(body?.sort ?? 0);
+  if (!Number.isSafeInteger(sort)) fail(400, '排序必须是整数');
+  const remark = String(body?.remark || '').trim().slice(0, 200);
+  const item = { id: deptNextId(), name, sort, remark, created_at: nowISO(), updated_at: nowISO(), deleted_at: null };
   T(DEPT_TABLE).push(item);
   save();
   return { item, ...deptView() };
