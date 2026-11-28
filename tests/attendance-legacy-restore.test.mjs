@@ -195,10 +195,10 @@ test('接线：侧栏单入口 / 旧工作台路由 / 自动补齐 / SW 资源',
   const [ui, work, sw, localapi] = await Promise.all([
     read('js/ui.js'), read('js/work.js'), read('sw.js'), read('js/localapi.js'),
   ]);
-  /* v425：六页签工作台不变，侧栏加回六张表的入口（每个入口落到对应页签）。 */
-  const navBlock = /\{ id: 'attendance'[\s\S]*?\]\s*\}\s*,/.exec(ui)?.[0] || '';
+  assert.match(ui, /{ id: 'attendance', label: '考勤', icon: 'users' }/);
+  const route = await read('js/attendance-tab-route.mjs');
   for (const key of ['roster', 'seat', 'class', 'research', 'leave', 'summary']) {
-    assert.match(navBlock, new RegExp(`id: '${key}'`), `侧栏缺入口 ${key}`);
+    assert.ok(route.includes("'" + key + "'"), '旧书签映射缺少 ' + key);
   }
   assert.match(work, /renderAttendancePRD/);
   assert.doesNotMatch(work, /renderAttendanceHub/);

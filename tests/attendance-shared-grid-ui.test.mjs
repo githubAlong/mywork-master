@@ -133,15 +133,16 @@ async function setup(options={}) {
   await render(root,{grade});
   return {root,saved,calls,exportedGrids,toasts,patchCalls,gets,reopen:()=>render(root,{grade})};
 }
+const selectTable=(root,type)=>root.querySelector('#aprd-table-type').change(type);
 const control=(root,key,id='1')=>root.querySelectorAll('[data-grid-person]').find(element=>element.dataset.gridPerson===id&&element.dataset.gridKey===key);
 
 test('坐班表、上课表、教研表名单与列一模一样，花名册只维护名单',async()=>{
   const {root}=await setup();
   const headers=()=>[...root.innerHTML.matchAll(/<th>(.*?)<\/th>/g)].map(match=>match[1]);
   const names=()=>[...root.innerHTML.matchAll(/<td class="aprd-name">([^<]*)/g)].map(match=>match[1]);
-  /* 用户 11-15 需求：默认进入坐班表（数据源），优先展示全状态 */
-  assert.deepEqual(headers(),['序号','归属部门','归属年级','姓名','学科','坐班','上课','听课','教研','请假','请假时间','备注','操作']);
-  await root.querySelector('[data-tab="roster"]').click();
+  assert.equal(root.querySelector('#aprd-table-type').value,'roster');
+  assert.deepEqual([...root.innerHTML.matchAll(/<option value="(roster|seat|class|research|leave|summary)"/g)].map(match=>match[1]),
+    ['roster','seat','class','research','leave','summary']);
   const rosterHeaders=headers(),expectedNames=names();
   /* 用户 11-15 裁决：花名册只维护教师名单，考勤状态列全部隐藏；操作前保留一列可填写的备注。
      用户 11-26 补充：花名册多一列「在职状态」，默认全部在职，可点成停用。 */
@@ -158,7 +159,7 @@ test('坐班表、上课表、教研表名单与列一模一样，花名册只�
   /* 本表可编的格子：坐班表五类全开，上课表开上课/听课，教研表开教研+请假，备注每行一个 */
   const expectedControls={seat:12,class:6,research:6};
   for(const type of ['seat','class','research']) {
-    await root.querySelector('[data-tab="'+type+'"]').click();
+    await selectTable(root,type);
     const current=headers();
     if(workHeaders===null) workHeaders=current;
     assert.deepEqual(current,expectedHeaders[type]);
@@ -177,7 +178,7 @@ test('切页签不再重拉接口：按日视图只重绘，月/年累计才现�
   const {root,gets}=await setup();
   const before=gets.length;
   for(const type of ['seat','class','research','roster','leave','summary','class','seat']) {
-    await root.querySelector('[data-tab="'+type+'"]').click();
+    await selectTable(root,type);
   }
   /* 用户 11-22 反馈「切换表格之后要好久才生效」：按日视图的数据早就在内存里，
      以前每次点页签都 await load() 把 6 个接口重跑一遍。 */
@@ -186,26 +187,17 @@ test('切页签不再重拉接口：按日视图只重绘，月/年累计才现�
   assert.ok(gets.length>before,'按月/按年是累计快照，仍要现拉');
 });
 
-test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/确认生成（坐班/上课/教研/花名册无编辑，学科管理已去掉）',async()=>{
+test('六张表共用搜索、语音速记、新建和筛选区',async()=>{
   const {root}=await setup();
-  /* 「新增」按页签各点各的动作，但都排在语音速记后面（用户 11-22 裁决）。
-     用户 11-25 裁决：学科管理按钮去掉，学科改在花名册新增卡片就地创建；
-     花名册与坐班/上课/教研不再有「编辑」按钮，表格随时可直接编辑；
-     请假表和汇总表保留「编辑」按钮（用户 11-25 只点名前三张）。
-     用户 11-26 裁决：花名册的新增表单常驻在名单上方，工具栏不再有「新增教师」按钮。 */
-  const addSelector={seat:'data-add-record',class:'data-add-record',
+  const addSelector={roster:'data-add>',seat:'data-add-record',class:'data-add-record',
     research:'data-add-record',leave:'data-add-leave',summary:'data-add-summary'};
   for(const type of ['roster','seat','class','research','leave','summary']) {
-    await root.querySelector('[data-tab="'+type+'"]').click();
+    await selectTable(root,type);
     const html=root.innerHTML;
-    const markers=['id="aprd-subject"','id="aprd-search"','data-workspace-voice'];
-    if(addSelector[type])markers.push(addSelector[type]);
-    if(type==='leave'||type==='summary')markers.push('data-edit-sheet');
-    markers.push('data-generate');
+    const markers=['id="aprd-search"','data-workspace-voice',addSelector[type],'id="aprd-table-type"','id="aprd-subject"','data-generate'];
+    if(type==='leave'||type==='summary')assert.match(html,/data-edit-sheet/);
     const positions=markers.map(marker=>html.indexOf(marker));
-    const missing=markers.filter((marker,index)=>positions[index]<0);
-    assert.deepEqual(missing,[],type+' 表缺少统一按钮：'+missing.join(','));
-    assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),type+' 表按钮顺序不是 学科筛选/搜索框/语音/新增/编辑/确认生成');
+    assert.ok(positions.every((pos,index)=>pos>=0&&(!index||pos>positions[index-1])),type+' 表的工具栏和筛选顺序');
     if(['roster','seat','class','research'].includes(type)){
       assert.doesNotMatch(html,/data-edit-sheet/,type+' 表不应再有「编辑」按钮');
     }
@@ -214,25 +206,27 @@ test('六张表底部按钮统一：学科筛选/搜索框/语音速记/新增/�
   }
 });
 
-test('花名册新增表单常驻在名单上方，字段按名单列序排（归属部门-归属年级-姓名-学科-在职状态-备注）',async()=>{
+test('花名册点击新建后展开表单，字段按名单列序排',async()=>{
   const {root}=await setup();
-  await root.querySelector('[data-tab="roster"]').click();
+  await selectTable(root,'roster');
+  assert.equal(root.querySelector('#aprd-roster-add-form'),null);
+  await root.querySelector('[data-add]').click();
   const html=root.innerHTML;
-  assert.ok(root.querySelector('#aprd-roster-add-form'),'新增表单常驻，不需要先点按钮展开');
+  assert.ok(root.querySelector('#aprd-roster-add-form'));
   const start=html.indexOf('id="aprd-roster-add-form"');
   const formHtml=html.slice(start,html.indexOf('</form>',start));
   /* 用户 11-26：字段顺序要和下面名单的列一一对应，填的时候从上往下就是从左往右 */
   assert.deepEqual([...formHtml.matchAll(/<(?:input|select) name="([\w-]+)"/g)].map(match=>match[1]),
     ['department','grade','name','subject','duty','remark']);
   assert.ok(start<html.indexOf('aprd-table-wrap'),'新增表单在名单上面');
-  assert.doesNotMatch(html,/data-add[ >]/,'工具栏不再有「新增教师」按钮（表单常驻，不需要收起）');
+  assert.ok(root.querySelector('[data-add]'));
   /* 在职状态默认「在职」，与名单里默认全部在职一致 */
   assert.match(formHtml,/<select name="duty">[\s\S]*?<option value="1" selected>在职<\/option>/);
 });
 
 test('学科清单独立存储：没挂老师的学科也能筛选，改名连带历史考勤行',async()=>{
   const {root}=await setup({settings:{attendanceWorkspace:{subjectLists:{高一:['物理']}}}});
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   const options=root.innerHTML.match(/<select id="aprd-subject">([\s\S]*?)<\/select>/)?.[1]||'';
   /* 名册里根本没有物理老师，但清单存了就要能筛，这是「独立清单」和旧行为的分水岭 */
   assert.match(options,/<option value="物理"/);
@@ -245,7 +239,7 @@ test('学科清单独立存储：没挂老师的学科也能筛选，改名连�
 
 test('按月按年查看：每人一行累计，写操作整排锁住只能回看',async()=>{
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   for(const period of ['month','year']) {
     await root.querySelector('#aprd-view-period').change(period);
     const html=root.innerHTML;
@@ -270,9 +264,9 @@ test('花名册和请假表上方也有统计条，数字跟着当前筛选走',
     {id:1,name:'李老师',subject:'语文',grade:'高一',type:'病假',start_date:'2000-01-01',end_date:'2999-12-31',days:0.5,hours:0,duration_unit:'day'},
     {id:2,name:'王老师',subject:'数学',grade:'高一',type:'事假',start_date:'2000-01-01',end_date:'2999-12-31',days:0,hours:3,duration_unit:'hour'},
   ]}}});
-  await root.querySelector('[data-tab="roster"]').click();
+  await selectTable(root,'roster');
   assert.deepEqual(kpi(root.innerHTML),['在册教师=2','学科=2','归属部门=1','已停用=0']);
-  await root.querySelector('[data-tab="leave"]').click();
+  await selectTable(root,'leave');
   assert.deepEqual(kpi(root.innerHTML),
     ['请假教师=2','请假条数=2','病假=1','事假=1','累计时长=0.5天 / 3小时']);
   /* 筛到只剩一个学科，人数与请假条数要跟着变小，不能还是整份名单 */
@@ -285,7 +279,7 @@ test('请假时段按 24 小时制显示，页面里不再出现上午/下午',a
     /* 历史数据存的还是「上午」，展示时必须换成作息表钟点段 */
     {id:7,name:'李老师',subject:'语文',grade:'高一',type:'病假',start_date:'2000-01-01',end_date:'2999-12-31',days:0.5,hours:0,duration_unit:'day',day_part:'上午'},
   ]}}});
-  await root.querySelector('[data-tab="leave"]').click();
+  await selectTable(root,'leave');
   assert.match(root.innerHTML,/08:00-12:20（0\.5天）/,'请假时长要写成钟点段并保留半天口径');
   assert.doesNotMatch(root.innerHTML,/>[^<]*上午[^<]*</,'请假表里不再出现「上午」');
   assert.doesNotMatch(root.innerHTML,/>[^<]*下午[^<]*</,'请假表里不再出现「下午」');
@@ -297,7 +291,7 @@ test('请假时段按 24 小时制显示，页面里不再出现上午/下午',a
 
 test('按月按年回看时收掉按日的批量入口，顶部换成累计区间',async()=>{
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   assert.ok(root.querySelector('[data-roster-export-toggle]'),'按日仍要能批量导出');
   for(const period of ['month','year']) {
     await root.querySelector('#aprd-view-period').change(period);
@@ -309,7 +303,7 @@ test('按月按年回看时收掉按日的批量入口，顶部换成累计区�
   await root.querySelector('#aprd-view-period').change('day');
   assert.ok(root.querySelector('[data-roster-export-toggle]'),'切回按日入口要回来');
   /* 汇总表的按月是「月度快照」，可编辑，不能当成只读累计；快照加载完批量导入要回来 */
-  await root.querySelector('[data-tab="summary"]').click();
+  await selectTable(root,'summary');
   await root.querySelector('#aprd-view-period').change('month');
   for(let i=0;i<20&&!/<div class="aprd-kpis/.test(root.innerHTML);i+=1) await new Promise(r=>setImmediate(r));
   assert.doesNotMatch(root.innerHTML,/只读回看|累计教师/,'按月汇总是可编快照，不是只读累计');
@@ -317,7 +311,7 @@ test('按月按年回看时收掉按日的批量入口，顶部换成累计区�
 });
 test('真实操作链：草稿跨页签保留，自动保存仅写本表，重新打开与花名册一致',async()=>{
   const {root,saved,calls}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await control(root,'sit').click();
   /* 用户 11-15 要求：备注列改为行内输入框，默认空白，失焦即保存 */
   assert.equal(control(root,'remark').tag,'input');
@@ -326,13 +320,13 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
   assert.deepEqual(calls,['seat']);
   assert.equal(saved.class.rows.length,0);
   assert.equal(saved.research.rows.length,0);
-  await root.querySelector('[data-tab="class"]').click();
+  await selectTable(root,'class');
   /* 只勾坐班不会给上课表生成记录：名单和坐班表一样全，但本表这些格子仍是空白。 */
   assert.equal(saved.class.rows.length,0,'只勾坐班不该写出上课记录');
   assert.equal(control(root,'sit'),undefined,'坐班格在上课表只读回显，不给写入入口');
   assert.match(control(root,'class').attributes['aria-label'],/上课：未登记/);
   assert.match(control(root,'listen').attributes['aria-label'],/听课：未登记/);
-  await root.querySelector('[data-tab="roster"]').click();
+  await selectTable(root,'roster');
   /* 花名册只保留名单与操作，不再展示任何考勤状态格 */
   assert.equal(root.querySelectorAll('[data-grid-person]').length,0);
   assert.equal(root.querySelectorAll('[aria-disabled]').length,0);
@@ -340,11 +334,12 @@ test('真实操作链：草稿跨页签保留，自动保存仅写本表，重�
 
 test('确认坐班表后语音速记紧邻新增按钮，保留行操作并隐藏确认状态字样',async()=>{
   const {root,reopen,saved}=await setup();
+  await selectTable(root,'seat');
   await root.querySelector('[data-generate]').click();
   assert.equal(saved.seat.confirm_state,'confirmed');
   const checkActions=()=>{
     assert.doesNotMatch(root.innerHTML,/已确认/);
-    assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音速记<\/button><button[^>]* data-add-record[ >]/);
+    assert.match(root.innerHTML,/data-workspace-voice[^>]*>[^<]*语音速记<\/button><div class="aprd-top-actions"><button[^>]* data-add-record[ >]/);
     for(const selector of ['[data-add-record]','[data-generate]',
       '[data-roster-import]','[data-roster-export-toggle]','[data-edit="1"]','[data-disable="1"]']){
       assert.ok(root.querySelector(selector),selector);
@@ -356,15 +351,16 @@ test('确认坐班表后语音速记紧邻新增按钮，保留行操作并隐�
   };
   checkActions();
   await reopen();
+  await selectTable(root,'seat');
   checkActions();
-  await root.querySelector('[data-tab="summary"]').click();
+  await selectTable(root,'summary');
   await root.querySelector('[data-generate]').click();
   assert.ok(root.querySelector('[data-summary-edit-row="0"]'));
 });
 
 test('请假表在自己的工具栏确认，空结果也会保存',async()=>{
   const {root,toasts,calls,saved}=await setup();
-  await root.querySelector('[data-tab="leave"]').click();
+  await selectTable(root,'leave');
   assert.match(root.innerHTML,/data-tab="leave" class="on">请假表</);
   assert.ok(root.querySelector('[data-edit-sheet]'));
   await root.querySelector('[data-generate]').click();
@@ -379,7 +375,8 @@ test('请假表在自己的工具栏确认，空结果也会保存',async()=>{
 
 test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和删除',async()=>{
   const {root,saved,reopen}=await setup();
-  const select=tab=>root.querySelector('[data-tab="'+tab+'"]').click();
+  await selectTable(root,'seat');
+  const select=tab=>selectTable(root,tab);
   const confirm=()=>root.querySelector('[data-generate]').click();
   await root.querySelector('#aprd-period').change('6');
   await control(root,'class').click();
@@ -415,7 +412,8 @@ test('确认生成只同步已勾选的同节记录，刷新后仍可编辑和�
 
 test('确认后才生成当节请假记录，重新确认更新同一条',async()=>{
   const {root}=await setup();
-  const select=tab=>root.querySelector('[data-tab="'+tab+'"]').click();
+  await selectTable(root,'seat');
+  const select=tab=>selectTable(root,tab);
   await root.querySelector('#aprd-period').change('6');
   await control(root,'leave').change('事假');
   await select('leave');
@@ -438,14 +436,14 @@ test('确认后才生成当节请假记录，重新确认更新同一条',async(
 test('请假时间：座班表填 2 小时，确认后请假记录按小时折算',async()=>{
   /* 用户 11-24 需求：请假列后面加「请假时间」，小时输几就是几，天选上午/下午/全天，月输几就是几个月。 */
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await root.querySelector('#aprd-period').change('3');
   await control(root,'leave').change('事假');
   /* 默认是「天·全天」；切到小时后数字框自动补 1，再改成 2 */
   await root.querySelector('[data-leave-unit="1"]').change('hour');
   await root.querySelector('[data-leave-amount="1"]').change('2');
   await root.querySelector('[data-generate]').click();
-  await root.querySelector('[data-tab="leave"]').click();
+  await selectTable(root,'leave');
   assert.match(root.innerHTML,/事假/);
   assert.match(root.innerHTML,/2小时/,'确认生成的请假记录要按小时记，不能算成整天');
   assert.doesNotMatch(root.innerHTML,/1天/);
@@ -453,13 +451,13 @@ test('请假时间：座班表填 2 小时，确认后请假记录按小时折�
 
 test('请假时间：天这一档留上午/下午/全天三选，选上午折算 0.5 天',async()=>{
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await control(root,'leave').change('病假');
   const part=root.querySelector('[data-leave-part="1"]');
   assert.equal(part.value,'full','默认全天');
   await part.change('morning');
   await root.querySelector('[data-generate]').click();
-  await root.querySelector('[data-tab="leave"]').click();
+  await selectTable(root,'leave');
   /* 请假表沿用 11-22 的 24 小时制口径，上午=作息表前半段（0.5 天） */
   assert.match(root.innerHTML,/病假/);
   assert.match(root.innerHTML,/0\.5天/);
@@ -468,7 +466,7 @@ test('请假时间：天这一档留上午/下午/全天三选，选上午折算
 test('表内登记的请假只作用在登记的那一节，不会被带到其他节次',async()=>{
   /* 用户 11-15 反馈：第 1 节登记的信息自动带到了第 8 节，每节课录入的内容应该各管各的。 */
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await root.querySelector('#aprd-period').change('1');
   await control(root,'leave').change('事假');
   await new Promise(resolve=>setTimeout(resolve,450));
@@ -481,7 +479,7 @@ test('换节次后连续自动保存，不会把自己的上一次写入判成�
   /* 用户 11-12 截图：单人单机也弹「云端：WB_ATTENDANCE_CONFLICT: 表头已被另一台设备修改」。
      根因是 PATCH 表头成功后没把新的 updated_at 写回本地缓存，下一次保存仍拿旧版本比对。 */
   const {root,saved,toasts,patchCalls}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await root.querySelector('#aprd-period').change('2');
   await control(root,'sit').click();
   await new Promise(resolve=>setTimeout(resolve,450));
@@ -498,7 +496,7 @@ test('换节次后连续自动保存，不会把自己的上一次写入判成�
 
 test('明细行真被别的设备改过时仍会拦下，并给出中文提示而不是英文错误码',async()=>{
   const {root,saved,toasts}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await control(root,'sit').click();
   await new Promise(resolve=>setTimeout(resolve,450));
   /* 模拟另一台设备已经改了这一行：版本号落后于云端 */
@@ -516,9 +514,9 @@ test('明细行真被别的设备改过时仍会拦下，并给出中文提示�
 test('切换节次和日期不会把之前的草稿带入教研表',async()=>{
   const {root,saved}=await setup();
   /* 先在坐班表给李老师勾上教研，再验证切换节次不会串用原节次草稿。 */
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await control(root,'research').click();
-  await root.querySelector('[data-tab="research"]').click();
+  await selectTable(root,'research');
   const marks=()=>root.querySelectorAll('[data-grid-person]').filter(el=>el.dataset.gridKey==='research');
   const blank=()=>marks().map(el=>el.attributes['aria-label']).join('|');
   await root.querySelector('#aprd-period').change('2');
@@ -534,7 +532,7 @@ test('切换节次和日期不会把之前的草稿带入教研表',async()=>{
 
 test('教师搜索支持中文输入法组合输入，组合期间不重绘，选字完成后再筛选',async()=>{
   const {root}=await setup();
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   const input=root.querySelector('#aprd-search');
   const htmlBefore=root.innerHTML;
   await input.composition('compositionstart');
@@ -550,10 +548,10 @@ test('教师搜索支持中文输入法组合输入，组合期间不重绘，�
 test('工作表导出和生成操作针对当前页签，导出的列及勾选与页面一致',async()=>{
   const {root,exportedGrids,saved}=await setup();
   /* 上课表只出上课/听课的人：先在坐班表勾上上课，再切到上课表 */
-  await root.querySelector('[data-tab="seat"]').click();
+  await selectTable(root,'seat');
   await control(root,'class').click();
   await control(root,'listen','2').click();
-  await root.querySelector('[data-tab="class"]').click();
+  await selectTable(root,'class');
   await root.querySelector('[data-generate]').click();
   assert.equal(saved.class.confirm_state,'confirmed');
   assert.ok(root.querySelector('[data-edit-work-record="1"]'));
@@ -634,8 +632,8 @@ test('时段：课表给默认值，手改后以手改为准，非法区间被�
     {id:'c1',weekday,period_no:1,grade:'高一',start_time:'08:00',end_time:'08:40'},
   ]});
   const repaint=async()=>{
-    await root.querySelector('[data-tab="roster"]').click();
-    await root.querySelector('[data-tab="seat"]').click();
+    await selectTable(root,'roster');
+    await selectTable(root,'seat');
   };
   await root.querySelector('#aprd-start').change('07:30');
   await repaint();
@@ -659,8 +657,8 @@ test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 �
     {id:'c1',weekday,period_no:1,grade:'高一',start_time:'08:00',end_time:'08:40'},
   ]});
   const repaint=async()=>{
-    await root.querySelector('[data-tab="roster"]').click();
-    await root.querySelector('[data-tab="seat"]').click();
+    await selectTable(root,'roster');
+    await selectTable(root,'seat');
   };
   /* <input type=time> 在中文系统里渲染成「上午 08:00」，lang 属性扭不过来，只能自己画 */
   assert.doesNotMatch(root.innerHTML,/type="time"/,'时段不能再交给浏览器时间控件');
@@ -679,6 +677,7 @@ test('时段是 24 小时文本框：不用浏览器时间控件，手打 730 �
 
 test('编辑已确认的坐班表：改一行才报未确认变更，并在那一行标出已修改',async()=>{
   const {root}=await setup();
+  await selectTable(root,'seat');
   await root.querySelector('[data-generate]').click();
   assert.doesNotMatch(root.innerHTML,/未确认变更/);
   /* 「编辑」按钮已去掉（用户 11-25）：确认后的表随时可直接点格子写。 */

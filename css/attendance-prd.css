@@ -607,3 +607,109 @@
 .attendance-prd .aprd-duty:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(22,93,255,.35)}
 .attendance-prd tr.aprd-row-off td{color:#93a0b4}
 .attendance-prd tr.aprd-row-off td.aprd-name{color:#7a889c}
+
+
+/* 单页考勤工作区 */
+.attendance-prd.aprd-unified {
+  background:#eff4f9;
+  border:1px solid #dce5f1;
+  border-radius:12px;
+}
+.aprd-unified .aprd-head {
+  margin:0;
+  padding:17px 27px;
+  border-bottom:1px solid #dce5f1;
+  border-radius:12px 12px 0 0;
+  background:#fff;
+}
+.aprd-unified .aprd-live {background:#eafbf3;color:#087c54}
+.aprd-unified .aprd-live i {background:#0abc7c;box-shadow:none}
+.aprd-unified .aprd-body {padding:20px clamp(12px,2.4vw,28px)}
+.aprd-unified .aprd-controls {
+  margin-bottom:16px;
+  padding:16px 18px;
+  border:1px solid #dce5f1;
+  border-radius:12px;
+  background:#fff;
+}
+.aprd-unified .aprd-topbar {gap:12px}
+.aprd-unified .aprd-search-form,.aprd-unified .aprd-top-actions {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.aprd-unified .aprd-top-actions {margin-left:auto;flex-wrap:wrap}
+.aprd-unified .aprd-topbar input[type=search] {width:min(289px,36vw);min-width:0;height:37px}
+.aprd-unified .aprd-topbar > button,
+.aprd-unified .aprd-search-form > button,
+.aprd-unified .aprd-top-actions > button,
+.aprd-unified .aprd-top-actions .aprd-export-toggle {height:37px;white-space:nowrap}
+.aprd-unified .aprd-scope {
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px 16px;
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid #e1e8f3;
+}
+.aprd-unified .aprd-scope label,
+.aprd-unified .aprd-filter label,
+.aprd-unified .aprd-time-range {display:inline-flex;gap:8px;align-items:center;color:#60738d;font-size:12px}
+.aprd-unified .aprd-scope select,
+.aprd-unified .aprd-filter-fields select {
+  min-width:120px;
+  max-width:100%;
+  height:36px;
+  padding:0 10px;
+  border:1px solid #dce5f1;
+  border-radius:8px;
+  color:#22334c;
+  background:#fff;
+  font-size:12px;
+}
+.aprd-unified .aprd-panel {padding:18px clamp(12px,1.9vw,22px);box-shadow:0 2px 4px #17274413}
+.aprd-unified #aprd-table-title {margin:0 0 16px;text-align:center;color:#172744;font-size:18px}
+.aprd-unified .aprd-filter {gap:12px;margin:0 0 14px;padding:0 0 14px;border:0;border-bottom:1px solid #dce5f1;border-radius:0}
+.aprd-unified .aprd-filter-fields {gap:12px}
+.aprd-unified .aprd-filter-fields select {min-width:106px}
+.aprd-unified .aprd-filter input {height:36px}
+.aprd-unified .aprd-filter input[type=date] {width:136px}
+.aprd-unified .aprd-filter input[type=time] {width:87px}
+.aprd-unified .aprd-filter-actions button {height:37px}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap {max-height:none;border:0;border-radius:0}
+.aprd-unified .aprd-roster-panel table {min-width:710px}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap th {background:#fff;color:#60738d;font-weight:500}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap td {height:56px;padding:9px 10px}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap tr:nth-child(even):not(:hover) {background:#fff}
+.aprd-unified .aprd-roster-panel .aprd-note-input {width:clamp(96px,14vw,160px);height:28px;border-color:#dce5f1;background:#fff}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap .aprd-note-input:focus {border-color:#165dff}
+.aprd-unified .aprd-roster-panel .aprd-table-wrap td b {font-weight:500}
+.aprd-unified .aprd-employment {display:inline-block;padding:3px 9px;border-radius:5px;font-size:11.5px;color:#087c54;background:#eafbf3}
+.aprd-unified .aprd-employment[data-employment="休假"] {color:#245bce;background:#eaf0ff}
+.aprd-unified .aprd-employment[data-employment="离职"] {color:#5d6e85;background:#edf1f6}
+@media(max-width:640px){
+  .aprd-unified .aprd-head {padding:15px 12px}
+  .aprd-unified .aprd-controls {padding:12px}
+  .aprd-unified .aprd-search-form {width:100%}
+  .aprd-unified .aprd-topbar input[type=search] {width:auto;flex:1}
+  .aprd-unified .aprd-top-actions {margin-left:0}
+  .aprd-unified .aprd-scope select {min-width:104px}
+  .aprd-unified .aprd-filter-fields {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .aprd-unified .aprd-filter-fields select,
+  .aprd-unified .aprd-filter input[type=date] {width:100%;min-width:0}
+  .aprd-unified .aprd-time-range {grid-column:1/-1;flex-wrap:wrap}
+}
+
+.aprd-unified .aprd-maintenance {display:flex;justify-content:flex-end;gap:14px;margin-top:12px;font-size:12px}
+.aprd-unified .aprd-maintenance a,.aprd-unified .aprd-maintenance button {color:#526987}
+.aprd-unified .aprd-maintenance button {padding:0;border:0;background:none;cursor:pointer}
+
+.aprd-unified .aprd-roster-panel .aprd-grid-summary {margin:14px 0 0}
+.aprd-unified .aprd-time-range input.aprd-hhmm {width:54px}
+@media(max-width:600px){
+  .aprd-unified .aprd-filter-fields > label:has(.aprd-time-range) {grid-column:1/-1}
+}
+
+.aprd-unified .aprd-duty[data-employment="休假"] {color:#245bce;background:#eaf0ff}
+.aprd-unified .aprd-duty[data-employment="离职"] {color:#5d6e85;background:#edf1f6}

@@ -27,7 +27,7 @@ test('v417~v423 老链接落到页签；中文年级名仍作为初始年级', (
   assert.equal(attendanceTabOf('  leave  '), 'leave');
 });
 
-test('工作台仍是旧版六页签，花名册字段一个都不改', async () => {
+test('工作台的表类型下拉保留六种表和兼容路由', async () => {
   const [prd, work] = await Promise.all([
     read('js/attendance-prd.js'), read('js/work.js'),
   ]);
@@ -43,7 +43,8 @@ test('工作台仍是旧版六页签，花名册字段一个都不改', async ()
     '花名册列不能改');
   assert.ok(!prd.includes('教师序号'), '花名册不应混入独立表的「教师序号」列');
   assert.ok(work.includes('grade: initialGrade, tab: initialTab'), '初始页签要传进工作台');
-  assert.ok(prd.includes('TABS.some(([id]) => id === initialTab)'), '未知页签回落坐班表');
+  assert.match(prd, /id="aprd-table-type"/);
+  assert.match(prd, /initialTab : 'roster'/, '默认打开花名册');
 });
 
 test('新模块进 SW 预缓存清单，缓存版本按规范递增', async () => {
